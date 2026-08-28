@@ -115,6 +115,12 @@ export interface Visitor extends Timestamps {
   /** Opt-in courtesy emails on confirm/join/disband/cancel. Default false. */
   courtesyEmails: boolean;
   lastUsedAt: IsoDateTime;
+  /**
+   * Set by `importMembers` (§12.5) when a new member's email matches this
+   * visitor's and the visitor still has a future non-cancelled entry (so the
+   * doc is kept, rather than deleted, to keep denormalising `displayName`).
+   */
+  promotedToMemberId?: Id;
 }
 
 /* -------------------------------------------------------------------------- */

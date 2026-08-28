@@ -27,6 +27,7 @@ import { logger } from '../lib/logger.js';
 import { LOGIN_CODE_PEPPER, SMTP_PASS } from '../lib/secrets.js';
 import { getEmailProvider } from '../email/provider.js';
 import { loginCodeEmail } from '../email/templates/loginCode.js';
+import { parseInput } from '../lib/parseInput.js';
 
 const TTL_MINUTES = Number(process.env.LOGIN_CODE_TTL_MINUTES ?? 10);
 const MAX_ATTEMPTS = Number(process.env.LOGIN_CODE_MAX_ATTEMPTS ?? 5);
@@ -61,7 +62,7 @@ export async function requestLoginCodeHandler(
   req: CallableRequest<RequestLoginCodeInput>,
 ): Promise<RequestLoginCodeResult> {
   const start = Date.now();
-  const input = RequestLoginCodeInputSchema.parse(req.data);
+  const input = parseInput(RequestLoginCodeInputSchema, req.data);
   const emailLower = input.email;
   const ip = clientIp(req);
 
@@ -127,7 +128,7 @@ export const requestLoginCode = onCall(
 export async function verifyLoginCodeHandler(
   req: CallableRequest<VerifyLoginCodeInput>,
 ): Promise<VerifyLoginCodeResult> {
-  const input = VerifyLoginCodeInputSchema.parse(req.data);
+  const input = parseInput(VerifyLoginCodeInputSchema, req.data);
   const emailLower = input.email;
   const ip = clientIp(req);
 

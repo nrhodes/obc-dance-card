@@ -31,11 +31,12 @@ import { callableOptions } from '../lib/callable.js';
 import { requireMember, resolveActingMember } from '../lib/context.js';
 import { createNotification } from '../notifications/create.js';
 import { assertForceAllowed, assertSessionOpen, entryId, isFree, loadSession, readEntry, repeatPartnerWarning, writePair } from './lib.js';
+import { parseInput } from '../lib/parseInput.js';
 
 /* -------------------------------- setSoloStatus ------------------------------ */
 
 export async function setSoloStatusHandler(req: CallableRequest<SetSoloStatusInput>): Promise<SetSoloStatusResult> {
-  const input = SetSoloStatusInputSchema.parse(req.data);
+  const input = parseInput(SetSoloStatusInputSchema, req.data);
   const caller = await requireMember(req);
   assertForceAllowed(caller, input.force);
   const actor = await resolveActingMember(caller, input.onBehalfOfMemberId);
@@ -101,7 +102,7 @@ export const setSoloStatus = onCall(callableOptions, setSoloStatusHandler);
 export async function clearSoloStatusHandler(
   req: CallableRequest<ClearSoloStatusInput>,
 ): Promise<ClearSoloStatusResult> {
-  const input = ClearSoloStatusInputSchema.parse(req.data);
+  const input = parseInput(ClearSoloStatusInputSchema, req.data);
   const caller = await requireMember(req);
   assertForceAllowed(caller, input.force);
 
@@ -130,7 +131,7 @@ export const clearSoloStatus = onCall(callableOptions, clearSoloStatusHandler);
 export async function claimLookingForPartnerHandler(
   req: CallableRequest<ClaimLookingForPartnerInput>,
 ): Promise<ClaimLookingForPartnerResult> {
-  const input = ClaimLookingForPartnerInputSchema.parse(req.data);
+  const input = parseInput(ClaimLookingForPartnerInputSchema, req.data);
   const caller = await requireMember(req);
   assertForceAllowed(caller, input.force);
   const actor = await resolveActingMember(caller, input.onBehalfOfMemberId);
@@ -225,7 +226,7 @@ interface CancelEntryTxResult {
 }
 
 export async function cancelEntryHandler(req: CallableRequest<CancelEntryInput>): Promise<CancelEntryResult> {
-  const input = CancelEntryInputSchema.parse(req.data);
+  const input = parseInput(CancelEntryInputSchema, req.data);
   const caller = await requireMember(req);
   assertForceAllowed(caller, input.force);
   const actor = await resolveActingMember(caller, input.onBehalfOfMemberId);
@@ -287,7 +288,10 @@ export async function cancelEntryHandler(req: CallableRequest<CancelEntryInput>)
       if (issues.length > 0) {
         throw new HttpsError('internal', `Pairing invariant violated: ${issues.join('; ')}`);
       }
-      // Courtesy email to the visitor (if opted in) is a Phase 5 concern (email adapter).
+      // TODO(Phase 5): send the opt-in courtesy *cancellation* email to the
+      // visitor here (mirrors `signUpWithVisitor`'s confirmation email,
+      // `visitorCourtesyEmail` template) — Phase 4a only wires the
+      // confirmation courtesy email; see plan §12.4.
       return { ownEntry: cancelled, notify: [] };
     }
 

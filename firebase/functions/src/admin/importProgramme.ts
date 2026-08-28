@@ -8,11 +8,12 @@ import { ImportProgrammeInputSchema, type ImportProgrammeInput, type ProgrammeIm
 import { callableOptions } from '../lib/callable.js';
 import { requireAdmin } from '../lib/context.js';
 import { runProgrammeImport } from './programmeImport.js';
+import { parseInput } from '../lib/parseInput.js';
 
 export async function importProgrammeHandler(
   req: CallableRequest<ImportProgrammeInput>,
 ): Promise<ProgrammeImportReport> {
-  const input = ImportProgrammeInputSchema.parse(req.data);
+  const input = parseInput(ImportProgrammeInputSchema, req.data);
   const caller = await requireAdmin(req);
   return runProgrammeImport(input, caller.uid);
 }

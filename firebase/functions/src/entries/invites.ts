@@ -29,6 +29,7 @@ import { requireMember, resolveActingMember } from '../lib/context.js';
 import { assertRateLimit } from '../lib/rateLimit.js';
 import { createNotification } from '../notifications/create.js';
 import { assertForceAllowed, assertSessionOpen, isFree, loadSession, readEntry, repeatPartnerWarning, writePair, type LoadedSession } from './lib.js';
+import { parseInput } from '../lib/parseInput.js';
 
 const MAX_LISTED_CONFLICTS = 10;
 const INVITE_SEND_LIMIT = 30;
@@ -38,7 +39,7 @@ const INVITE_MAX_AGE_MS = 7 * 24 * 3600 * 1000;
 /* ---------------------------------- sendInvite ------------------------------- */
 
 export async function sendInviteHandler(req: CallableRequest<SendInviteInput>): Promise<SendInviteResult> {
-  const input = SendInviteInputSchema.parse(req.data);
+  const input = parseInput(SendInviteInputSchema, req.data);
   const caller = await requireMember(req);
   assertForceAllowed(caller, input.force);
   const actor = await resolveActingMember(caller, input.onBehalfOfMemberId);
@@ -185,7 +186,7 @@ export const sendInvite = onCall(callableOptions, sendInviteHandler);
 export async function respondToInviteHandler(
   req: CallableRequest<RespondToInviteInput>,
 ): Promise<RespondToInviteResult> {
-  const input = RespondToInviteInputSchema.parse(req.data);
+  const input = parseInput(RespondToInviteInputSchema, req.data);
   const caller = await requireMember(req);
   assertForceAllowed(caller, input.force);
   const actor = await resolveActingMember(caller, input.onBehalfOfMemberId);
@@ -384,7 +385,7 @@ export const respondToInvite = onCall(callableOptions, respondToInviteHandler);
 /* --------------------------------- cancelInvite ------------------------------ */
 
 export async function cancelInviteHandler(req: CallableRequest<CancelInviteInput>): Promise<CancelInviteResult> {
-  const input = CancelInviteInputSchema.parse(req.data);
+  const input = parseInput(CancelInviteInputSchema, req.data);
   const caller = await requireMember(req);
   const actor = await resolveActingMember(caller, input.onBehalfOfMemberId);
   const actorName = `${actor.member.firstName} ${actor.member.lastName}`;

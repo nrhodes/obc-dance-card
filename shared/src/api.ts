@@ -117,6 +117,10 @@ export interface SetSubstituteResult {
   entries: Entry[];
 }
 
+export interface ClearSubstituteResult {
+  entries: Entry[];
+}
+
 export interface CancelEntryResult {
   /** The caller's now-cancelled entry. */
   entry: Entry;
@@ -128,9 +132,14 @@ export interface CancelEntryResult {
 
 export interface CreateVisitorResult {
   visitor: Visitor;
+  /** Plan §12.6: a non-blocking warning, e.g. a display-name collision with an active member. */
+  warnings: string[];
 }
 export interface UpdateVisitorResult {
   visitor: Visitor;
+}
+export interface DeleteVisitorResult {
+  ok: true;
 }
 
 /* ---------------------------------- teams --------------------------------- */

@@ -19,6 +19,7 @@ import { audit } from '../lib/audit.js';
 import { callableOptions } from '../lib/callable.js';
 import { requireAdmin } from '../lib/context.js';
 import { createNotification } from '../notifications/create.js';
+import { parseInput } from '../lib/parseInput.js';
 
 const NOTIFY_CHUNK_SIZE = 50;
 
@@ -76,7 +77,7 @@ export async function runPublishProgramme(
 export async function publishProgrammeHandler(
   req: CallableRequest<PublishProgrammeInput>,
 ): Promise<PublishProgrammeResult> {
-  const input = PublishProgrammeInputSchema.parse(req.data);
+  const input = parseInput(PublishProgrammeInputSchema, req.data);
   const caller = await requireAdmin(req);
   return runPublishProgramme(input, caller.uid);
 }

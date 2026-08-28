@@ -216,20 +216,27 @@ export type ClaimLookingForPartnerInput = z.infer<typeof ClaimLookingForPartnerI
 export const SignUpWithVisitorInputSchema = z
   .object({
     scope: z.enum(['session', 'series']),
+    year,
     sessionId: id.optional(),
     seriesId: id.optional(),
     visitorId: id,
     onBehalfOfMemberId,
+    force,
   })
   .refine((v) => (v.scope === 'session' ? !!v.sessionId : !!v.seriesId), {
     message: 'sessionId is required for scope=session, seriesId for scope=series',
   });
 export type SignUpWithVisitorInput = z.infer<typeof SignUpWithVisitorInputSchema>;
 
+/** Which side of the pairing the named substitute stands in for (plan §9.2 design notes). */
+const coverFor = z.enum(['self', 'partner']).optional();
+
 export const SetSubstituteInputSchema = z.object({
   entryId: id,
   substitute: partnerRefInput,
   onBehalfOfMemberId,
+  coverFor,
+  force,
 });
 export type SetSubstituteInput = z.infer<typeof SetSubstituteInputSchema>;
 
@@ -241,11 +248,15 @@ export type CancelEntryInput = z.infer<typeof CancelEntryInputSchema>;
 
 /* ---------------------------------- visitors ------------------------------- */
 
+const visitorNotes = z.string().trim().max(500);
+
 export const CreateVisitorInputSchema = z.object({
   displayName,
   email: email.optional(),
   phone: phone.optional(),
+  notes: visitorNotes.optional(),
   courtesyEmails: z.boolean().optional(),
+  onBehalfOfMemberId,
 });
 export type CreateVisitorInput = z.infer<typeof CreateVisitorInputSchema>;
 
@@ -254,6 +265,7 @@ export const UpdateVisitorInputSchema = z.object({
   displayName: displayName.optional(),
   email: email.optional(),
   phone: phone.optional(),
+  notes: visitorNotes.optional(),
   courtesyEmails: z.boolean().optional(),
 });
 export type UpdateVisitorInput = z.infer<typeof UpdateVisitorInputSchema>;

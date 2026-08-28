@@ -104,6 +104,8 @@ export const NOTIFICATION_TYPES = [
   'team_disbanded',
   'broadcast',
   'security',
+  /** §12.5: a visitor's email now matches a newly-imported member. */
+  'visitor_promoted',
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 
@@ -127,12 +129,15 @@ export const AUDIT_ACTIONS = [
   'programme_edit',
   'broadcast_sent',
   'pairing_repair',
+  /** System action: `importMembers` promoted a visitor whose email matched a new member (§12.5). */
+  'visitor_promoted',
   // Per-callable on-behalf actions (§9.2 "Audit" column)
   'send_invite_on_behalf',
   'respond_to_invite_on_behalf',
   'cancel_invite_on_behalf',
   'set_solo_status_on_behalf',
   'claim_looking_for_partner_on_behalf',
+  'create_visitor_on_behalf',
   'sign_up_with_visitor_on_behalf',
   'set_substitute_on_behalf',
   'clear_substitute_on_behalf',

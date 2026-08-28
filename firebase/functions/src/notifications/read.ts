@@ -9,11 +9,12 @@ import { MarkNotificationsReadInputSchema, paths, type MarkNotificationsReadInpu
 import { db } from '../lib/admin.js';
 import { callableOptions } from '../lib/callable.js';
 import { requireMember } from '../lib/context.js';
+import { parseInput } from '../lib/parseInput.js';
 
 export async function markNotificationsReadHandler(
   req: CallableRequest<MarkNotificationsReadInput>,
 ): Promise<{ ok: true }> {
-  const input = MarkNotificationsReadInputSchema.parse(req.data);
+  const input = parseInput(MarkNotificationsReadInputSchema, req.data);
   const caller = await requireMember(req);
 
   const refs = input.ids.map((id) => db.doc(paths.notification(id)));

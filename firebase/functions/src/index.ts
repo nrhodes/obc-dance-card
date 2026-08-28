@@ -33,11 +33,12 @@ export { sendInvite, respondToInvite, cancelInvite } from './entries/invites.js'
 export { setSoloStatus, clearSoloStatus, claimLookingForPartner, cancelEntry } from './entries/entries.js';
 export { markNotificationsRead } from './notifications/read.js';
 
+// Phase 4a — visitors + substitutes
+export { createVisitor, updateVisitor, deleteVisitor } from './visitors/visitors.js';
+export { signUpWithVisitor } from './visitors/signUp.js';
+export { setSubstitute, clearSubstitute } from './entries/substitute.js';
+
 /*
- * Phase 4 — visitors + substitutes
- * export { createVisitor, updateVisitor, deleteVisitor, signUpWithVisitor } from './visitors/visitors.js';
- * export { setSubstitute, clearSubstitute } from './entries/substitute.js';
- *
  * Phase 4b — teams
  * export {
  *   createTeam,

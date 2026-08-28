@@ -27,6 +27,8 @@ import { requireAdmin } from '../lib/context.js';
 import { audit } from '../lib/audit.js';
 import { BatchWriter } from '../lib/batchWriter.js';
 import { provisionMember } from './provisionMember.js';
+import { promoteVisitorsForNewMember } from '../visitors/promotion.js';
+import { parseInput } from '../lib/parseInput.js';
 
 const EXPECTED_HEADERS = ['firstName', 'lastName', 'email', 'phone', 'grade'];
 const MAX_ROWS = 2_000;
@@ -151,7 +153,7 @@ function parseAndValidateCsv(csv: string): {
 }
 
 export async function importMembersHandler(req: CallableRequest<ImportMembersInput>): Promise<MemberImportReport> {
-  const input = ImportMembersInputSchema.parse(req.data);
+  const input = parseInput(ImportMembersInputSchema, req.data);
   const caller = await requireAdmin(req);
 
   const { rows, errors, mentionedEmails } = parseAndValidateCsv(input.csv);
@@ -176,8 +178,15 @@ export async function importMembersHandler(req: CallableRequest<ImportMembersInp
         { firstName: row.firstName, lastName: row.lastName, emailLower: row.emailLower, phone: row.phone, grade: row.grade },
         { dryRun: !!input.dryRun, writer },
       );
-      if (result.outcome === 'added') added++;
-      else if (result.outcome === 'updated') updated++;
+      if (result.outcome === 'added') {
+        added++;
+        // Plan §12.5: promote any visitor whose email matches this brand-new
+        // member. Never during a dry run (no member was actually created —
+        // `result.memberId` is null in that case too).
+        if (!input.dryRun && result.memberId) {
+          await promoteVisitorsForNewMember(result.memberId, row.emailLower, caller.uid);
+        }
+      } else if (result.outcome === 'updated') updated++;
       else unchanged++;
     } catch (err) {
       errors.push({

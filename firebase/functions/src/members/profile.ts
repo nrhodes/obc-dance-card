@@ -21,13 +21,14 @@ import {
 import { db } from '../lib/admin.js';
 import { callableOptions } from '../lib/callable.js';
 import { requireMember } from '../lib/context.js';
+import { parseInput } from '../lib/parseInput.js';
 
 const MAX_DEVICES = 10;
 
 export async function updateMyContactHandler(
   req: CallableRequest<UpdateMyContactInput>,
 ): Promise<{ ok: true }> {
-  const input = UpdateMyContactInputSchema.parse(req.data);
+  const input = parseInput(UpdateMyContactInputSchema, req.data);
   const caller = await requireMember(req);
 
   if (input.phone !== undefined) {
@@ -44,7 +45,7 @@ export const updateMyContact = onCall(callableOptions, updateMyContactHandler);
 export async function updateMyPrefsHandler(
   req: CallableRequest<UpdateMyPrefsInput>,
 ): Promise<{ ok: true }> {
-  const input = UpdateMyPrefsInputSchema.parse(req.data);
+  const input = parseInput(UpdateMyPrefsInputSchema, req.data);
   const caller = await requireMember(req);
 
   await db
@@ -59,7 +60,7 @@ export const updateMyPrefs = onCall(callableOptions, updateMyPrefsHandler);
 export async function registerDeviceHandler(
   req: CallableRequest<RegisterDeviceInput>,
 ): Promise<{ ok: true }> {
-  const input = RegisterDeviceInputSchema.parse(req.data);
+  const input = parseInput(RegisterDeviceInputSchema, req.data);
   const caller = await requireMember(req);
   const ref = db.doc(paths.memberPrivate(caller.uid));
 
@@ -102,7 +103,7 @@ export const registerDevice = onCall(callableOptions, registerDeviceHandler);
 export async function unregisterDeviceHandler(
   req: CallableRequest<UnregisterDeviceInput>,
 ): Promise<{ ok: true }> {
-  const input = UnregisterDeviceInputSchema.parse(req.data);
+  const input = parseInput(UnregisterDeviceInputSchema, req.data);
   const caller = await requireMember(req);
   const ref = db.doc(paths.memberPrivate(caller.uid));
 

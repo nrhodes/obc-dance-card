@@ -17,11 +17,12 @@ import { auth, db } from '../lib/admin.js';
 import { callableOptions } from '../lib/callable.js';
 import { requireMember } from '../lib/context.js';
 import { createNotification } from '../notifications/create.js';
+import { parseInput } from '../lib/parseInput.js';
 
 export async function markPasswordSetHandler(
   req: CallableRequest<MarkPasswordSetInput>,
 ): Promise<{ ok: true }> {
-  MarkPasswordSetInputSchema.parse(req.data);
+  parseInput(MarkPasswordSetInputSchema, req.data);
   const caller = await requireMember(req);
 
   // Do not take the client's word for it: `hasPassword` drives UI and the
@@ -52,7 +53,7 @@ export const markPasswordSet = onCall(callableOptions, markPasswordSetHandler);
 export async function removePasswordHandler(
   req: CallableRequest<RemovePasswordInput>,
 ): Promise<{ ok: true }> {
-  RemovePasswordInputSchema.parse(req.data);
+  parseInput(RemovePasswordInputSchema, req.data);
   const caller = await requireMember(req);
 
   // Firebase has no "unset password" API: rotate to an unknowable value.
