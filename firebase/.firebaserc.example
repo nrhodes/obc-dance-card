@@ -1,0 +1,6 @@
+{
+  "projects": {
+    "default": "obc-dance-card",
+    "dev": "obc-dance-card-dev"
+  }
+}

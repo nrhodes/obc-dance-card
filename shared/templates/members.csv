@@ -1,0 +1,5 @@
+firstName,lastName,email,phone,grade
+Jane,Doe,jane.doe@example.com,021 555 0100,Open
+John,Smith,john.smith@example.com,021 555 0101,Intermediate
+Mary,Brown,mary.brown@example.com,09 555 0102,Junior
+Alex,Taylor,alex.taylor@example.com,,Unknown

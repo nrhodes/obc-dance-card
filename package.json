@@ -1,0 +1,32 @@
+{
+  "name": "obc-dance-card",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Electronic dance card for Orewa Bridge Club",
+  "license": "MIT",
+  "type": "module",
+  "workspaces": [
+    "shared",
+    "web",
+    "firebase/functions"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "lint": "eslint .",
+    "test": "npm run build -w @obc/shared && npm run test --workspaces --if-present",
+    "typecheck": "npm run build -w @obc/shared && npm run typecheck --workspaces --if-present",
+    "emulators": "firebase --project demo-obc emulators:start",
+    "seed": "npm run seed -w @obc/functions",
+    "format": "prettier --write \"**/*.{ts,tsx,js,json,md}\""
+  },
+  "devDependencies": {
+    "eslint": "^9.17.0",
+    "firebase-tools": "^13.29.1",
+    "prettier": "^3.4.2",
+    "typescript": "^5.7.2",
+    "typescript-eslint": "^8.18.1"
+  }
+}

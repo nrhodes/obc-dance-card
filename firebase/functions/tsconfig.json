@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2022"],
+    "outDir": "lib",
+    "rootDir": "src",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "sourceMap": true,
+    "resolveJsonModule": true,
+    "tsBuildInfoFile": "lib/.tsbuildinfo"
+  },
+  "references": [{ "path": "../../shared/tsconfig.build.json" }],
+  "include": ["src"],
+  "exclude": ["src/**/*.test.ts", "lib", "node_modules"]
+}

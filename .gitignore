@@ -1,0 +1,54 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build output
+dist/
+build/
+lib/
+*.tsbuildinfo
+.tsbuildinfo
+
+# Firebase
+.firebase/
+firebase-debug.log
+firebase-debug.*.log
+ui-debug.log
+firestore-debug.log
+database-debug.log
+pubsub-debug.log
+*-debug.log
+.runtimeconfig.json
+firebase/functions/.env
+firebase/functions/.env.*
+!firebase/functions/.env.example
+
+# Emulator data
+emulator-data/
+firebase-export-*/
+
+# Secrets / local config
+.env
+.env.local
+.env.*.local
+serviceAccountKey*.json
+.firebaserc.local
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
+
+# Test / coverage
+coverage/
+.nyc_output/
+
+# iOS
+ios/**/Pods/
+ios/**/*.xcuserstate
+ios/**/xcuserdata/
+ios/**/GoogleService-Info.plist
+ios/**/DerivedData/

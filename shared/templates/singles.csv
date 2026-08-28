@@ -1,0 +1,6 @@
+date,weekday,kind,title,partnerRequired
+2027-01-04,monday,holidayBridge,Holiday Bridge,yes
+2027-03-26,friday,noBridge,Good Friday - No Bridge,no
+2027-03-29,monday,holidayBridge,Easter Monday - Holiday Bridge,yes
+2027-06-07,monday,holidayBridge,King's Birthday - Holiday Bridge,yes
+2027-10-25,monday,holidayBridge,Labour Day - Holiday Bridge,yes

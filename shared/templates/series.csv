@@ -1,0 +1,9 @@
+weekday,name,scoring,format,bestOfN,bestOfM,allowSubstitute,eligibilityNote,note,dates
+monday,Marion Taylor Pairs,Scr,Pairs,,,yes,,,2027-01-11;2027-01-18;2027-01-25;2027-02-01
+monday,Campbell Cave Pairs,Scr,Pairs,,,yes,,,2027-02-08;2027-02-15;2027-02-22;2027-03-01
+monday,Milton Pairs,Hcp,Pairs,,,yes,,,2027-03-08;2027-03-15;2027-03-22;2027-03-29
+monday,Martin Gillam Memorial Mon Champ Pairs,Scr,Pairs,5,6,no,,no substitute,2027-04-12;2027-04-19;2027-04-26;2027-05-03;2027-05-10;2027-05-17
+monday,Summerset Mon Individual,Scr,Individual,4,5,yes,,,2027-08-16;2027-08-23;2027-08-30;2027-09-06;2027-09-13
+monday,Campbell Cave Teams,Scr,Teams,,,yes,"Max 1 open player, min 1 junior player",,2027-09-20;2027-09-27;2027-10-04
+tuesday,February Pairs,Scr,Pairs,,,yes,,,2027-02-02;2027-02-09;2027-02-16;2027-02-23
+tuesday,July Individual,Scr,Individual,,,yes,,,2027-07-06;2027-07-13;2027-07-20;2027-07-27
