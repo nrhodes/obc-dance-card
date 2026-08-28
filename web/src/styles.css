@@ -276,3 +276,82 @@ td {
     padding: var(--space-2);
   }
 }
+
+.weekday-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  border-bottom: 2px solid var(--color-border);
+}
+
+.weekday-tab {
+  min-height: var(--tap-target);
+  min-width: var(--tap-target);
+  padding: var(--space-1) var(--space-2);
+  border: none;
+  border-bottom: 4px solid transparent;
+  background: none;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 1rem;
+}
+
+.weekday-tab-active {
+  border-bottom-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+.badge {
+  display: inline-block;
+  background: var(--color-secondary-bg);
+  color: var(--color-secondary-text);
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  padding: 2px var(--space-1);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.session-date-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.session-date-list li {
+  min-height: var(--tap-target);
+  display: flex;
+  align-items: center;
+}
+
+.session-past {
+  opacity: 0.55;
+}
+
+.single-row-nobridge {
+  background: var(--color-secondary-bg);
+}
+
+.roster-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.roster-list li {
+  padding: var(--space-1) 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.team-card {
+  background: var(--color-secondary-bg);
+}

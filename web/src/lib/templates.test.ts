@@ -5,10 +5,12 @@ import { describe, expect, it } from 'vitest';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-describe('members.csv template', () => {
-  it('web/public/templates/members.csv is byte-identical to shared/templates/members.csv', () => {
-    const sharedPath = resolve(__dirname, '..', '..', '..', 'shared', 'templates', 'members.csv');
-    const publicPath = resolve(__dirname, '..', '..', 'public', 'templates', 'members.csv');
+const TEMPLATE_FILES = ['members.csv', 'weekdays.csv', 'series.csv', 'singles.csv'];
+
+describe.each(TEMPLATE_FILES)('%s template', (file) => {
+  it(`web/public/templates/${file} is byte-identical to shared/templates/${file}`, () => {
+    const sharedPath = resolve(__dirname, '..', '..', '..', 'shared', 'templates', file);
+    const publicPath = resolve(__dirname, '..', '..', 'public', 'templates', file);
 
     const sharedBuf = readFileSync(sharedPath);
     const publicBuf = readFileSync(publicPath);

@@ -16,8 +16,10 @@ export function AppShell() {
           <NavLink to="/" end>
             Home
           </NavLink>
+          <NavLink to="/programme">Programme</NavLink>
           <NavLink to="/profile">Profile</NavLink>
-          {isAdmin && <NavLink to="/admin/members">Admin</NavLink>}
+          {isAdmin && <NavLink to="/admin/members">Admin: Members</NavLink>}
+          {isAdmin && <NavLink to="/admin/programme">Admin: Programme import</NavLink>}
           <button type="button" onClick={() => void signOut()}>
             Sign out
           </button>

@@ -1,0 +1,6 @@
+weekday,label,startTime,seatedBy,stewardEmail,notes
+monday,Monday Afternoon,13:00,12:45,jane.doe@example.com,
+tuesday,Tuesday (Juniors) Evening,19:00,18:45,,No partner required
+wednesday,Wednesday Afternoon,13:00,12:45,john.smith@example.com,
+thursday,Thursday Evening,19:00,18:45,mary.brown@example.com,
+friday,Friday Afternoon,13:00,12:45,jane.doe@example.com,

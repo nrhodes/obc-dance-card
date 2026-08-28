@@ -16,8 +16,53 @@ land.
 - [ ] Import `members.csv` — report shows the expected added/updated counts.
 - [ ] Re-import with one member removed — that member is marked inactive, not
       deleted; they can no longer sign in.
-- [ ] Import the three programme CSVs for 2027 into a draft, review, publish.
-- [ ] A non-admin cannot see the draft before publish; can after.
+- [ ] Go to **Admin: Programme import** (`/admin/programme`). Download the
+      three templates (weekdays/series/singles) from the links at the top.
+- [ ] Paste or upload weekdays.csv, series.csv, singles.csv for a new year
+      (the year field defaults to next year after 1 Oct NZ, this year
+      otherwise — check it matches what you expect before continuing).
+- [ ] Click **Check files (dry run)** — the report shows weekday/series/session
+      counts and zero errors; **Import** stays disabled until this step has
+      run against the exact text you're about to import.
+- [ ] Click **Import** — the report now shows the same counts; the year
+      appears in the **All programmes** list below with status `draft`.
+- [ ] Try importing the same year again without ticking anything — you get
+      the "already published" `failed-precondition` only if it was already
+      published; for a fresh draft, re-importing just overwrites the draft.
+- [ ] Click **Publish {year}** in the All programmes list, confirm the
+      dialog ("Members will be notified") — status flips to `published` and
+      a `publishedAt` timestamp appears.
+- [ ] As a non-admin member, confirm `/admin/programme` is not reachable
+      (redirects home) and that the programme only becomes visible at
+      `/programme` once published — not before (rules deny reading a draft).
+- [ ] Re-import the same year with `replace` unchecked over the now-published
+      programme — you get the "already published" error with a **Replace
+      existing programme** checkbox; tick it and re-import to confirm replace
+      succeeds when no removed session has active sign-ups.
+
+## 1a. Programme browsing (Phase 2b)
+
+- [ ] As a member, open **Programme** in the nav (`/programme`). The default
+      tab is today's weekday (Mon–Fri) or Monday on a weekend.
+- [ ] Click through the Mon/Tue/Wed/Thu/Fri tabs with the keyboard (arrow
+      keys move focus and selection) as well as the mouse.
+- [ ] On Monday, confirm "Marion Taylor Pairs" appears as a card with a `Scr`
+      and `Pairs` badge, and its four dates as links; a later "no substitute"
+      series shows a "no substitutes" badge and its "best N of M" text.
+- [ ] Confirm the Holiday Bridge dates (e.g. Easter Monday) appear inline
+      between the series cards in date order, and Good Friday's "No bridge"
+      entry (Friday tab) is visually greyed out.
+- [ ] Click **Jump to today** — the view scrolls to the next upcoming
+      session.
+- [ ] Click a past date — it's dimmed but still opens its session page.
+- [ ] Click a date under Marion Taylor Pairs — you land on
+      `/session/2027/<id>` showing the title, weekday/date, start/seated-by
+      times, and "Nobody has signed up yet." (no entries exist yet this
+      phase).
+- [ ] All the action buttons on the session page are visibly disabled with a
+      "Coming soon" tooltip — confirm nothing is clickable/writes anything.
+- [ ] On the Home screen, confirm "Next sessions" lists the next five
+      upcoming sessions in date order, each linking to its session page.
 
 ## 2. Login (Phase 1)
 

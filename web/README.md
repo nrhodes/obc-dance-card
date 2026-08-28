@@ -1,7 +1,18 @@
 # web — OBC Dance Card PWA
 
 React 18 + Vite + TypeScript PWA (plan §14.1). Serves the member and admin
-screens for Phase 1b: sign in, profile, admin members import.
+screens for Phase 1b (sign in, profile, admin members import) and Phase 2b
+(programme browser, session page, admin programme import/publish).
+
+## Routes
+
+- `/signin` — sign in (code or password)
+- `/` — home, "Next sessions"
+- `/profile` — contact, prefs, password, sign out
+- `/programme` — the published programme, by weekday
+- `/session/:year/:sessionId` — one session's roster (read-only this phase)
+- `/admin/members` — admin: members CSV import
+- `/admin/programme` — admin: programme CSV import/publish, all-programmes list
 
 ## Stack
 
@@ -65,9 +76,18 @@ npm run lint -w web
 ### End-to-end (Playwright)
 
 `web/e2e/signin.spec.ts` drives a real browser against the emulators: request
-a code for `admin@example.org`, sign in, visit Profile, sign out. It assumes
-the emulators + seed + dev server are already running (see above) — it does
-not start them itself.
+a code for `admin@example.org`, sign in, visit Profile, sign out.
+`web/e2e/programme.spec.ts` signs in the same way, opens **Programme**, opens
+the Monday tab, clicks the first "Marion Taylor Pairs" date, and confirms the
+session page and its empty roster. Both assume the emulators + seed + dev
+server are already running (see above) — they do not start them itself.
+
+Because both specs sign in with an emailed code for the same seeded admin
+address, running the full suite more than 2-3 times inside a 15-minute window
+can trip the `requestLoginCode` rate limit (plan §8.1: 3 requests / email /
+15 min) — the request still returns `{ ok: true }` (uniform response) but no
+email arrives, and `waitForLoginCode` will time out. Re-seed (which resets
+`rateLimits`) or wait out the window if that happens.
 
 ```sh
 npx playwright install chromium   # once
@@ -104,11 +124,12 @@ picking the newest doc addressed to the sign-in email.
 
 ## Templates
 
-`web/public/templates/members.csv` is a generated, git-ignored copy of
-`shared/templates/members.csv`, kept byte-identical by
-`scripts/copy-templates.mjs` (runs via the `predev`/`prebuild`/`pretest`
-npm hooks). `src/lib/templates.test.ts` asserts the two files match — if it
-fails, run `node scripts/copy-templates.mjs` from `web/`.
+`web/public/templates/*.csv` are generated, git-ignored copies of
+`shared/templates/*.csv` (members, weekdays, series, singles), kept
+byte-identical by `scripts/copy-templates.mjs` (runs via the
+`predev`/`prebuild`/`pretest` npm hooks). `src/lib/templates.test.ts` asserts
+every file matches — if it fails, run `node scripts/copy-templates.mjs` from
+`web/`.
 
 ## Structure
 
@@ -125,8 +146,19 @@ src/
   components/
     AppShell.tsx             header, nav, skip link, <main id="content">
     RouteGuards.tsx           signed-out / not-active / admin route guards
+  programme/
+    ProgrammeProvider.tsx     the shared "current published programme" subscription
+    useProgramme.ts           read hook for weekdays/series/sessions
+  members/
+    MembersDirectoryProvider.tsx  subscribes to active members once; nameOf(id)
+  lib/
+    format.ts                 formatDateNZ/formatTimeOfDay/shortWeekdayLabel
+    roster.ts                 pure session-roster grouping (pairs/LFP/available/own entry)
+    programmeView.ts          pure weekday-timeline grouping + default-tab logic
   screens/
     SignInScreen.tsx, HomeScreen.tsx, ProfileScreen.tsx, NotActiveScreen.tsx,
     NotificationPrefsForm.tsx, PasswordSection.tsx,
-    admin/MembersImportScreen.tsx
+    ProgrammeScreen.tsx, SessionScreen.tsx,
+    admin/MembersImportScreen.tsx, admin/ProgrammeImportScreen.tsx,
+    admin/AdminProgrammeList.tsx
 ```

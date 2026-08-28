@@ -7,7 +7,11 @@
 import type {
   ImportMembersInput,
   ImportMembersResult,
+  ImportProgrammeInput,
+  ImportProgrammeResult,
   MarkPasswordSetInput,
+  PublishProgrammeInput,
+  PublishProgrammeResult,
   RemovePasswordInput,
   RequestLoginCodeInput,
   RequestLoginCodeResult,
@@ -25,3 +29,5 @@ export const removePassword = callable<RemovePasswordInput, { ok: true }>('remov
 export const updateMyContact = callable<UpdateMyContactInput, { ok: true }>('updateMyContact');
 export const updateMyPrefs = callable<UpdateMyPrefsInput, { ok: true }>('updateMyPrefs');
 export const importMembers = callable<ImportMembersInput, ImportMembersResult>('importMembers');
+export const importProgramme = callable<ImportProgrammeInput, ImportProgrammeResult>('importProgramme');
+export const publishProgramme = callable<PublishProgrammeInput, PublishProgrammeResult>('publishProgramme');
