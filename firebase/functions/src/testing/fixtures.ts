@@ -9,6 +9,7 @@ import {
   paths,
   todayNZ,
   validatePairingGroup,
+  validateTeamGroup,
   type Entry,
   type IsoDate,
   type MemberGrade,
@@ -20,6 +21,7 @@ import {
   type Series,
   type SeriesFormat,
   type Session,
+  type Team,
   type TimeOfDay,
   type Weekday,
   type WeekdayProgramme,
@@ -261,6 +263,29 @@ export async function assertSessionPairingValid(sessionId: string): Promise<Entr
   const issues = validatePairingGroup(entries);
   expect(issues, `validatePairingGroup violations for session ${sessionId}`).toEqual([]);
   return entries;
+}
+
+/** Every entry doc currently tagged with `teamId`, straight from Firestore. */
+export async function entriesForTeam(teamId: string): Promise<Entry[]> {
+  const snap = await db.collection(paths.entries()).where('teamId', '==', teamId).get();
+  return snap.docs.map((d) => d.data() as Entry);
+}
+
+/**
+ * Reads `teamId`'s team doc, its series, and every entry tagged with it, and
+ * asserts `validateTeamGroup` finds no I9 violations (plan §7 — "law"; every
+ * team test asserts this after every mutation). Returns everything read, so
+ * callers can chain further assertions without a second read.
+ */
+export async function assertTeamValid(teamId: string): Promise<{ team: Team; series: Series; entries: Entry[] }> {
+  const teamSnap = await db.doc(paths.team(teamId)).get();
+  const team = teamSnap.data() as Team;
+  const seriesSnap = await db.doc(paths.seriesDoc(team.year, team.seriesId)).get();
+  const series = seriesSnap.data() as Series;
+  const entries = await entriesForTeam(teamId);
+  const issues = validateTeamGroup(team, series, entries);
+  expect(issues, `validateTeamGroup violations for team ${teamId}`).toEqual([]);
+  return { team, series, entries };
 }
 
 /** Every notification doc for one member, optionally filtered by type. */

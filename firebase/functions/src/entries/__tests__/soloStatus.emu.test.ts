@@ -99,18 +99,23 @@ describe('setSoloStatus / clearSoloStatus', () => {
     expect(second.entry.id).toBe(first.entry.id);
   });
 
-  it('rejects on a Teams session', async () => {
+  // Phase 4b (plan §12A.4) explicitly lifts the Teams rejection for this one
+  // callable: on a Teams session, `setSoloStatus` posts "Looking for a
+  // team" / "Available for a team" instead of a pairing listing. See
+  // `teams/__tests__/noticeboard.emu.test.ts` for the fuller coverage
+  // (including `claimLookingForPartner`, which still rejects a non-captain).
+  it('is allowed on a Teams session (plan §12A.4 — "Looking for a team")', async () => {
     const m = await makeMember('solo-teams@example.org');
     const prog = await makeProgramme({ seriesFormat: 'Teams', dates: [sessionInFuture('monday')] });
 
-    await expect(
-      setSoloStatusHandler(
-        fakeCallableRequest<SetSoloStatusInput>(
-          { year: prog.year, sessionId: prog.sessionIds[0]!, status: 'looking_for_partner' },
-          { uid: m },
-        ),
+    const result = await setSoloStatusHandler(
+      fakeCallableRequest<SetSoloStatusInput>(
+        { year: prog.year, sessionId: prog.sessionIds[0]!, status: 'looking_for_partner' },
+        { uid: m },
       ),
-    ).rejects.toMatchObject({ code: 'failed-precondition' });
+    );
+    expect(result.entry.status).toBe('looking_for_partner');
+    expect(result.entry.teamId).toBeNull();
   });
 
   it('rejects on a locked session', async () => {

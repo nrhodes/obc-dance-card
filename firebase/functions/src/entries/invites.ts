@@ -21,15 +21,27 @@ import {
   type SendInviteInput,
   type SendInviteResult,
   type Series,
+  type Team,
 } from '@obc/shared';
 import { db } from '../lib/admin.js';
 import { audit } from '../lib/audit.js';
 import { callableOptions } from '../lib/callable.js';
-import { requireMember, resolveActingMember } from '../lib/context.js';
+import { requireMember, resolveActingMember, type ActingMember } from '../lib/context.js';
 import { assertRateLimit } from '../lib/rateLimit.js';
 import { createNotification } from '../notifications/create.js';
-import { assertForceAllowed, assertSessionOpen, isFree, loadSession, readEntry, repeatPartnerWarning, writePair, type LoadedSession } from './lib.js';
+import { assertForceAllowed, assertSessionOpen, isFree, loadSession, memberRef, readEntry, repeatPartnerWarning, writePair, type LoadedSession } from './lib.js';
 import { parseInput } from '../lib/parseInput.js';
+import {
+  assertTeamValid,
+  loadTeam,
+  loadTeamEntries,
+  loadSeries as loadTeamSeries,
+  mergeEntries,
+  refreshTeamStatus,
+  seriesSessions,
+  unlockedSessions,
+  writeTeamEntries,
+} from '../teams/lib.js';
 
 const MAX_LISTED_CONFLICTS = 10;
 const INVITE_SEND_LIMIT = 30;
@@ -192,6 +204,17 @@ export async function respondToInviteHandler(
   const actor = await resolveActingMember(caller, input.onBehalfOfMemberId);
   const actorName = `${actor.member.firstName} ${actor.member.lastName}`;
   const inviteRef = db.doc(paths.invite(input.inviteId));
+
+  // Team invites (join or captaincy-transfer offers, plan §9.2/§12A.3) have a
+  // materially different accept/decline shape — route to that flow entirely
+  // separately and leave the pairs flow below untouched. A plain read (not a
+  // transaction) is enough to decide which flow applies; if the invite turns
+  // out not to exist, the normal flow's own `not-found` below still fires.
+  const peekSnap = await inviteRef.get();
+  const peek = peekSnap.data() as Invite | undefined;
+  if (peek?.scope === 'team') {
+    return respondToTeamInviteHandler(input, actor, actorName, inviteRef);
+  }
 
   if (!input.accept) {
     const invite = await db.runTransaction(async (tx) => {
@@ -381,6 +404,259 @@ export async function respondToInviteHandler(
 }
 
 export const respondToInvite = onCall(callableOptions, respondToInviteHandler);
+
+/* ----------------------------- respondToInvite (team) ------------------------- */
+
+/**
+ * The `scope: 'team'` branch of `respondToInvite` (plan §9.2, §12A.3): a
+ * `kind: 'join'` invite (default when absent) adds the invitee to the
+ * team's roster for every session still open on the invite; a
+ * `kind: 'captaincy'` invite (from `transferCaptaincy`) hands the captain
+ * role to the invitee with no roster/entry changes. Routed to from
+ * `respondToInviteHandler` before any of the pairs-flow logic runs, so that
+ * flow (above) is untouched.
+ */
+async function respondToTeamInviteHandler(
+  input: RespondToInviteInput,
+  actor: ActingMember,
+  actorName: string,
+  inviteRef: FirebaseFirestore.DocumentReference,
+): Promise<RespondToInviteResult> {
+  if (!input.accept) {
+    const invite = await db.runTransaction(async (tx) => {
+      const snap = await tx.get(inviteRef);
+      const inv = snap.data() as Invite | undefined;
+      if (!inv) throw new HttpsError('not-found', 'Invite not found.');
+      if (inv.toMemberId !== actor.memberId) {
+        throw new HttpsError('permission-denied', 'This invite is not addressed to you.');
+      }
+      if (inv.status !== 'pending') {
+        throw new HttpsError('failed-precondition', 'This invite is no longer pending.');
+      }
+      const now = new Date().toISOString();
+      const updated: Invite = { ...inv, status: 'declined', respondedAt: now, updatedAt: now };
+      tx.set(inviteRef, updated);
+      return updated;
+    });
+
+    if (actor.onBehalfBy) {
+      await audit({
+        actorMemberId: actor.onBehalfBy,
+        action: 'respond_to_invite_on_behalf',
+        targetMemberId: actor.memberId,
+        entityRef: inviteRef.path,
+      });
+      await createNotification(
+        actor.memberId,
+        'on_behalf_action',
+        'An admin declined a team invite for you',
+        'An admin declined a team invite on your behalf.',
+        { inviteId: invite.id },
+      );
+    }
+    await createNotification(
+      invite.fromMemberId,
+      'team_member_declined',
+      invite.kind === 'captaincy' ? 'Your captaincy offer was declined' : 'A team invite was declined',
+      invite.kind === 'captaincy'
+        ? `${actorName} declined the captaincy of your team.`
+        : `${actorName} declined your team invite.`,
+      { inviteId: invite.id, teamId: invite.teamId ?? '' },
+    );
+    return { invite, entries: [] };
+  }
+
+  // Same two-phase expiry pattern as the pairs flow above: marking an
+  // already-expired invite `expired` must commit even though reporting the
+  // failure to the caller then has to happen in a separate transaction.
+  const expiredJustNow = await db.runTransaction(async (tx) => {
+    const snap = await tx.get(inviteRef);
+    const inv = snap.data() as Invite | undefined;
+    if (!inv) throw new HttpsError('not-found', 'Invite not found.');
+    if (inv.toMemberId !== actor.memberId) {
+      throw new HttpsError('permission-denied', 'This invite is not addressed to you.');
+    }
+    if (inv.status !== 'pending') {
+      throw new HttpsError('failed-precondition', 'This invite is no longer pending.');
+    }
+    if (new Date(inv.expiresAt).getTime() < Date.now()) {
+      tx.set(inviteRef, { ...inv, status: 'expired', updatedAt: new Date().toISOString() });
+      return true;
+    }
+    return false;
+  });
+  if (expiredJustNow) {
+    throw new HttpsError('failed-precondition', 'This invite has expired.');
+  }
+
+  const result = await db.runTransaction(async (tx) => {
+    const snap = await tx.get(inviteRef);
+    const inv = snap.data() as Invite | undefined;
+    if (!inv) throw new HttpsError('not-found', 'Invite not found.');
+    if (inv.toMemberId !== actor.memberId) {
+      throw new HttpsError('permission-denied', 'This invite is not addressed to you.');
+    }
+    if (inv.status !== 'pending') {
+      throw new HttpsError('failed-precondition', 'This invite is no longer pending.');
+    }
+
+    const team = await loadTeam(tx, inv.teamId!);
+    if (team.status === 'disbanded') {
+      throw new HttpsError('failed-precondition', 'This team has been disbanded.');
+    }
+    const { series, weekday, programme } = await loadTeamSeries(tx, inv.year, inv.seriesId!);
+
+    if (inv.kind === 'captaincy') {
+      const isMember = team.members.some((m) => m.ref.kind === 'member' && m.ref.memberId === actor.memberId);
+      if (!isMember) {
+        throw new HttpsError('failed-precondition', 'You are no longer a member of this team.');
+      }
+      const baseline = await loadTeamEntries(tx, team.id);
+
+      const now = new Date().toISOString();
+      const updatedTeam: Team = { ...team, captainMemberId: actor.memberId, updatedAt: now };
+      updatedTeam.status = refreshTeamStatus(updatedTeam, series);
+      tx.set(db.doc(paths.team(team.id)), updatedTeam);
+      assertTeamValid(updatedTeam, series, baseline);
+
+      const acceptedInvite: Invite = { ...inv, status: 'accepted', respondedAt: now, updatedAt: now };
+      tx.set(inviteRef, acceptedInvite);
+
+      return {
+        invite: acceptedInvite,
+        entries: [] as Entry[],
+        team: updatedTeam as Team | undefined,
+        expired: [] as Invite[],
+        oldCaptainId: inv.fromMemberId as string | undefined,
+      };
+    }
+
+    // ---- kind: 'join' (or absent — every pre-existing team invite) ----
+    if (team.members.length >= series.teamMax) {
+      throw new HttpsError('failed-precondition', 'This team is full.');
+    }
+    if (team.members.some((m) => m.ref.kind === 'member' && m.ref.memberId === actor.memberId)) {
+      throw new HttpsError('failed-precondition', 'You are already on this team.');
+    }
+
+    const sessions = await seriesSessions(tx, inv.year, series);
+    const byId = new Map(sessions.map((s) => [s.id, s]));
+    const invitedSessions = inv.sessionIds.map((sid) => byId.get(sid)).filter((s): s is NonNullable<typeof s> => !!s);
+    // Sessions that have since locked are dropped, not treated as a failure
+    // (plan design notes: "skip sessions that have since locked").
+    const activeSessions = unlockedSessions(invitedSessions, weekday, programme, { force: input.force });
+    if (activeSessions.length === 0) {
+      throw new HttpsError('failed-precondition', 'Every session on this invite has already started.');
+    }
+
+    const existingEntries = new Map<string, Entry | null>();
+    const conflicts: string[] = [];
+    for (const session of activeSessions) {
+      const entry = await readEntry(tx, session.id, actor.memberId);
+      if (!isFree(entry)) conflicts.push(session.date);
+      existingEntries.set(session.id, entry);
+    }
+    if (conflicts.length > 0) {
+      throw new HttpsError(
+        'failed-precondition',
+        `Conflicting session(s): ${conflicts.join(', ')}. The invite is still pending.`,
+      );
+    }
+
+    const activeSessionIdSet = new Set(activeSessions.map((s) => s.id));
+    const otherPendingSnap = await tx.get(db.collection(paths.invites()).where('status', '==', 'pending'));
+    const toExpire = otherPendingSnap.docs
+      .map((d) => d.data() as Invite)
+      .filter(
+        (other) =>
+          other.id !== inv.id &&
+          (other.fromMemberId === actor.memberId || other.toMemberId === actor.memberId) &&
+          other.sessionIds.some((sid) => activeSessionIdSet.has(sid)),
+      );
+
+    const baseline = await loadTeamEntries(tx, team.id);
+    const now = new Date().toISOString();
+    const wasForming = team.status === 'forming';
+    const updatedTeam: Team = {
+      ...team,
+      members: [...team.members, { ref: memberRef(actor.member), joinedAt: now }],
+      updatedAt: now,
+    };
+    updatedTeam.status = refreshTeamStatus(updatedTeam, series);
+
+    const entries = writeTeamEntries(
+      tx,
+      updatedTeam,
+      activeSessions,
+      existingEntries,
+      actor.memberId,
+      actor.memberId,
+      actor.onBehalfBy,
+    );
+    tx.set(db.doc(paths.team(team.id)), updatedTeam);
+
+    const acceptedInvite: Invite = { ...inv, status: 'accepted', respondedAt: now, updatedAt: now };
+    tx.set(inviteRef, acceptedInvite);
+    for (const other of toExpire) {
+      tx.set(db.doc(paths.invite(other.id)), { ...other, status: 'expired', updatedAt: now });
+    }
+
+    assertTeamValid(updatedTeam, series, mergeEntries(baseline, entries));
+
+    return {
+      invite: acceptedInvite,
+      entries,
+      team: (wasForming && updatedTeam.status === 'active' ? updatedTeam : undefined) as Team | undefined,
+      expired: toExpire,
+      oldCaptainId: undefined as string | undefined,
+    };
+  });
+
+  if (actor.onBehalfBy) {
+    await audit({
+      actorMemberId: actor.onBehalfBy,
+      action: 'respond_to_invite_on_behalf',
+      targetMemberId: actor.memberId,
+      entityRef: inviteRef.path,
+    });
+    await createNotification(
+      actor.memberId,
+      'on_behalf_action',
+      'An admin accepted a team invite for you',
+      'An admin accepted a team invite on your behalf.',
+      { inviteId: result.invite.id },
+    );
+  }
+
+  if (result.invite.kind === 'captaincy') {
+    await createNotification(
+      result.oldCaptainId!,
+      'team_captaincy_transferred',
+      'You handed over the captaincy',
+      `${actorName} is now the captain of "${result.team?.name ?? 'your team'}".`,
+      { teamId: result.invite.teamId ?? '' },
+    );
+  } else {
+    await createNotification(
+      result.invite.fromMemberId,
+      'team_member_joined',
+      'Someone joined your team',
+      `${actorName} accepted your team invite.`,
+      { inviteId: result.invite.id, teamId: result.invite.teamId ?? '' },
+    );
+  }
+  for (const other of result.expired) {
+    await createNotification(
+      other.fromMemberId,
+      'invite_expired',
+      'Your invite expired',
+      'The member you invited has already been committed for that session.',
+      { inviteId: other.id },
+    );
+  }
+
+  return { invite: result.invite, entries: result.entries, team: result.team };
+}
 
 /* --------------------------------- cancelInvite ------------------------------ */
 

@@ -148,6 +148,21 @@ export interface CreateTeamResult {
   team: Team;
   entries: Entry[];
 }
+export interface InviteToTeamResult {
+  invite: Invite;
+}
+export interface AddVisitorToTeamResult {
+  team: Team;
+}
+export interface RemoveVisitorFromTeamResult {
+  team: Team;
+}
+export interface LeaveTeamResult {
+  team: Team;
+}
+export interface RemoveFromTeamResult {
+  team: Team;
+}
 export interface DisbandTeamResult {
   team: Team;
 }
@@ -155,6 +170,10 @@ export interface TransferCaptaincyResult {
   invite: Invite;
 }
 export interface AddTeamSessionSubstituteResult {
+  entry?: Entry;
+  team: Team;
+}
+export interface ClearTeamSessionSubstituteResult {
   entry?: Entry;
   team: Team;
 }

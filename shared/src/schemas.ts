@@ -276,9 +276,11 @@ export type DeleteVisitorInput = z.infer<typeof DeleteVisitorInputSchema>;
 /* ----------------------------------- teams --------------------------------- */
 
 export const CreateTeamInputSchema = z.object({
+  year,
   seriesId: id,
   name: z.string().trim().min(1).max(200).optional(),
   onBehalfOfMemberId,
+  force,
 });
 export type CreateTeamInput = z.infer<typeof CreateTeamInputSchema>;
 
@@ -287,6 +289,7 @@ export const InviteToTeamInputSchema = z.object({
   toMemberId: id,
   message: message200.optional(),
   onBehalfOfMemberId,
+  force,
 });
 export type InviteToTeamInput = z.infer<typeof InviteToTeamInputSchema>;
 
@@ -304,13 +307,14 @@ export const RemoveVisitorFromTeamInputSchema = z.object({
 });
 export type RemoveVisitorFromTeamInput = z.infer<typeof RemoveVisitorFromTeamInputSchema>;
 
-export const LeaveTeamInputSchema = z.object({ teamId: id, onBehalfOfMemberId });
+export const LeaveTeamInputSchema = z.object({ teamId: id, onBehalfOfMemberId, force });
 export type LeaveTeamInput = z.infer<typeof LeaveTeamInputSchema>;
 
 export const RemoveFromTeamInputSchema = z.object({
   teamId: id,
   ref: partnerRefInput,
   onBehalfOfMemberId,
+  force,
 });
 export type RemoveFromTeamInput = z.infer<typeof RemoveFromTeamInputSchema>;
 
@@ -321,7 +325,7 @@ export const TransferCaptaincyInputSchema = z.object({
 });
 export type TransferCaptaincyInput = z.infer<typeof TransferCaptaincyInputSchema>;
 
-export const DisbandTeamInputSchema = z.object({ teamId: id, onBehalfOfMemberId });
+export const DisbandTeamInputSchema = z.object({ teamId: id, onBehalfOfMemberId, force });
 export type DisbandTeamInput = z.infer<typeof DisbandTeamInputSchema>;
 
 export const AddTeamSessionSubstituteInputSchema = z.object({
@@ -329,13 +333,16 @@ export const AddTeamSessionSubstituteInputSchema = z.object({
   sessionId: id,
   ref: partnerRefInput,
   onBehalfOfMemberId,
+  force,
 });
 export type AddTeamSessionSubstituteInput = z.infer<typeof AddTeamSessionSubstituteInputSchema>;
 
 export const ClearTeamSessionSubstituteInputSchema = z.object({
   teamId: id,
   sessionId: id,
+  ref: partnerRefInput,
   onBehalfOfMemberId,
+  force,
 });
 export type ClearTeamSessionSubstituteInput = z.infer<typeof ClearTeamSessionSubstituteInputSchema>;
 

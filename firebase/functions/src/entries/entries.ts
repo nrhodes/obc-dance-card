@@ -30,8 +30,18 @@ import { audit } from '../lib/audit.js';
 import { callableOptions } from '../lib/callable.js';
 import { requireMember, resolveActingMember } from '../lib/context.js';
 import { createNotification } from '../notifications/create.js';
-import { assertForceAllowed, assertSessionOpen, entryId, isFree, loadSession, readEntry, repeatPartnerWarning, writePair } from './lib.js';
+import { assertForceAllowed, assertSessionOpen, entryId, isFree, loadSession, memberRef, readEntry, repeatPartnerWarning, writePair } from './lib.js';
 import { parseInput } from '../lib/parseInput.js';
+import {
+  assertTeamValid,
+  loadTeamEntries,
+  memberTeamInSeries,
+  mergeEntries,
+  refreshTeamStatus,
+  seriesSessions,
+  unlockedSessions,
+  writeTeamEntries,
+} from '../teams/lib.js';
 
 /* -------------------------------- setSoloStatus ------------------------------ */
 
@@ -43,7 +53,10 @@ export async function setSoloStatusHandler(req: CallableRequest<SetSoloStatusInp
 
   const entry = await db.runTransaction(async (tx) => {
     const loaded = await loadSession(tx, input.year, input.sessionId);
-    assertSessionOpen(loaded.session, loaded.weekday, loaded.programme, { force: input.force });
+    // `allowTeamsSession: true` — plan §12A.4: on a Teams session this posts
+    // "Looking for a team" / "Available for a team" instead of a pairing
+    // listing, so the "this is a teams event" rejection must not apply here.
+    assertSessionOpen(loaded.session, loaded.weekday, loaded.programme, { force: input.force, allowTeamsSession: true });
 
     const existing = await readEntry(tx, input.sessionId, actor.memberId);
     if (!isFree(existing)) {
@@ -108,7 +121,7 @@ export async function clearSoloStatusHandler(
 
   const entry = await db.runTransaction(async (tx) => {
     const loaded = await loadSession(tx, input.year, input.sessionId);
-    assertSessionOpen(loaded.session, loaded.weekday, loaded.programme, { force: input.force });
+    assertSessionOpen(loaded.session, loaded.weekday, loaded.programme, { force: input.force, allowTeamsSession: true });
 
     const existing = await readEntry(tx, input.sessionId, caller.uid);
     if (!existing || (existing.status !== 'looking_for_partner' && existing.status !== 'available')) {
@@ -143,14 +156,78 @@ export async function claimLookingForPartnerHandler(
 
   const result = await db.runTransaction(async (tx) => {
     const loaded = await loadSession(tx, input.year, input.sessionId);
-    assertSessionOpen(loaded.session, loaded.weekday, loaded.programme, { force: input.force });
+    assertSessionOpen(loaded.session, loaded.weekday, loaded.programme, { force: input.force, allowTeamsSession: true });
+
+    // ---- Teams (plan §12A.4): only a captain with space may claim a
+    // "looking for a team" listing, and claiming adds the poster to the
+    // captain's roster for the *whole series*, not just this session. ----
     if (loaded.session.format === 'Teams') {
-      throw new HttpsError(
-        'failed-precondition',
-        'This is a teams event — only a captain with space can claim a "looking for a team" listing.',
-      );
+      if (!loaded.series) {
+        throw new HttpsError('internal', 'A Teams session is missing its series.');
+      }
+      const series = loaded.series;
+      const posterEntry = await readEntry(tx, input.sessionId, input.posterMemberId);
+      if (!posterEntry || posterEntry.status !== 'looking_for_partner') {
+        throw new HttpsError('failed-precondition', 'That listing is no longer available.');
+      }
+      const posterSnap = await tx.get(db.doc(paths.member(input.posterMemberId)));
+      const poster = posterSnap.data() as Member | undefined;
+      if (!poster || !poster.active) {
+        throw new HttpsError('failed-precondition', 'That member is no longer active.');
+      }
+
+      // Look the caller's team up by membership, not by the deterministic id:
+      // after a captaincy transfer the doc keeps the original captain's id.
+      const team = await memberTeamInSeries(tx, series.id, actor.memberId);
+      if (!team || team.status === 'disbanded' || team.captainMemberId !== actor.memberId) {
+        throw new HttpsError(
+          'failed-precondition',
+          'You must captain a team in this series with space to claim this listing.',
+        );
+      }
+      if (team.members.length >= series.teamMax) {
+        throw new HttpsError('failed-precondition', 'Your team is full.');
+      }
+      if (await memberTeamInSeries(tx, series.id, poster.id)) {
+        throw new HttpsError('failed-precondition', 'That member is already on a team for this series.');
+      }
+
+      const sessions = await seriesSessions(tx, input.year, series);
+      const openSessions = unlockedSessions(sessions, loaded.weekday, loaded.programme, { force: input.force });
+      const existingEntries = new Map<string, Entry | null>();
+      const conflicts: string[] = [];
+      for (const session of openSessions) {
+        // The poster's own listing on *this* session is what is being
+        // claimed — it is replaced by the team entry, so it does not count
+        // as a conflict (plan design notes: "treat their own solo entry as
+        // free"). Every other session must be genuinely free.
+        const entry = session.id === input.sessionId ? posterEntry : await readEntry(tx, session.id, poster.id);
+        if (session.id !== input.sessionId && !isFree(entry)) {
+          conflicts.push(session.date);
+        }
+        existingEntries.set(session.id, session.id === input.sessionId ? null : entry);
+      }
+      if (conflicts.length > 0) {
+        throw new HttpsError('failed-precondition', `That member is already committed on: ${conflicts.join(', ')}.`);
+      }
+
+      const baseline = await loadTeamEntries(tx, team.id);
+      const now = new Date().toISOString();
+      const updatedTeam: Team = {
+        ...team,
+        members: [...team.members, { ref: memberRef(poster), joinedAt: now }],
+        updatedAt: now,
+      };
+      updatedTeam.status = refreshTeamStatus(updatedTeam, series);
+
+      const written = writeTeamEntries(tx, updatedTeam, openSessions, existingEntries, poster.id, actor.memberId, actor.onBehalfBy);
+      tx.set(db.doc(paths.team(updatedTeam.id)), updatedTeam);
+      assertTeamValid(updatedTeam, series, mergeEntries(baseline, written));
+
+      return { kind: 'team' as const, entries: written, team: updatedTeam, poster };
     }
 
+    // ---- Pairs / Individual (unchanged) ----
     const posterEntry = await readEntry(tx, input.sessionId, input.posterMemberId);
     if (!posterEntry || posterEntry.status !== 'looking_for_partner') {
       throw new HttpsError('failed-precondition', 'That listing is no longer available.');
@@ -178,7 +255,7 @@ export async function claimLookingForPartnerHandler(
       onBehalfBy: actor.onBehalfBy,
     });
 
-    return { entries: [entryA, entryB], warning, poster };
+    return { kind: 'pair' as const, entries: [entryA, entryB], warning, poster };
   });
 
   if (actor.onBehalfBy) {
@@ -186,25 +263,31 @@ export async function claimLookingForPartnerHandler(
       actorMemberId: actor.onBehalfBy,
       action: 'claim_looking_for_partner_on_behalf',
       targetMemberId: actor.memberId,
-      entityRef: paths.entry(entryId(input.sessionId, actor.memberId)),
+      entityRef: result.kind === 'team' ? paths.team(result.team.id) : paths.entry(entryId(input.sessionId, actor.memberId)),
     });
     await createNotification(
       actor.memberId,
       'on_behalf_action',
       'An admin claimed a partner listing for you',
-      `An admin paired you with ${result.poster.firstName} ${result.poster.lastName} on your behalf.`,
+      result.kind === 'team'
+        ? `An admin added ${result.poster.firstName} ${result.poster.lastName} to your team on your behalf.`
+        : `An admin paired you with ${result.poster.firstName} ${result.poster.lastName} on your behalf.`,
       { sessionId: input.sessionId },
     );
   }
   await createNotification(
     result.poster.id,
     'claimed',
-    'Someone claimed your listing',
-    `${actorName} will play with you.`,
+    result.kind === 'team' ? 'A captain claimed your listing' : 'Someone claimed your listing',
+    result.kind === 'team' ? `${actorName} added you to their team.` : `${actorName} will play with you.`,
     { sessionId: input.sessionId, year: String(input.year) },
   );
 
-  return { entries: result.entries, repeatPartnerWarning: result.warning };
+  return {
+    entries: result.entries,
+    team: result.kind === 'team' ? result.team : undefined,
+    repeatPartnerWarning: result.kind === 'pair' ? result.warning : undefined,
+  };
 }
 
 export const claimLookingForPartner = onCall(callableOptions, claimLookingForPartnerHandler);

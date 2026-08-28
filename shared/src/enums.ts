@@ -77,6 +77,15 @@ export type ProgrammeStatus = (typeof PROGRAMME_STATUSES)[number];
 export const TEAM_STATUSES = ['forming', 'active', 'disbanded'] as const;
 export type TeamStatus = (typeof TEAM_STATUSES)[number];
 
+/**
+ * What a `scope:'team'` invite is for: joining the roster (`'join'`, the
+ * default when the field is absent — every invite created before this kind
+ * existed is implicitly a join invite) or accepting the captaincy
+ * (`'captaincy'`, plan §9.2 `transferCaptaincy`).
+ */
+export const INVITE_KINDS = ['join', 'captaincy'] as const;
+export type InviteKind = (typeof INVITE_KINDS)[number];
+
 export const NOTIFICATION_CHANNELS = ['inapp', 'push', 'email', 'sms'] as const;
 export type NotificationChannel = (typeof NOTIFICATION_CHANNELS)[number];
 

@@ -12,6 +12,7 @@ import type {
   AuditAction,
   DigestMode,
   EntryStatus,
+  InviteKind,
   InviteScope,
   InviteStatus,
   MemberGrade,
@@ -253,6 +254,12 @@ export interface Invite extends Timestamps {
   id: Id;
   scope: InviteScope;
   /**
+   * Set only for `scope: 'team'`. Absent (and every non-team invite) means
+   * `'join'`. `'captaincy'` is `transferCaptaincy`'s offer to the new
+   * captain — plan §9.2.
+   */
+  kind?: InviteKind;
+  /**
    * Programme year the sessions belong to. Threaded through so later
    * lookups (respond/cancel) never have to re-derive it from a session id
    * shape (plan §5.4's two id forms aren't reliably splittable).
@@ -318,6 +325,14 @@ export interface Team extends Timestamps {
   /** Includes the captain; members or visitors. */
   members: TeamMemberEntry[];
   status: TeamStatus;
+  /**
+   * Session-only substitutes who are visitors (plan §9.2
+   * `addTeamSessionSubstitute`): keyed by `sessionId`, since a visitor sub
+   * has no `entries` doc of its own to record it on. A member sub is
+   * recorded as a `teamSessionOnly` entry instead (I9) and never appears
+   * here. Additive field — absent means "none recorded".
+   */
+  sessionVisitors?: Record<Id, PartnerRef[]>;
 }
 
 /* -------------------------------------------------------------------------- */

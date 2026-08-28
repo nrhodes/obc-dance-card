@@ -38,21 +38,21 @@ export { createVisitor, updateVisitor, deleteVisitor } from './visitors/visitors
 export { signUpWithVisitor } from './visitors/signUp.js';
 export { setSubstitute, clearSubstitute } from './entries/substitute.js';
 
+// Phase 4b — teams
+export {
+  createTeam,
+  inviteToTeam,
+  addVisitorToTeam,
+  removeVisitorFromTeam,
+  leaveTeam,
+  removeFromTeam,
+  transferCaptaincy,
+  disbandTeam,
+  addTeamSessionSubstitute,
+  clearTeamSessionSubstitute,
+} from './teams/teams.js';
+
 /*
- * Phase 4b — teams
- * export {
- *   createTeam,
- *   inviteToTeam,
- *   addVisitorToTeam,
- *   removeVisitorFromTeam,
- *   leaveTeam,
- *   removeFromTeam,
- *   transferCaptaincy,
- *   disbandTeam,
- *   addTeamSessionSubstitute,
- *   clearTeamSessionSubstitute,
- * } from './teams/teams.js';
- *
  * Phase 5 — notifications
  * export { onNotificationCreated } from './notifications/dispatch.js';
  * export { sendSessionReminders } from './notifications/reminders.js';
