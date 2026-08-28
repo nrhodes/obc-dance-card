@@ -57,3 +57,17 @@ const SHORT_WEEKDAY_LABELS: Record<Weekday, string> = {
 export function shortWeekdayLabel(weekday: Weekday): string {
   return SHORT_WEEKDAY_LABELS[weekday];
 }
+
+const nzDateTimeLabelFormatter = new Intl.DateTimeFormat('en-NZ', {
+  timeZone: 'Pacific/Auckland',
+  day: 'numeric',
+  month: 'short',
+  year: 'numeric',
+  hour: 'numeric',
+  minute: '2-digit',
+});
+
+/** Formats a full ISO instant (e.g. an invite's `expiresAt`) as an NZ-local date + time. */
+export function formatDateTimeNZ(iso: string): string {
+  return nzDateTimeLabelFormatter.format(new Date(iso));
+}

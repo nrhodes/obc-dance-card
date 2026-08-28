@@ -128,21 +128,95 @@ starting the emulators + seed + dev server first).
       not active — please contact the club." with only a Sign out button; no
       member data is shown.
 
-## 3. Invite and accept (Phase 3)
+## 3. My Card, invites, and session actions (Phase 3b)
 
-- [ ] Member A opens a Monday session, invites Member B.
-- [ ] Member B sees the invite (in-app + notification), accepts.
-- [ ] **Both** cards now show the pairing for that session; the session roster
-      lists them as a confirmed pair.
-- [ ] Member A tries to invite someone else for the same session — blocked
-      (already paired).
+**3a. My Dance Card (`/`) — empty state**
 
-## 4. Cancel and re-match (Phase 3–4)
+- [ ] Sign in as Member A (who has no entries yet). The home screen still
+      greets you ("Hello, `<first name>`") and, below it, **My dance card**
+      shows "Nothing on your card yet — open the Programme to sign up."
+- [ ] Click **Show past** — it toggles to "Hide past" and shows "No past
+      sessions yet." (or nothing, if there is genuinely no history).
 
-- [ ] Member A cancels that session.
-- [ ] Member B is notified and their entry flips to "Looking for Partner"; A's
-      entry is "cancelled" and no longer shown as active.
-- [ ] Member C sees B on the noticeboard and pairs with them; both cards match.
+**3b. Send an invite for a single session**
+
+- [ ] Member A opens a future Monday "Marion Taylor Pairs" session
+      (`/programme` → Mon tab → a date).
+- [ ] Under **Actions**, click **Invite a partner**. A dialog opens
+      (title "Invite a partner"); type part of Member B's name into
+      **Search members**, confirming Member A's own name and anyone already
+      confirmed on this session never appear in the list.
+- [ ] Click Member B in the list — the dialog switches to "Invite `<Member
+      B>`"; optionally type a short message; leave **Invite for the whole
+      series** unticked; click **Send invite**. The dialog closes and a
+      "Invite sent." banner appears.
+- [ ] Press <kbd>Escape</kbd> to confirm a dialog can be dismissed this way
+      (open **Invite a partner** again, then close it without sending).
+
+**3c. Accept the invite**
+
+- [ ] Sign in as Member B (a second browser/incognito window, or sign out
+      and back in). The nav's **Invites** link shows a badge (**1**).
+- [ ] Open **Invites** (`/invites`). Under **Incoming**, see Member A's name,
+      "single session", the session's date, the message (if any), and the
+      expiry. Click **Accept**.
+- [ ] **Both** My Cards (`/`) now show the pairing for that session ("with
+      `<partner's name>`"), grouped under the right weekday → series; the
+      session's roster (`/session/...`) lists them as a confirmed pair. The
+      **Invites** badge is gone for Member B; the invite now appears under
+      **Recently resolved** for both.
+- [ ] Member A opens the same session and confirms **Actions** now show
+      **Cancel this session** (and a disabled **Arrange a substitute**), not
+      the invite/looking-for-partner buttons.
+- [ ] Member A tries to invite a third member (Member C) to the *same*
+      session — the invite dialog no longer offers Member B (already
+      confirmed), and if attempted via the API directly the call fails with
+      `failed-precondition` shown verbatim.
+
+**3d. Looking for a partner / Available, and claiming**
+
+- [ ] Member C opens a different, still-open Monday session and clicks
+      **I'm looking for a partner**. A dialog offers an optional short note;
+      click **Confirm**. The session roster now lists Member C under
+      "Looking for a partner"; Member C's own **Actions** area now shows
+      **Switch to available** and **Remove**.
+- [ ] Member D opens the same session and sees a **Play with `<Member C>`**
+      button next to Member C's roster row; click it, confirm "You'll be
+      paired with `<Member C>` for this session." in the dialog, click **Play
+      with them**. Both are now confirmed; Member C gets a notification.
+- [ ] On a fresh session, Member E clicks **I'm available** instead; Member F
+      sees an **Invite `<Member E>`** button next to that row, which opens
+      the invite dialog pre-filled with Member E.
+- [ ] On an Individual-format series, pair the same two members again on a
+      different session of that series (via claim or accept) — a non-blocking
+      "You've already played with `<name>` in this individual series." notice
+      appears; the pairing still succeeds.
+
+## 4. Cancel and re-match, and notifications (Phase 3b)
+
+- [ ] Member A (confirmed with Member B) opens the session and clicks
+      **Cancel this session**. The confirm dialog explains the consequence
+      in plain words first — "`<Member B>` will be told you've cancelled and
+      will be shown as looking for a partner." — before any button is
+      pressed. Confirm.
+- [ ] Member A's entry disappears from their My Card (cancelled entries are
+      not shown); Member B's roster row flips to "Looking for a partner",
+      and their My Card line now reads "Looking for a partner" for that date.
+- [ ] Member B opens **Notifications** (`/notifications`) — a new, boldly
+      styled unread entry "Your partner cancelled" appears at the top. Click
+      it: it is marked read (the styling changes and the nav badge count
+      drops) and it follows the deep link back to the session page.
+- [ ] Click **Mark all read** — every remaining unread item's styling
+      updates and the nav badge disappears.
+- [ ] Member C sees Member B "Looking for a partner" on that session's
+      roster and claims them (§3d) — both cards match again.
+- [ ] Withdraw an invite: Member A sends a fresh invite to Member G, then
+      opens **Invites** → **Sent** and clicks **Withdraw** before Member G
+      responds. Member G's **Invites** badge never appears for it, and it
+      moves to **Recently resolved** ("cancelled") for both.
+- [ ] Decline an invite: Member A invites Member H; Member H opens
+      **Invites** and clicks **Decline**. Member A is notified
+      ("Your invite was declined").
 
 ## 5. Substitute (Phase 4)
 

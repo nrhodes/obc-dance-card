@@ -1,16 +1,28 @@
 # web — OBC Dance Card PWA
 
 React 18 + Vite + TypeScript PWA (plan §14.1). Serves the member and admin
-screens for Phase 1b (sign in, profile, admin members import) and Phase 2b
-(programme browser, session page, admin programme import/publish).
+screens for Phase 1b (sign in, profile, admin members import), Phase 2b
+(programme browser, session page — read-only), and Phase 3b (My Dance Card,
+invites inbox, live session actions, notifications feed).
 
 ## Routes
 
 - `/signin` — sign in (code or password)
-- `/` — home, "Next sessions"
+- `/` — **My Dance Card**: upcoming entries grouped by weekday → series, a
+  collapsed "Past" (last 10), empty state, and the source of the nav's
+  invites/notifications badges
 - `/profile` — contact, prefs, password, sign out
 - `/programme` — the published programme, by weekday
-- `/session/:year/:sessionId` — one session's roster (read-only this phase)
+- `/session/:year/:sessionId` — one session's roster **and actions**: invite a
+  partner (single session or whole series), "I'm looking for a partner" /
+  "I'm available", claim a "looking for a partner" roster row, invite an
+  "available" row, and cancel your own entry (with a plain-English
+  consequence before you confirm). Visitor sign-up, arranging a substitute,
+  and teams are disabled placeholders (Phase 4 / 4b)
+- `/invites` — incoming (Accept/Decline), outgoing (Withdraw), and the last
+  10 recently resolved invites
+- `/notifications` — the last 50 notifications; tap to mark read and follow
+  its deep link; "Mark all read"
 - `/admin/members` — admin: members CSV import
 - `/admin/programme` — admin: programme CSV import/publish, all-programmes list
 
@@ -79,15 +91,24 @@ npm run lint -w web
 a code for `admin@example.org`, sign in, visit Profile, sign out.
 `web/e2e/programme.spec.ts` signs in the same way, opens **Programme**, opens
 the Monday tab, clicks the first "Marion Taylor Pairs" date, and confirms the
-session page and its empty roster. Both assume the emulators + seed + dev
-server are already running (see above) — they do not start them itself.
+session page and its empty roster. `web/e2e/dancecard.spec.ts` drives **two**
+browser contexts — the seeded admin and a seeded ordinary member
+(`john.smith@example.org`) — through a full pairing/cancel cycle: the admin
+lists themselves "Looking for a partner" on a future Monday session, the
+second member claims it ("Play with Admin User"), both My Dance Cards show
+the pairing, the admin then cancels, and the second member's card flips back
+to "Looking for a partner" with a "Your partner cancelled" notification. All
+three specs assume the emulators + seed + dev server are already running
+(see above) — they do not start them themselves.
 
-Because both specs sign in with an emailed code for the same seeded admin
-address, running the full suite more than 2-3 times inside a 15-minute window
-can trip the `requestLoginCode` rate limit (plan §8.1: 3 requests / email /
-15 min) — the request still returns `{ ok: true }` (uniform response) but no
-email arrives, and `waitForLoginCode` will time out. Re-seed (which resets
-`rateLimits`) or wait out the window if that happens.
+Because these specs sign in with an emailed code, running the full suite
+more than 2-3 times inside a 15-minute window can trip the
+`requestLoginCode` rate limit (plan §8.1: 3 requests / email / 15 min) — the
+request still returns `{ ok: true }` (uniform response) but no email
+arrives, and `waitForLoginCode` will time out. `dancecard.spec.ts` uses a
+second seeded email precisely so it doesn't share a rate-limit budget with
+the other two specs' admin sign-ins. Re-seed (which resets `rateLimits`) or
+wait out the window if that happens.
 
 ```sh
 npx playwright install chromium   # once
@@ -144,21 +165,36 @@ src/
     errors.ts                error -> plain-English copy mapping
     passwordStrength.ts       mirrors the Firebase password policy
   components/
-    AppShell.tsx             header, nav, skip link, <main id="content">
+    AppShell.tsx             header, nav (+ invites/notifications badges), skip link, <main id="content">
     RouteGuards.tsx           signed-out / not-active / admin route guards
+    Dialog.tsx                accessible modal primitive (role=dialog, focus trap, Escape)
+    ConfirmDialog.tsx         generic confirm/cancel dialog (claim, cancel entry)
+    SoloStatusDialog.tsx      "I'm looking for a partner" / "I'm available" + optional note
+    InvitePartnerDialog.tsx   member picker + message + whole-series toggle
   programme/
     ProgrammeProvider.tsx     the shared "current published programme" subscription
     useProgramme.ts           read hook for weekdays/series/sessions
   members/
     MembersDirectoryProvider.tsx  subscribes to active members once; nameOf(id)
+  invites/
+    InvitesProvider.tsx       incoming/outgoing pending + last-10-resolved subscription
+    useInvites.ts
+  notifications/
+    NotificationsProvider.tsx newest-50 notifications subscription; unread count
+    useNotifications.ts
   lib/
-    format.ts                 formatDateNZ/formatTimeOfDay/shortWeekdayLabel
+    format.ts                 formatDateNZ/formatTimeOfDay/formatDateTimeNZ/shortWeekdayLabel
     roster.ts                 pure session-roster grouping (pairs/LFP/available/own entry)
     programmeView.ts          pure weekday-timeline grouping + default-tab logic
+    card.ts                   pure My Dance Card grouping + per-status line text
+    sessionActions.ts         pure session-page action state machine + cancel-consequence copy
+    actionErrors.ts           shared callable-error -> display copy mapping
+    memberPicker.ts           pure member-search filter (excludes self + already-confirmed)
   screens/
-    SignInScreen.tsx, HomeScreen.tsx, ProfileScreen.tsx, NotActiveScreen.tsx,
+    SignInScreen.tsx, HomeScreen.tsx (My Dance Card), ProfileScreen.tsx, NotActiveScreen.tsx,
     NotificationPrefsForm.tsx, PasswordSection.tsx,
-    ProgrammeScreen.tsx, SessionScreen.tsx,
+    ProgrammeScreen.tsx, SessionScreen.tsx (roster + actions),
+    InvitesScreen.tsx, NotificationsScreen.tsx,
     admin/MembersImportScreen.tsx, admin/ProgrammeImportScreen.tsx,
     admin/AdminProgrammeList.tsx
 ```

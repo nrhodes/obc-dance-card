@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatDateNZ, formatTimeOfDay, shortWeekdayLabel } from './format';
+import { formatDateNZ, formatDateTimeNZ, formatTimeOfDay, shortWeekdayLabel } from './format';
 
 describe('formatDateNZ', () => {
   it('formats an NZST date (no comma, short weekday/month)', () => {
@@ -38,6 +38,13 @@ describe('formatTimeOfDay', () => {
 
   it('falls back to the raw value when unparseable', () => {
     expect(formatTimeOfDay('not-a-time')).toBe('not-a-time');
+  });
+});
+
+describe('formatDateTimeNZ', () => {
+  it('formats an ISO instant as an NZ-local date and time', () => {
+    // 2027-01-11T01:00:00Z is 14:00 NZDT (+13) on the same NZ calendar day.
+    expect(formatDateTimeNZ('2027-01-11T01:00:00.000Z')).toBe('11 Jan 2027, 2:00 pm');
   });
 });
 
