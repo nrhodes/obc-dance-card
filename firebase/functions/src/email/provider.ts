@@ -9,6 +9,8 @@
  *    silently drop mail.
  */
 import nodemailer, { type Transporter } from 'nodemailer';
+import { randomUUID } from 'node:crypto';
+import { db } from '../lib/admin.js';
 import { logger } from '../lib/logger.js';
 import { SMTP_PASS } from '../lib/secrets.js';
 
@@ -23,10 +25,24 @@ export interface EmailProvider {
   send(msg: EmailMessage): Promise<void>;
 }
 
-/** True on a deployed Cloud Function (Cloud Run sets `K_SERVICE`); false in the emulator, tests, and local scripts. */
-function isDeployed(): boolean {
-  return typeof process.env.K_SERVICE === 'string' && process.env.K_SERVICE.length > 0;
+/**
+ * True only on a deployed Cloud Function. Cloud Run sets `K_SERVICE` on real
+ * instances — but so does the Functions emulator, which additionally sets
+ * `FUNCTIONS_EMULATOR=true`. Tests and local scripts set neither.
+ */
+export function isDeployed(): boolean {
+  const hasService = typeof process.env.K_SERVICE === 'string' && process.env.K_SERVICE.length > 0;
+  return hasService && process.env.FUNCTIONS_EMULATOR !== 'true';
 }
+
+/**
+ * Local-only mailbox. When not deployed, the console provider also writes each
+ * message to `emulatorOutbox/{id}` so the E2E suite and manual testers can read
+ * a login code deterministically instead of scraping logs. The collection is
+ * unreadable by clients (the rules' catch-all denies it); tests read it through
+ * the emulator's owner-bypass REST API. Never written when deployed.
+ */
+const EMULATOR_OUTBOX = 'emulatorOutbox';
 
 /** Never log a full email address (plan §3 rule 7) — domain only. */
 function emailDomain(address: string): string {
@@ -50,6 +66,12 @@ class ConsoleEmailProvider implements EmailProvider {
       console.log(
         `\n--- email (console provider) ---\nTo: ${msg.to}\nSubject: ${msg.subject}\n\n${msg.text}\n---------------------------------\n`,
       );
+      await db.collection(EMULATOR_OUTBOX).doc(randomUUID()).set({
+        to: msg.to,
+        subject: msg.subject,
+        text: msg.text,
+        createdAt: new Date().toISOString(),
+      });
     }
   }
 }

@@ -70,3 +70,87 @@ jobs:
 
       - name: Firestore rules tests
         run: npm run test:rules -w @obc/functions
+
+  e2e-test:
+    # Verified working locally (Phase 1b): emulators + seed + `npm run dev -w
+    # web` + `npm run test:e2e -w web` all green. See web/README.md for the
+    # manual sequence this mirrors.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Set up Java (Firestore emulator)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Install
+        run: npm ci
+
+      - name: Build (shared → web → functions)
+        run: npm run build
+
+      - name: Install Playwright Chromium
+        run: npx --prefix web playwright install --with-deps chromium
+
+      - name: Write local-dev secrets for the emulator
+        run: |
+          echo "LOGIN_CODE_PEPPER=ci-dev-pepper" > firebase/functions/.secret.local
+          echo "SMTP_PASS=ci-dev-smtp-pass" >> firebase/functions/.secret.local
+
+      - name: Start emulators
+        run: nohup npm run emulators > firebase-emulators.out 2>&1 &
+
+      - name: Wait for emulators
+        run: |
+          for i in $(seq 1 60); do
+            if grep -q "All emulators ready" firebase-emulators.out 2>/dev/null; then exit 0; fi
+            sleep 1
+          done
+          echo "Emulators did not start in time" >&2
+          cat firebase-emulators.out || true
+          exit 1
+
+      - name: Seed emulator data
+        env:
+          FIRESTORE_EMULATOR_HOST: 127.0.0.1:8080
+          FIREBASE_AUTH_EMULATOR_HOST: 127.0.0.1:9099
+          GCLOUD_PROJECT: demo-obc
+        run: npm run seed
+
+      - name: Start web dev server
+        run: nohup npm run dev -w web > web-dev.out 2>&1 &
+
+      - name: Wait for web dev server
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:5173/ > /dev/null; then exit 0; fi
+            sleep 1
+          done
+          echo "Web dev server did not start in time" >&2
+          cat web-dev.out || true
+          exit 1
+
+      - name: Run Playwright E2E
+        env:
+          OBC_EMULATOR_LOG: ${{ github.workspace }}/firebase-emulators.out
+          LOGIN_CODE_PEPPER: ci-dev-pepper
+        run: npm run test:e2e -w web
+
+      - name: Upload debug artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-debug
+          path: |
+            web/test-results/
+            web/playwright-report/
+            firebase-emulators.out
+            web-dev.out
+          retention-days: 7

@@ -1,0 +1,278 @@
+/*
+ * Single global stylesheet (plan §14.1: no UI kit, plain CSS + variables).
+ * Accessibility rules are non-negotiable here (plan §1, §14.1):
+ *   - base font 18px
+ *   - minimum tap target 48px
+ *   - WCAG AA contrast
+ *   - a visible focus ring on every interactive element
+ */
+
+:root {
+  --color-bg: #ffffff;
+  --color-text: #14213d;
+  --color-primary: #1b3a57;
+  --color-primary-contrast: #ffffff;
+  --color-secondary-bg: #eef2f6;
+  --color-secondary-text: #14213d;
+  --color-border: #6b7686;
+  --color-error-bg: #fdecea;
+  --color-error-text: #7a1712;
+  --color-success-bg: #e8f5e9;
+  --color-success-text: #1b4332;
+  --color-muted: #4b5563;
+  --focus-ring: #0b5fff;
+  --tap-target: 48px;
+  --font-size-base: 18px;
+  --font-size-large: 24px;
+  --space-1: 8px;
+  --space-2: 16px;
+  --space-3: 24px;
+  --space-4: 32px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  font-size: var(--font-size-base);
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family:
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    Helvetica,
+    Arial,
+    sans-serif;
+  line-height: 1.5;
+}
+
+h1,
+h2,
+h3 {
+  line-height: 1.25;
+}
+
+a {
+  color: var(--color-primary);
+}
+
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  background: var(--color-primary);
+  color: var(--color-primary-contrast);
+  padding: var(--space-2);
+  z-index: 100;
+}
+
+.skip-link:focus {
+  left: var(--space-2);
+  top: var(--space-2);
+}
+
+:focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--tap-target);
+  min-width: var(--tap-target);
+  padding: var(--space-1) var(--space-3);
+  border-radius: 8px;
+  border: 2px solid transparent;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 1rem;
+}
+
+.button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.button-primary {
+  background: var(--color-primary);
+  color: var(--color-primary-contrast);
+}
+
+.button-secondary {
+  background: var(--color-secondary-bg);
+  color: var(--color-secondary-text);
+  border-color: var(--color-border);
+}
+
+.button-danger {
+  background: var(--color-error-bg);
+  color: var(--color-error-text);
+  border-color: var(--color-error-text);
+}
+
+.button-link {
+  background: none;
+  border: none;
+  color: var(--color-primary);
+  text-decoration: underline;
+  min-width: 0;
+  padding: var(--space-1);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-bottom: var(--space-2);
+}
+
+.field label {
+  font-weight: 600;
+}
+
+.field input,
+.field select,
+.field textarea {
+  min-height: var(--tap-target);
+  padding: var(--space-1) var(--space-2);
+  border: 2px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+.code-input {
+  font-size: 2rem;
+  letter-spacing: 0.5rem;
+  text-align: center;
+  max-width: 10ch;
+}
+
+.checkbox-field {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: var(--tap-target);
+}
+
+.checkbox-field input[type='checkbox'] {
+  width: 28px;
+  height: 28px;
+}
+
+.alert {
+  padding: var(--space-2);
+  border-radius: 8px;
+  margin-bottom: var(--space-2);
+}
+
+.alert-error {
+  background: var(--color-error-bg);
+  color: var(--color-error-text);
+}
+
+.alert-success {
+  background: var(--color-success-bg);
+  color: var(--color-success-text);
+}
+
+.app-header {
+  background: var(--color-primary);
+  color: var(--color-primary-contrast);
+  padding: var(--space-2);
+}
+
+.app-header .title {
+  font-size: var(--font-size-large);
+  font-weight: 700;
+  margin: 0 0 var(--space-1) 0;
+}
+
+.app-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.app-nav a,
+.app-nav button {
+  color: var(--color-primary-contrast);
+  min-height: var(--tap-target);
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.app-nav button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 1rem;
+  padding: 0;
+}
+
+main {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: var(--space-3) var(--space-2) var(--space-4);
+}
+
+.card {
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  padding: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+.muted {
+  color: var(--color-muted);
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th,
+td {
+  text-align: left;
+  padding: var(--space-1);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.actions-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+@media (max-width: 400px) {
+  main {
+    padding: var(--space-2);
+  }
+}

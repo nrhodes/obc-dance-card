@@ -52,10 +52,37 @@ claims to keep in sync. Emails, phones, and device tokens live in
 ```sh
 npm install
 cp firebase/functions/.env.example firebase/functions/.env   # fill in local values
-npm run emulators        # Firestore + Auth + Functions on localhost
-npm run seed             # load a sample programme + fake members into the emulator
-npm run --workspace web dev
+cp web/.env.example web/.env                                  # emulator defaults work as-is
+
+# Secrets declared with defineSecret() (login-code pepper, SMTP password) are
+# not read from .env — the emulator reads them from this gitignored file:
+echo "LOGIN_CODE_PEPPER=local-dev-pepper" > firebase/functions/.secret.local
+echo "SMTP_PASS=local-dev-smtp-pass" >> firebase/functions/.secret.local
+
+npm run build             # builds @obc/shared, which functions/web import
+npm run emulators         # Firestore + Auth + Functions + Hosting on demo-obc (needs --config; see below)
+npm run seed -w @obc/functions   # 20 fake members incl. admin@example.org, into the running emulator
+npm run dev -w web         # Vite dev server on http://localhost:5173
 ```
+
+`npm run emulators` runs
+`firebase --project demo-obc --config firebase/firebase.json emulators:start`
+(the `--config` matters — `firebase.json` lives under `firebase/`, not the
+repo root). `npm run seed` talks to whatever emulator is already listening on
+the standard ports; it refuses to run unless
+`FIRESTORE_EMULATOR_HOST`/`FIREBASE_AUTH_EMULATOR_HOST` are set, which
+`firebase emulators:exec` does automatically but a plain
+`emulators:start` (as above) does not — set them yourself first if you're not
+using `emulators:exec`:
+
+```sh
+export FIRESTORE_EMULATOR_HOST=127.0.0.1:8080
+export FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099
+export GCLOUD_PROJECT=demo-obc
+```
+
+See [`web/README.md`](web/README.md) for the web app's own dev/test/E2E
+instructions.
 
 ## Cost
 
