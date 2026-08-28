@@ -169,7 +169,7 @@ programmes/{year}                 id ("2027"), year, status ('draft'|'published'
 ```
 
 `sessionId` is deterministic: `${year}-${date}-${weekday}` for singles and
-`${seriesId}-${date}` for series sessions. `bookable` = `kind !== 'noBridge' && date >= todayNZ()` is *not* stored — it is computed; the stored field is only `kind`.
+`${seriesId}-${date}` for series sessions. `partnerRequired` is `true` for Pairs and Individual series sessions (members arrange a partner; Individual just rotates), `false` for Teams sessions (entered via a team) and `noBridge`, and per the CSV for `holidayBridge`. `bookable` = `kind !== 'noBridge' && date >= todayNZ()` is *not* stored — it is computed; the stored field is only `kind`.
 (Remove `bookable` from the stored shape; keep `partnerRequired`.)
 
 ### 5.5 Partner references

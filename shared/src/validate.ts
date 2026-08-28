@@ -17,7 +17,7 @@ import {
   type Weekday,
 } from './enums.js';
 import type { Entry } from './models.js';
-import type { IsoDate } from './primitives.js';
+import type { IsoDate, TimeOfDay } from './primitives.js';
 
 // NB: the pairing/team invariant checks (I1–I6, I9) live in `pairing.ts`, not
 // here — this module stays limited to pure, non-domain CSV/date/string helpers.
@@ -73,6 +73,19 @@ export function parseSessionKind(value: string, field = 'kind'): SessionKind {
   const match = SESSION_KINDS.find((k) => k.toLowerCase() === token.toLowerCase());
   if (match) return match;
   throw new Error(`${field}: expected one of ${SESSION_KINDS.join(', ')}, got "${value}"`);
+}
+
+const TIME_OF_DAY_RE = /^([01]\d|2[0-3]):([0-5]\d)$/;
+
+/** `HH:MM`, 24h clock. */
+export function isTimeOfDay(value: string): value is TimeOfDay {
+  return TIME_OF_DAY_RE.test(value.trim());
+}
+
+export function assertTimeOfDay(value: string, field = 'time'): TimeOfDay {
+  const trimmed = value.trim();
+  if (!isTimeOfDay(trimmed)) throw new Error(`${field}: expected HH:MM (24h), got "${value}"`);
+  return trimmed;
 }
 
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;

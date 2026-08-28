@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isPastNZ, sessionCutoff, todayNZ } from './time.js';
+import { isPastNZ, sessionCutoff, todayNZ, weekdayOfNZ } from './time.js';
 
 describe('todayNZ', () => {
   it('rolls over to the NZ calendar date, not the UTC one', () => {
@@ -60,5 +60,37 @@ describe('sessionCutoff', () => {
   it('round-trips back to the same NZ calendar date via todayNZ', () => {
     const cutoff = sessionCutoff('2027-04-04', '13:00');
     expect(todayNZ(cutoff)).toBe('2027-04-04');
+  });
+});
+
+describe('weekdayOfNZ', () => {
+  it('resolves every weekday Monday-Friday', () => {
+    expect(weekdayOfNZ('2027-01-11')).toBe('monday');
+    expect(weekdayOfNZ('2027-01-12')).toBe('tuesday');
+    expect(weekdayOfNZ('2027-01-13')).toBe('wednesday');
+    expect(weekdayOfNZ('2027-01-14')).toBe('thursday');
+    expect(weekdayOfNZ('2027-01-15')).toBe('friday');
+  });
+
+  it('throws for Saturday and Sunday', () => {
+    expect(() => weekdayOfNZ('2027-01-16')).toThrow(/Saturday/);
+    expect(() => weekdayOfNZ('2027-01-17')).toThrow(/Sunday/);
+  });
+
+  it('is unaffected by the April DST fall-back boundary (NZDT -> NZST, 2027-04-04)', () => {
+    // 2027-04-04 is the day NZ clocks fall back; the calendar weekday must
+    // not shift depending on which side of the transition instant a naive
+    // timezone-based implementation happened to land on.
+    expect(weekdayOfNZ('2027-04-02')).toBe('friday');
+    expect(() => weekdayOfNZ('2027-04-03')).toThrow(/Saturday/);
+    expect(() => weekdayOfNZ('2027-04-04')).toThrow(/Sunday/);
+    expect(weekdayOfNZ('2027-04-05')).toBe('monday');
+  });
+
+  it('is unaffected by the September DST spring-forward boundary (NZST -> NZDT, 2027-09-26)', () => {
+    expect(weekdayOfNZ('2027-09-24')).toBe('friday');
+    expect(() => weekdayOfNZ('2027-09-25')).toThrow(/Saturday/);
+    expect(() => weekdayOfNZ('2027-09-26')).toThrow(/Sunday/);
+    expect(weekdayOfNZ('2027-09-27')).toBe('monday');
   });
 });

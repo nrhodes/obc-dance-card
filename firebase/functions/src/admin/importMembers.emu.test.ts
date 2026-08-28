@@ -194,8 +194,18 @@ describe('importMembers', () => {
   });
 
   it('refuses a mass deactivation unless allowMassDeactivation is set', async () => {
+    // The threshold is max(5, 20% of *every* currently-active member in the
+    // project) — and this suite shares one emulator with every other
+    // `*.emu.test.ts` file in the same run, some of which create their own
+    // active members. Count the current baseline and create comfortably more
+    // than enough on top of it, rather than a fixed 6, so this assertion
+    // holds regardless of what else has run.
+    const baselineSnap = await db.collection('members').where('active', '==', true).get();
+    const activeBefore = baselineSnap.size;
+    const toCreate = Math.ceil(activeBefore * 0.25) + 10; // always exceeds max(5, 20% of the new total)
+
     const uids: string[] = [];
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < toCreate; i++) {
       uids.push(await makeMember(`mass-${Date.now()}-${i}@example.org`, { role: 'member', active: true }));
     }
     const report = await importMembersHandler(
@@ -207,5 +217,5 @@ describe('importMembers', () => {
       expect((await db.doc(paths.member(uid)).get()).data()?.active).toBe(true);
       expect((await auth.getUser(uid)).disabled).toBe(false);
     }
-  });
+  }, 30_000);
 });

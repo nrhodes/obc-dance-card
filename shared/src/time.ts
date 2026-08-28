@@ -5,6 +5,7 @@
  * against the IANA `Pacific/Auckland` zone; no date library needed.
  */
 
+import type { Weekday } from './enums.js';
 import type { IsoDate, TimeOfDay } from './primitives.js';
 
 const NZ_TIME_ZONE = 'Pacific/Auckland';
@@ -36,6 +37,41 @@ export function todayNZ(now: Date = new Date()): IsoDate {
 /** True when `date` (an NZ-local `YYYY-MM-DD`) is strictly before today (NZ). */
 export function isPastNZ(date: IsoDate, now: Date = new Date()): boolean {
   return date < todayNZ(now);
+}
+
+const JS_DAY_TO_WEEKDAY: Record<number, Weekday | undefined> = {
+  1: 'monday',
+  2: 'tuesday',
+  3: 'wednesday',
+  4: 'thursday',
+  5: 'friday',
+};
+
+/**
+ * The `Weekday` a programme `IsoDate` (`YYYY-MM-DD`, already an NZ-local
+ * calendar date per plan §6) falls on. Throws for Saturday/Sunday — the club
+ * only runs Monday-Friday, and this is also how `importProgramme` catches
+ * the most common transcription mistake (a date that does not match the
+ * weekday printed against it).
+ *
+ * Deliberately implemented as plain proleptic-Gregorian calendar arithmetic
+ * rather than routed through an `Intl`/`Pacific/Auckland` conversion: `date`
+ * already *is* the NZ-local calendar date, so its day-of-week is timezone
+ * independent. Converting it through a timezone first (e.g. treating it as a
+ * UTC instant and reprojecting into `Pacific/Auckland`) would shift the
+ * apparent date by one near midnight, and the shift direction flips across
+ * the NZDT/NZST boundary — which is exactly the class of bug the DST-adjacent
+ * cases in `time.test.ts` guard against.
+ */
+export function weekdayOfNZ(date: IsoDate): Weekday {
+  const [year, month, day] = date.split('-').map(Number);
+  const dayIndex = new Date(Date.UTC(year ?? 1970, (month ?? 1) - 1, day ?? 1)).getUTCDay();
+  const weekday = JS_DAY_TO_WEEKDAY[dayIndex];
+  if (!weekday) {
+    const label = dayIndex === 0 ? 'Sunday' : 'Saturday';
+    throw new Error(`weekdayOfNZ: ${date} is a ${label}; the club only runs Monday-Friday`);
+  }
+  return weekday;
 }
 
 /** The Pacific/Auckland UTC offset, in minutes, in effect at `instant`. */

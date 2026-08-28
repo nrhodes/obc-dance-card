@@ -36,6 +36,17 @@ describe('programmes/{year} — draft', () => {
       createdAt: 'now',
       updatedAt: 'now',
     });
+    await seedDoc(env, 'programmes/2027/sessions/sess1', {
+      id: 'sess1',
+      date: '2027-01-11',
+      weekday: 'monday',
+      seriesId: 'ser1',
+      kind: 'series',
+      title: 'Marion Taylor Pairs',
+      partnerRequired: true,
+      createdAt: 'now',
+      updatedAt: 'now',
+    });
   });
 
   it('unauthenticated: cannot read the draft programme', async () => {
@@ -54,9 +65,14 @@ describe('programmes/{year} — draft', () => {
     await assertFails(getDoc(doc(clientAs(env, 'alice'), 'programmes/2027/series/ser1')));
   });
 
+  it('active member: cannot read a draft programme\'s sessions', async () => {
+    await assertFails(getDoc(doc(clientAs(env, 'alice'), 'programmes/2027/sessions/sess1')));
+  });
+
   it('admin: can read a draft programme and its sub-collections', async () => {
     await assertSucceeds(getDoc(doc(clientAs(env, 'admin1'), 'programmes/2027')));
     await assertSucceeds(getDoc(doc(clientAs(env, 'admin1'), 'programmes/2027/series/ser1')));
+    await assertSucceeds(getDoc(doc(clientAs(env, 'admin1'), 'programmes/2027/sessions/sess1')));
   });
 });
 
@@ -76,6 +92,17 @@ describe('programmes/{year} — published', () => {
       createdAt: 'now',
       updatedAt: 'now',
     });
+    await seedDoc(env, 'programmes/2027/sessions/sess1', {
+      id: 'sess1',
+      date: '2027-01-11',
+      weekday: 'monday',
+      seriesId: 'ser1',
+      kind: 'series',
+      title: 'Marion Taylor Pairs',
+      partnerRequired: true,
+      createdAt: 'now',
+      updatedAt: 'now',
+    });
   });
 
   it('unauthenticated: still cannot read', async () => {
@@ -89,6 +116,10 @@ describe('programmes/{year} — published', () => {
   it('active member: can read a published programme and its sub-collections', async () => {
     await assertSucceeds(getDoc(doc(clientAs(env, 'alice'), 'programmes/2027')));
     await assertSucceeds(getDoc(doc(clientAs(env, 'alice'), 'programmes/2027/series/ser1')));
+  });
+
+  it('active member: can read the sessions of a published year', async () => {
+    await assertSucceeds(getDoc(doc(clientAs(env, 'alice'), 'programmes/2027/sessions/sess1')));
   });
 
   it('admin: can read', async () => {

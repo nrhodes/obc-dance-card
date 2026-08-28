@@ -32,6 +32,11 @@ export class BatchWriter {
     this.trackOp();
   }
 
+  delete(ref: DocumentReference): void {
+    this.batch.delete(ref);
+    this.trackOp();
+  }
+
   private trackOp(): void {
     this.opsInBatch += 1;
     if (this.opsInBatch >= MAX_OPS_PER_BATCH) {

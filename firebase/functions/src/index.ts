@@ -24,10 +24,11 @@ export { markPasswordSet, removePassword } from './auth/password.js';
 export { updateMyContact, updateMyPrefs, registerDevice, unregisterDevice } from './members/profile.js';
 export { importMembers } from './admin/importMembers.js';
 
+// Phase 2 — programme
+export { importProgramme } from './admin/importProgramme.js';
+export { publishProgramme } from './admin/programme.js';
+
 /*
- * Phase 2 — programme
- * export { importProgramme, publishProgramme } from './admin/programme.js';
- *
  * Phase 3 — dance card
  * export { sendInvite, respondToInvite, cancelInvite } from './entries/invites.js';
  * export { setSoloStatus, cancelEntry, claimLookingForPartner } from './entries/entries.js';

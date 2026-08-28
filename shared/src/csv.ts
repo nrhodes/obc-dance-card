@@ -86,6 +86,10 @@ export interface ProgrammeImportReport {
   series: number;
   sessions: number;
   errors: CsvRowError[];
+  /** Non-fatal notices, e.g. a disambiguated series id, or a session count dropping on re-import. */
+  warnings: string[];
+  /** Count of previously-existing sessions this import would remove (0 if there is no prior programme). */
+  wouldRemoveSessions: number;
 }
 
 export interface CsvRowError {
