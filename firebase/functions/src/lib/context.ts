@@ -39,19 +39,24 @@ export async function requireAdmin(req: CallableRequest): Promise<Caller> {
  * Resolve the member an action targets. When `onBehalfOfMemberId` is supplied the
  * caller must be an admin; otherwise the action targets the caller.
  */
-export async function resolveActingMember(
-  caller: Caller,
-  onBehalfOfMemberId?: string,
-): Promise<{ memberId: string; onBehalfBy?: string }> {
+export interface ActingMember {
+  memberId: string;
+  /** The member the action is performed as — never the admin, when acting on behalf. Use this for any user-facing name. */
+  member: Member;
+  onBehalfBy?: string;
+}
+
+export async function resolveActingMember(caller: Caller, onBehalfOfMemberId?: string): Promise<ActingMember> {
   if (!onBehalfOfMemberId || onBehalfOfMemberId === caller.uid) {
-    return { memberId: caller.uid };
+    return { memberId: caller.uid, member: caller.member };
   }
   if (!caller.isAdmin) {
     throw new HttpsError('permission-denied', 'Only admins can act on behalf of members.');
   }
   const target = await db.doc(paths.member(onBehalfOfMemberId)).get();
-  if (!target.exists) {
+  const member = target.data() as Member | undefined;
+  if (!member) {
     throw new HttpsError('not-found', 'Target member not found.');
   }
-  return { memberId: onBehalfOfMemberId, onBehalfBy: caller.uid };
+  return { memberId: onBehalfOfMemberId, member, onBehalfBy: caller.uid };
 }

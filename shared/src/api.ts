@@ -20,6 +20,7 @@ export type {
   CancelEntryInput,
   CancelInviteInput,
   ClaimLookingForPartnerInput,
+  ClearSoloStatusInput,
   ClearSubstituteInput,
   ClearTeamSessionSubstituteInput,
   CreateTeamInput,
@@ -83,6 +84,12 @@ export interface RespondToInviteResult {
   entries: Entry[];
   /** Set when accepting a team invite that brought the team from `forming` to `active`. */
   team?: Team;
+  /** True when accepting pairs the same two members again within an Individual series (plan §2). Never blocks. */
+  repeatPartnerWarning?: boolean;
+}
+
+export interface CancelInviteResult {
+  invite: Invite;
 }
 
 /* -------------------------------- entries ------------------------------- */
@@ -91,9 +98,15 @@ export interface SetSoloStatusResult {
   entry: Entry;
 }
 
+export interface ClearSoloStatusResult {
+  entry: Entry;
+}
+
 export interface ClaimLookingForPartnerResult {
   entries: Entry[];
   team?: Team;
+  /** True when this pairs the same two members again within an Individual series (plan §2). Never blocks. */
+  repeatPartnerWarning?: boolean;
 }
 
 export interface SignUpWithVisitorResult {

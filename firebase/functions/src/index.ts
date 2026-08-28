@@ -28,11 +28,12 @@ export { importMembers } from './admin/importMembers.js';
 export { importProgramme } from './admin/importProgramme.js';
 export { publishProgramme } from './admin/programme.js';
 
+// Phase 3a — dance card core
+export { sendInvite, respondToInvite, cancelInvite } from './entries/invites.js';
+export { setSoloStatus, clearSoloStatus, claimLookingForPartner, cancelEntry } from './entries/entries.js';
+export { markNotificationsRead } from './notifications/read.js';
+
 /*
- * Phase 3 — dance card
- * export { sendInvite, respondToInvite, cancelInvite } from './entries/invites.js';
- * export { setSoloStatus, cancelEntry, claimLookingForPartner } from './entries/entries.js';
- *
  * Phase 4 — visitors + substitutes
  * export { createVisitor, updateVisitor, deleteVisitor, signUpWithVisitor } from './visitors/visitors.js';
  * export { setSubstitute, clearSubstitute } from './entries/substitute.js';
@@ -54,7 +55,6 @@ export { publishProgramme } from './admin/programme.js';
  * Phase 5 — notifications
  * export { onNotificationCreated } from './notifications/dispatch.js';
  * export { sendSessionReminders } from './notifications/reminders.js';
- * export { markNotificationsRead } from './notifications/read.js';
  *
  * Phase 6 — admin extras + integrity
  * export { broadcast, setMemberRole, deactivateMember, reactivateMember, eraseMember } from './admin/misc.js';

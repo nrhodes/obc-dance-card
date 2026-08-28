@@ -24,6 +24,9 @@ const message200 = z.string().trim().max(200);
 const displayName = z.string().trim().min(1).max(80);
 const weekday = z.enum(WEEKDAYS);
 const onBehalfOfMemberId = id.optional();
+const year = z.number().int().min(2000).max(2100);
+/** Admin-only override of a locked session's cutoff (plan §6); enforced server-side. */
+const force = z.boolean().optional();
 
 const partnerRefInput = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('member'), memberId: id }),
@@ -151,11 +154,13 @@ export type UpdateSessionInput = z.infer<typeof UpdateSessionInputSchema>;
 export const SendInviteInputSchema = z
   .object({
     scope: z.enum(['session', 'series']),
+    year,
     sessionId: id.optional(),
     seriesId: id.optional(),
     toMemberId: id,
     message: message200.optional(),
     onBehalfOfMemberId,
+    force,
   })
   .refine((v) => (v.scope === 'session' ? !!v.sessionId : !!v.seriesId), {
     message: 'sessionId is required for scope=session, seriesId for scope=series',
@@ -166,6 +171,7 @@ export const RespondToInviteInputSchema = z.object({
   inviteId: id,
   accept: z.boolean(),
   onBehalfOfMemberId,
+  force,
 });
 export type RespondToInviteInput = z.infer<typeof RespondToInviteInputSchema>;
 
@@ -175,17 +181,35 @@ export type CancelInviteInput = z.infer<typeof CancelInviteInputSchema>;
 /* ---------------------------------- entries -------------------------------- */
 
 export const SetSoloStatusInputSchema = z.object({
+  year,
   sessionId: id,
   status: z.enum(['looking_for_partner', 'available']),
   note: z.string().trim().max(200).optional(),
   onBehalfOfMemberId,
+  force,
 });
 export type SetSoloStatusInput = z.infer<typeof SetSoloStatusInputSchema>;
 
+/**
+ * The solo-only shortcut of `cancelEntry` (plan §16 Phase 3a addendum): withdraw
+ * a `looking_for_partner`/`available` listing. Deliberately has no
+ * `onBehalfOfMemberId` — unlike every other entries mutation — because it is
+ * the one case the implementer's brief specified without it; see the Phase 3a
+ * report for the reasoning.
+ */
+export const ClearSoloStatusInputSchema = z.object({
+  year,
+  sessionId: id,
+  force,
+});
+export type ClearSoloStatusInput = z.infer<typeof ClearSoloStatusInputSchema>;
+
 export const ClaimLookingForPartnerInputSchema = z.object({
+  year,
   sessionId: id,
   posterMemberId: id,
   onBehalfOfMemberId,
+  force,
 });
 export type ClaimLookingForPartnerInput = z.infer<typeof ClaimLookingForPartnerInputSchema>;
 
@@ -212,7 +236,7 @@ export type SetSubstituteInput = z.infer<typeof SetSubstituteInputSchema>;
 export const ClearSubstituteInputSchema = z.object({ entryId: id, onBehalfOfMemberId });
 export type ClearSubstituteInput = z.infer<typeof ClearSubstituteInputSchema>;
 
-export const CancelEntryInputSchema = z.object({ entryId: id, onBehalfOfMemberId });
+export const CancelEntryInputSchema = z.object({ entryId: id, onBehalfOfMemberId, force });
 export type CancelEntryInput = z.infer<typeof CancelEntryInputSchema>;
 
 /* ---------------------------------- visitors ------------------------------- */

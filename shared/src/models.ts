@@ -246,6 +246,12 @@ export interface Entry extends Timestamps {
 export interface Invite extends Timestamps {
   id: Id;
   scope: InviteScope;
+  /**
+   * Programme year the sessions belong to. Threaded through so later
+   * lookups (respond/cancel) never have to re-derive it from a session id
+   * shape (plan §5.4's two id forms aren't reliably splittable).
+   */
+  year: number;
   /** 1..N session ids this invite covers. */
   sessionIds: Id[];
   seriesId: Id | null;

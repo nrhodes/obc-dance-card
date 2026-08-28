@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   BroadcastInputSchema,
+  ClearSoloStatusInputSchema,
   CreateVisitorInputSchema,
   ImportProgrammeInputSchema,
   MarkNotificationsReadInputSchema,
@@ -36,21 +37,27 @@ describe('VerifyLoginCodeInputSchema', () => {
 describe('SendInviteInputSchema', () => {
   it('accepts a session-scoped invite', () => {
     expect(() =>
-      SendInviteInputSchema.parse({ scope: 'session', sessionId: 's1', toMemberId: 'bob' }),
+      SendInviteInputSchema.parse({ scope: 'session', year: 2027, sessionId: 's1', toMemberId: 'bob' }),
     ).not.toThrow();
   });
   it('accepts a series-scoped invite', () => {
     expect(() =>
-      SendInviteInputSchema.parse({ scope: 'series', seriesId: 'ser1', toMemberId: 'bob' }),
+      SendInviteInputSchema.parse({ scope: 'series', year: 2027, seriesId: 'ser1', toMemberId: 'bob' }),
     ).not.toThrow();
   });
   it('rejects a session scope with no sessionId', () => {
-    expect(() => SendInviteInputSchema.parse({ scope: 'session', toMemberId: 'bob' })).toThrow();
+    expect(() => SendInviteInputSchema.parse({ scope: 'session', year: 2027, toMemberId: 'bob' })).toThrow();
+  });
+  it('rejects a missing year', () => {
+    expect(() =>
+      SendInviteInputSchema.parse({ scope: 'session', sessionId: 's1', toMemberId: 'bob' }),
+    ).toThrow();
   });
   it('rejects a message over 200 chars', () => {
     expect(() =>
       SendInviteInputSchema.parse({
         scope: 'session',
+        year: 2027,
         sessionId: 's1',
         toMemberId: 'bob',
         message: 'x'.repeat(201),
@@ -59,18 +66,44 @@ describe('SendInviteInputSchema', () => {
   });
   it('rejects a team scope (not accepted by sendInvite)', () => {
     expect(() =>
-      SendInviteInputSchema.parse({ scope: 'team', sessionId: 's1', toMemberId: 'bob' }),
+      SendInviteInputSchema.parse({ scope: 'team', year: 2027, sessionId: 's1', toMemberId: 'bob' }),
     ).toThrow();
+  });
+  it('accepts an admin force override', () => {
+    expect(() =>
+      SendInviteInputSchema.parse({ scope: 'session', year: 2027, sessionId: 's1', toMemberId: 'bob', force: true }),
+    ).not.toThrow();
   });
 });
 
 describe('SetSoloStatusInputSchema', () => {
   it('accepts looking_for_partner and available', () => {
-    expect(() => SetSoloStatusInputSchema.parse({ sessionId: 's1', status: 'looking_for_partner' })).not.toThrow();
-    expect(() => SetSoloStatusInputSchema.parse({ sessionId: 's1', status: 'available' })).not.toThrow();
+    expect(() =>
+      SetSoloStatusInputSchema.parse({ year: 2027, sessionId: 's1', status: 'looking_for_partner' }),
+    ).not.toThrow();
+    expect(() =>
+      SetSoloStatusInputSchema.parse({ year: 2027, sessionId: 's1', status: 'available' }),
+    ).not.toThrow();
   });
   it('rejects other statuses', () => {
-    expect(() => SetSoloStatusInputSchema.parse({ sessionId: 's1', status: 'confirmed' })).toThrow();
+    expect(() =>
+      SetSoloStatusInputSchema.parse({ year: 2027, sessionId: 's1', status: 'confirmed' }),
+    ).toThrow();
+  });
+  it('rejects a missing year', () => {
+    expect(() => SetSoloStatusInputSchema.parse({ sessionId: 's1', status: 'available' })).toThrow();
+  });
+});
+
+describe('ClearSoloStatusInputSchema', () => {
+  it('accepts year + sessionId with no onBehalfOfMemberId field', () => {
+    expect(() => ClearSoloStatusInputSchema.parse({ year: 2027, sessionId: 's1' })).not.toThrow();
+  });
+  it('accepts an admin force override', () => {
+    expect(() => ClearSoloStatusInputSchema.parse({ year: 2027, sessionId: 's1', force: true })).not.toThrow();
+  });
+  it('rejects a missing sessionId', () => {
+    expect(() => ClearSoloStatusInputSchema.parse({ year: 2027 })).toThrow();
   });
 });
 
