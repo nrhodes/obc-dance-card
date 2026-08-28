@@ -93,6 +93,24 @@ function nzOffsetMinutesAt(instant: Date): number {
 }
 
 /**
+ * Adds (or subtracts, for a negative `days`) whole calendar days to an
+ * NZ-local `YYYY-MM-DD` date (plan §16 Phase 5 `sendSessionReminders`).
+ *
+ * Deliberately plain proleptic-Gregorian arithmetic on the Y-M-D fields —
+ * exactly the same reasoning as `weekdayOfNZ` above: `date` already *is* the
+ * NZ-local calendar date, so adding calendar days to it needs no timezone
+ * conversion at all, and therefore cannot be perturbed by a DST transition
+ * that may fall somewhere in the added span (e.g. `reminderDaysBefore`
+ * crossing 2027-04-04 or 2027-09-26 — see `time.test.ts`).
+ */
+export function addDaysNZ(date: IsoDate, days: number): IsoDate {
+  const [year, month, day] = date.split('-').map(Number);
+  const dt = new Date(Date.UTC(year ?? 1970, (month ?? 1) - 1, day ?? 1));
+  dt.setUTCDate(dt.getUTCDate() + days);
+  return dt.toISOString().slice(0, 10);
+}
+
+/**
  * The UTC instant at which a session starting at `startTime` (24h, `HH:MM`)
  * on NZ-local `date` begins — i.e. the moment the session "locks" (§6/I7).
  */

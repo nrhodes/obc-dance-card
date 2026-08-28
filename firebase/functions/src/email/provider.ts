@@ -42,7 +42,7 @@ export function isDeployed(): boolean {
  * unreadable by clients (the rules' catch-all denies it); tests read it through
  * the emulator's owner-bypass REST API. Never written when deployed.
  */
-const EMULATOR_OUTBOX = 'emulatorOutbox';
+export const EMULATOR_OUTBOX = 'emulatorOutbox';
 
 /** Never log a full email address (plan §3 rule 7) — domain only. */
 function emailDomain(address: string): string {
@@ -67,6 +67,7 @@ class ConsoleEmailProvider implements EmailProvider {
         `\n--- email (console provider) ---\nTo: ${msg.to}\nSubject: ${msg.subject}\n\n${msg.text}\n---------------------------------\n`,
       );
       await db.collection(EMULATOR_OUTBOX).doc(randomUUID()).set({
+        kind: 'email',
         to: msg.to,
         subject: msg.subject,
         text: msg.text,

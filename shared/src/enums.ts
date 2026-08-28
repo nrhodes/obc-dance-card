@@ -140,6 +140,8 @@ export const AUDIT_ACTIONS = [
   'pairing_repair',
   /** System action: `importMembers` promoted a visitor whose email matched a new member (§12.5). */
   'visitor_promoted',
+  /** System action: `purgeExpired` deleted a visitor unused for 18+ months with no future entries. */
+  'visitor_purged',
   // Per-callable on-behalf actions (§9.2 "Audit" column)
   'send_invite_on_behalf',
   'respond_to_invite_on_behalf',

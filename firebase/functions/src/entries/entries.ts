@@ -24,12 +24,16 @@ import {
   type SetSoloStatusInput,
   type SetSoloStatusResult,
   type Team,
+  type Visitor,
 } from '@obc/shared';
 import { db } from '../lib/admin.js';
 import { audit } from '../lib/audit.js';
 import { callableOptions } from '../lib/callable.js';
 import { requireMember, resolveActingMember } from '../lib/context.js';
 import { createNotification } from '../notifications/create.js';
+import { sendMatchmakingAlerts } from '../notifications/matchmaking.js';
+import { getEmailProvider } from '../email/provider.js';
+import { visitorCancelledEmail } from '../email/templates/visitorCourtesy.js';
 import { assertForceAllowed, assertSessionOpen, entryId, isFree, loadSession, memberRef, readEntry, repeatPartnerWarning, writePair } from './lib.js';
 import { parseInput } from '../lib/parseInput.js';
 import {
@@ -51,7 +55,7 @@ export async function setSoloStatusHandler(req: CallableRequest<SetSoloStatusInp
   assertForceAllowed(caller, input.force);
   const actor = await resolveActingMember(caller, input.onBehalfOfMemberId);
 
-  const entry = await db.runTransaction(async (tx) => {
+  const { entry, sessionFormat } = await db.runTransaction(async (tx) => {
     const loaded = await loadSession(tx, input.year, input.sessionId);
     // `allowTeamsSession: true` — plan §12A.4: on a Teams session this posts
     // "Looking for a team" / "Available for a team" instead of a pairing
@@ -86,8 +90,22 @@ export async function setSoloStatusHandler(req: CallableRequest<SetSoloStatusInp
       updatedAt: now,
     };
     tx.set(db.doc(paths.entry(doc.id)), doc);
-    return doc;
+    return { entry: doc, sessionFormat: loaded.session.format };
   });
+
+  // Matchmaking alerts (plan §9.2 "Notify" column, task brief §B): fires for
+  // "looking for a partner" on any Pairs/Teams session — not Individual,
+  // where members already arrange their own weekly partner (plan §2) and a
+  // club-wide alert would be noise. `sessionFormat` is `undefined` for a
+  // non-series singles/holiday session; treated the same as Pairs.
+  if (input.status === 'looking_for_partner' && sessionFormat !== 'Individual') {
+    await sendMatchmakingAlerts({
+      posterMemberId: actor.memberId,
+      posterName: `${actor.member.firstName} ${actor.member.lastName}`,
+      sessionId: input.sessionId,
+      date: entry.date,
+    });
+  }
 
   if (actor.onBehalfBy) {
     await audit({
@@ -306,6 +324,8 @@ interface CancelEntryTxResult {
   ownEntry: Entry;
   partnerEntry?: Entry;
   notify: PendingNotification[];
+  /** Set only on the visitor-pairing branch: the visitor to courtesy-email, if any. */
+  cancelledVisitorId?: string;
 }
 
 export async function cancelEntryHandler(req: CallableRequest<CancelEntryInput>): Promise<CancelEntryResult> {
@@ -371,11 +391,9 @@ export async function cancelEntryHandler(req: CallableRequest<CancelEntryInput>)
       if (issues.length > 0) {
         throw new HttpsError('internal', `Pairing invariant violated: ${issues.join('; ')}`);
       }
-      // TODO(Phase 5): send the opt-in courtesy *cancellation* email to the
-      // visitor here (mirrors `signUpWithVisitor`'s confirmation email,
-      // `visitorCourtesyEmail` template) — Phase 4a only wires the
-      // confirmation courtesy email; see plan §12.4.
-      return { ownEntry: cancelled, notify: [] };
+      // Courtesy *cancellation* email (plan §9.3 / §12.4) is sent after the
+      // transaction commits, once we know it did — see below.
+      return { ownEntry: cancelled, notify: [], cancelledVisitorId: entry.partner.visitorId };
     }
 
     if (!entry.pairingId) {
@@ -547,6 +565,19 @@ export async function cancelEntryHandler(req: CallableRequest<CancelEntryInput>)
 
   for (const n of result.notify) {
     await createNotification(n.memberId, n.type, n.title, n.body, n.data);
+  }
+
+  if (result.cancelledVisitorId) {
+    const visitorSnap = await db.doc(paths.visitor(result.cancelledVisitorId)).get();
+    const visitor = visitorSnap.data() as Visitor | undefined;
+    if (visitor?.courtesyEmails && visitor.email) {
+      const content = visitorCancelledEmail({
+        sponsorName: actorName,
+        sponsorPhone: actor.member.phone || undefined,
+        date: result.ownEntry.date,
+      });
+      await getEmailProvider().send({ to: visitor.email, subject: content.subject, text: content.text, html: content.html });
+    }
   }
 
   return { entry: result.ownEntry, partnerEntry: result.partnerEntry };

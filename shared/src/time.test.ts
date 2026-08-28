@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isPastNZ, sessionCutoff, todayNZ, weekdayOfNZ } from './time.js';
+import { addDaysNZ, isPastNZ, sessionCutoff, todayNZ, weekdayOfNZ } from './time.js';
 
 describe('todayNZ', () => {
   it('rolls over to the NZ calendar date, not the UTC one', () => {
@@ -60,6 +60,37 @@ describe('sessionCutoff', () => {
   it('round-trips back to the same NZ calendar date via todayNZ', () => {
     const cutoff = sessionCutoff('2027-04-04', '13:00');
     expect(todayNZ(cutoff)).toBe('2027-04-04');
+  });
+});
+
+describe('addDaysNZ', () => {
+  it('adds simple day counts within a month', () => {
+    expect(addDaysNZ('2027-06-01', 2)).toBe('2027-06-03');
+    expect(addDaysNZ('2027-06-01', 0)).toBe('2027-06-01');
+  });
+
+  it('rolls over a month/year boundary', () => {
+    expect(addDaysNZ('2027-12-30', 3)).toBe('2028-01-02');
+  });
+
+  it('supports negative offsets', () => {
+    expect(addDaysNZ('2027-06-03', -2)).toBe('2027-06-01');
+  });
+
+  it('is unaffected by the April DST fall-back boundary (2027-04-04)', () => {
+    // NZ clocks fall back at 2027-04-04 03:00 NZDT -> 02:00 NZST. A reminder
+    // window that spans this date must land on the correct calendar date
+    // regardless — this is pure calendar arithmetic, so it does.
+    expect(addDaysNZ('2027-04-02', 2)).toBe('2027-04-04');
+    expect(addDaysNZ('2027-04-03', 1)).toBe('2027-04-04');
+    expect(addDaysNZ('2027-04-04', 1)).toBe('2027-04-05');
+  });
+
+  it('is unaffected by the September DST spring-forward boundary (2027-09-26)', () => {
+    // NZ clocks jump forward at 2027-09-26 02:00 NZST -> 03:00 NZDT.
+    expect(addDaysNZ('2027-09-24', 2)).toBe('2027-09-26');
+    expect(addDaysNZ('2027-09-25', 1)).toBe('2027-09-26');
+    expect(addDaysNZ('2027-09-26', 1)).toBe('2027-09-27');
   });
 });
 

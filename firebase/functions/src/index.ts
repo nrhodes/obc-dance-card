@@ -52,11 +52,11 @@ export {
   clearTeamSessionSubstitute,
 } from './teams/teams.js';
 
+// Phase 5 — notifications fan-out
+export { onNotificationCreated } from './notifications/dispatch.js';
+export { sendSessionReminders, sendDailyDigest, purgeExpired } from './notifications/scheduled.js';
+
 /*
- * Phase 5 — notifications
- * export { onNotificationCreated } from './notifications/dispatch.js';
- * export { sendSessionReminders } from './notifications/reminders.js';
- *
  * Phase 6 — admin extras + integrity
  * export { broadcast, setMemberRole, deactivateMember, reactivateMember, eraseMember } from './admin/misc.js';
  * export { updateSeries, updateSession } from './admin/programme.js';

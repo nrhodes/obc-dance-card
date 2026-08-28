@@ -1,7 +1,8 @@
 /**
- * Writes a `notifications/{id}` doc directly (plan §5.8). Fan-out to
- * push/email (plan §11 `notify()` + the `onNotificationCreated` trigger) is
- * Phase 5; for now every notification is in-app only.
+ * Writes a `notifications/{id}` doc directly (plan §5.8). This is the in-app
+ * channel only — fan-out to push/email (plan §11) happens asynchronously in
+ * `notifications/dispatch.ts`'s `onNotificationCreated` trigger, which reacts
+ * to the write this function makes.
  */
 import { randomUUID } from 'node:crypto';
 import type { Notification, NotificationType } from '@obc/shared';

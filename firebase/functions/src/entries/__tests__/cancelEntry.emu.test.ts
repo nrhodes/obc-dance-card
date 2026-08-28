@@ -271,6 +271,69 @@ describe('cancelEntry — visitor pairing', () => {
 
     await assertSessionPairingValid(sessionId);
   });
+
+  it('sends the opt-in courtesy cancellation email (plan §9.3 / §12.4)', async () => {
+    const a = await makeMember('cancel-visitor-courtesy-a@example.org', { phone: '021 555 0100' });
+    const prog = await makeProgramme({ dates: [sessionInFuture('monday')] });
+    const sessionId = prog.sessionIds[0]!;
+    const date = sessionInFuture('monday');
+    const visitorId = randomUUID();
+
+    await db.doc(paths.visitor(visitorId)).set({
+      id: visitorId,
+      displayName: 'Courtesy Visitor',
+      email: 'courtesy-cancel@example.org',
+      createdByMemberId: a,
+      courtesyEmails: true,
+      lastUsedAt: new Date().toISOString(),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+    await seed({
+      ...baseEntry(sessionId, a, date),
+      partner: { kind: 'visitor', visitorId, displayName: 'Courtesy Visitor' },
+      pairingId: randomUUID(),
+    });
+
+    await cancelEntryHandler(fakeCallableRequest<CancelEntryInput>({ entryId: entryId(sessionId, a) }, { uid: a }));
+
+    const outboxSnap = await db
+      .collection('emulatorOutbox')
+      .where('to', '==', 'courtesy-cancel@example.org')
+      .where('kind', '==', 'email')
+      .get();
+    expect(outboxSnap.docs).toHaveLength(1);
+    expect(outboxSnap.docs[0]!.data().text).toContain('cancelled');
+  });
+
+  it('sends no courtesy email when the visitor has not opted in', async () => {
+    const a = await makeMember('cancel-visitor-nocourtesy-a@example.org');
+    const prog = await makeProgramme({ dates: [sessionInFuture('monday')] });
+    const sessionId = prog.sessionIds[0]!;
+    const date = sessionInFuture('monday');
+    const visitorId = randomUUID();
+
+    await db.doc(paths.visitor(visitorId)).set({
+      id: visitorId,
+      displayName: 'No Courtesy Visitor',
+      email: 'no-courtesy-cancel@example.org',
+      createdByMemberId: a,
+      courtesyEmails: false,
+      lastUsedAt: new Date().toISOString(),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+    await seed({
+      ...baseEntry(sessionId, a, date),
+      partner: { kind: 'visitor', visitorId, displayName: 'No Courtesy Visitor' },
+      pairingId: randomUUID(),
+    });
+
+    await cancelEntryHandler(fakeCallableRequest<CancelEntryInput>({ entryId: entryId(sessionId, a) }, { uid: a }));
+
+    const outboxSnap = await db.collection('emulatorOutbox').where('to', '==', 'no-courtesy-cancel@example.org').get();
+    expect(outboxSnap.docs).toHaveLength(0);
+  });
 });
 
 describe('cancelEntry — team entry', () => {
