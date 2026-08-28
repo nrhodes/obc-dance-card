@@ -12,8 +12,8 @@ low-friction.
 
 | Path | Purpose |
 |---|---|
-| `shared/` | TypeScript types for the data model + CSV import templates. Consumed by `web` and `firebase/functions`; the iOS app mirrors these as `Codable` structs. |
-| `firebase/` | `firebase.json`, Firestore rules + indexes, emulator config, Cloud Functions (`functions/`), seed scripts (`seed/`). |
+| `shared/` | TypeScript types, zod schemas, pairing/time helpers, and CSV import templates — the single source of truth for the data model and callable contracts. Consumed by `web` and `firebase/functions`; the iOS app mirrors these as `Codable` structs. |
+| `firebase/` | `firebase.json`, Firestore rules + indexes, emulator config, Cloud Functions (`functions/`, Node 22, gen2), seed scripts (`seed/`). |
 | `web/` | React + Vite + TypeScript PWA. Also the Android / desktop experience. |
 | `ios/` | Native SwiftUI app (added in Phase 2). |
 | `docs/` | Data model, CSV formats, ops runbook, manual test script. |
@@ -23,13 +23,27 @@ low-friction.
 **Scheduling only.** Scores, results, and standings stay in the NZ Bridge software.
 
 See [`docs/data-model.md`](docs/data-model.md) for the domain model and
-[the implementation plan](../.claude/plans/lucky-foraging-boot.md) for the full
-design and build phases.
+[`docs/implementation-plan.md`](docs/implementation-plan.md) for the full
+design, security model, and build phases — it is the contract this repo is
+built against.
+
+## Security model, in one paragraph
+
+**Clients never write Firestore**, with exactly one exception: a member may
+mark their own `notifications` read. Every other mutation — pairing up,
+inviting, cancelling, teams, imports, admin actions — is a Cloud Functions
+callable that validates input with a zod schema, resolves the acting member
+from `req.auth.uid` (never a client-supplied id), writes inside a transaction,
+and re-checks the pairing/team invariants (`shared/src/pairing.ts`) before
+committing. Firestore rules are read-only for clients (`firebase/firestore.rules`),
+determined by `get()`-ing the caller's own `members/{uid}` doc — no custom
+claims to keep in sync. Emails, phones, and device tokens live in
+`memberPrivate`/`visitors`, never in the roster-visible `members` doc.
 
 ## Prerequisites
 
-- Node.js >= 20
-- Java 11+ (JRE) — required by the Firebase Emulator Suite
+- Node.js 22 (see `.mise.toml`)
+- Java 21 (JRE) — required by the Firebase Emulator Suite (see `.mise.toml`)
 - A Firebase project on the **Blaze** plan (Cloud Functions and the auth blocking
   function require it; usage stays within the free tier at club scale — see the plan)
 

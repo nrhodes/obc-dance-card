@@ -3,10 +3,11 @@ node_modules/
 .pnp
 .pnp.js
 
-# Build output
+# Build output. Scoped to the compiled-output directories only — a bare
+# `lib/` would also match `firebase/functions/src/lib/`, which is source.
 dist/
 build/
-lib/
+firebase/functions/lib/
 *.tsbuildinfo
 .tsbuildinfo
 

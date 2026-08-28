@@ -19,6 +19,9 @@ import {
 import type { Entry } from './models.js';
 import type { IsoDate } from './primitives.js';
 
+// NB: the pairing/team invariant checks (I1–I6, I9) live in `pairing.ts`, not
+// here — this module stays limited to pure, non-domain CSV/date/string helpers.
+
 const TRUE_TOKENS = new Set(['true', 'yes', 'y', '1']);
 const FALSE_TOKENS = new Set(['false', 'no', 'n', '0', '']);
 
@@ -107,30 +110,6 @@ export function parseOptionalInt(value: string, field: string): number | null {
     throw new Error(`${field}: expected a non-negative integer, got "${value}"`);
   }
   return n;
-}
-
-/**
- * The bidirectional-pairing invariant, expressed as a pure check so the same
- * logic backs the runtime transaction guard, the `verifyPairingConsistency`
- * sweep, and the tests.
- *
- * Returns `null` when the two entries are a valid mirror image, or a
- * human-readable reason when they are not.
- */
-export function pairingMismatchReason(a: Entry, b: Entry): string | null {
-  if (a.status !== 'confirmed' || b.status !== 'confirmed') {
-    return 'both entries must be confirmed';
-  }
-  if (a.sessionId !== b.sessionId) return 'entries are for different sessions';
-  if (!a.pairingId || a.pairingId !== b.pairingId) return 'pairingId does not match';
-  if (a.memberId !== b.partnerMemberId || b.memberId !== a.partnerMemberId) {
-    return 'memberId / partnerMemberId are not mirrored';
-  }
-  if (a.memberId === b.memberId) return 'both entries belong to the same member';
-  const aSub = a.substituteMemberId ?? null;
-  const bSub = b.substituteMemberId ?? null;
-  if (aSub !== bSub) return 'substitute is recorded on only one side';
-  return null;
 }
 
 /** True when a status keeps the member "occupied" for a session. */

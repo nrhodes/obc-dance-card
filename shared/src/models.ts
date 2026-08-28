@@ -12,21 +12,45 @@ import type {
   AuditAction,
   DigestMode,
   EntryStatus,
+  InviteScope,
   InviteStatus,
   MemberGrade,
   MemberRole,
   NotificationChannel,
   NotificationType,
+  PartnerKind,
   ProgrammeStatus,
   ScoringType,
   SeriesFormat,
   SessionKind,
+  TeamStatus,
   Weekday,
 } from './enums.js';
 import type { EmailLower, Id, IsoDate, IsoDateTime, Timestamps, TimeOfDay } from './primitives.js';
 
 /* -------------------------------------------------------------------------- */
-/* members/{memberId}                                                        */
+/* members/{memberId} — public-to-members profile                           */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * `memberId` is the Firebase Auth uid. Created only by `importMembers`. No
+ * email, no tokens: those live in `MemberPrivate`.
+ */
+export interface Member extends Timestamps {
+  id: Id;
+  firstName: string;
+  lastName: string;
+  phone: string;
+  grade: MemberGrade;
+  role: MemberRole;
+  /** False once a member leaves the club; row is kept, never hard-deleted. */
+  active: boolean;
+  /** Set when this member was created/updated by a CSV import. */
+  lastImportId?: Id;
+}
+
+/* -------------------------------------------------------------------------- */
+/* memberPrivate/{memberId} — owner + admin only                            */
 /* -------------------------------------------------------------------------- */
 
 export interface NotificationPrefs {
@@ -50,21 +74,16 @@ export interface RegisteredDevice {
   lastSeenAt: IsoDateTime;
 }
 
-export interface Member extends Timestamps {
+export interface MemberPrivate extends Timestamps {
   id: Id;
-  firstName: string;
-  lastName: string;
   /** Natural key. Always lower-cased. Unique across active + inactive members. */
   emailLower: EmailLower;
-  phone: string;
-  grade: MemberGrade;
-  role: MemberRole;
-  /** False once a member leaves the club; row is kept, never hard-deleted. */
-  active: boolean;
-  devices: RegisteredDevice[];
   notificationPrefs: NotificationPrefs;
-  /** Set when this member was created/updated by a CSV import. */
-  lastImportId?: Id;
+  /** Max 10; oldest/least-recently-seen pruned first. */
+  devices: RegisteredDevice[];
+  /** Maintained by the server; never trust a client-supplied value. */
+  hasPassword: boolean;
+  lastLoginAt?: IsoDateTime;
 }
 
 export const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
@@ -75,6 +94,36 @@ export const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
   digest: 'immediate',
   reminderDaysBefore: 2,
 };
+
+/* -------------------------------------------------------------------------- */
+/* visitors/{visitorId} — sponsor + admin only                               */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * A visitor belongs to the member who created it. Other members see only
+ * `displayName`, denormalised onto entries (`PartnerRef`) — never this doc.
+ */
+export interface Visitor extends Timestamps {
+  id: Id;
+  /** Required, 1..80 chars. */
+  displayName: string;
+  /** Validated, lowercased, when present. */
+  email?: string;
+  phone?: string;
+  createdByMemberId: Id;
+  notes?: string;
+  /** Opt-in courtesy emails on confirm/join/disband/cancel. Default false. */
+  courtesyEmails: boolean;
+  lastUsedAt: IsoDateTime;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Partner references (denormalised onto entries)                           */
+/* -------------------------------------------------------------------------- */
+
+export type PartnerRef =
+  | { kind: Extract<PartnerKind, 'member'>; memberId: Id; displayName: string }
+  | { kind: Extract<PartnerKind, 'visitor'>; visitorId: Id; displayName: string };
 
 /* -------------------------------------------------------------------------- */
 /* programmes/{year}                                                         */
@@ -121,6 +170,11 @@ export interface Series extends Timestamps {
   generalNote?: string;
   /** Sort order within the weekday. */
   order: number;
+  /** Every session id generated for this series, in date order. */
+  sessionIds: Id[];
+  /** Teams format only. Defaults 4/6. */
+  teamMin: number;
+  teamMax: number;
 }
 
 /* programmes/{year}/sessions/{sessionId} */
@@ -143,35 +197,40 @@ export interface Session extends Timestamps {
 }
 
 /* -------------------------------------------------------------------------- */
-/* entries/{entryId}                                                         */
+/* entries/{sessionId}_{memberId}                                            */
 /* -------------------------------------------------------------------------- */
 
 /**
- * One member's dance-card entry for one session.
+ * One member's dance-card entry for one session. The document id is
+ * deterministic (`${sessionId}_${memberId}`): there can only ever be one entry
+ * per member per session. Re-signing-up after a cancel updates the same doc.
  *
- * Bidirectional invariant: a `confirmed` entry always has an exactly-mirrored
- * entry on the partner's card (`memberId`/`partnerMemberId` swapped), sharing the
- * same `pairingId`. All paired mutations are done by Cloud Functions inside a
- * transaction that writes both halves; clients may only touch their own solo
- * entries.
+ * See plan §5.6 / §7 for the full invariants; `shared/src/pairing.ts` checks
+ * them programmatically.
  */
 export interface Entry extends Timestamps {
   id: Id;
   sessionId: Id;
   /** Denormalised from the session for range queries (noticeboard, reminders). */
   date: IsoDate;
+  weekday: Weekday;
   seriesId: Id | null;
   memberId: Id;
-  /** The other half of the pairing; null while solo. */
-  partnerMemberId: Id | null;
   status: EntryStatus;
-  /** Links the two halves of a pairing. Null while solo. */
+  /** The other half of a member/visitor pairing; null while solo or on a team. */
+  partner: PartnerRef | null;
+  /** Shared by all entries of one pairing. Null for team entries and solo statuses. */
   pairingId: Id | null;
-
-  /** Set on the covered member's entry when a sub stands in for this week. */
-  substituteMemberId?: Id | null;
-  /** Set on a substitute's own entry, pointing at who they are covering. */
-  isSubstituteFor?: Id | null;
+  /** Set for every entry that belongs to a team (Teams series). */
+  teamId: Id | null;
+  /** True for a session-only team substitute added by the captain. */
+  teamSessionOnly: boolean;
+  /** On the *covered* member's entry: who stands in this week. */
+  substitute: PartnerRef | null;
+  /** On the *remaining* member's entry: who their partner sent as a sub. */
+  partnerSubstitute: PartnerRef | null;
+  /** On a member-substitute's own entry: the memberId they are covering for. */
+  isSubstituteFor: Id | null;
 
   note?: string;
   /** memberId of whoever created the entry (self, or an admin acting on behalf). */
@@ -186,9 +245,13 @@ export interface Entry extends Timestamps {
 
 export interface Invite extends Timestamps {
   id: Id;
-  sessionId: Id;
-  date: IsoDate;
+  scope: InviteScope;
+  /** 1..N session ids this invite covers. */
+  sessionIds: Id[];
   seriesId: Id | null;
+  /** Set only for `scope: 'team'`. */
+  teamId: Id | null;
+  /** The captain, for team invites. */
   fromMemberId: Id;
   toMemberId: Id;
   status: InviteStatus;
@@ -196,8 +259,9 @@ export interface Invite extends Timestamps {
   createdBy: Id;
   onBehalfBy?: Id;
   respondedAt?: IsoDateTime;
-  /** When a pending invite auto-expires. */
-  expiresAt?: IsoDateTime;
+  /** ISO instant; 7 days out or the first session's date, whichever is earlier. */
+  expiresAt: IsoDateTime;
+  /** <= 200 chars. */
   message?: string;
 }
 
@@ -219,7 +283,33 @@ export interface Notification extends Timestamps {
 }
 
 /* -------------------------------------------------------------------------- */
-/* auditLog/{entryId}                                                        */
+/* teams/{teamId} — one team, for one Teams-format series                   */
+/* -------------------------------------------------------------------------- */
+
+export interface TeamMemberEntry {
+  ref: PartnerRef;
+  joinedAt: IsoDateTime;
+}
+
+/**
+ * `teamId` is deterministic: `${seriesId}-${captainMemberId}` at creation (a
+ * captain has at most one team per series). Readable by all active members;
+ * writable only by callables.
+ */
+export interface Team extends Timestamps {
+  id: Id;
+  year: number;
+  seriesId: Id;
+  /** Default "<Captain surname> team". */
+  name: string;
+  captainMemberId: Id;
+  /** Includes the captain; members or visitors. */
+  members: TeamMemberEntry[];
+  status: TeamStatus;
+}
+
+/* -------------------------------------------------------------------------- */
+/* auditLog/{entryId} — server-only, never client-readable/writable          */
 /* -------------------------------------------------------------------------- */
 
 export interface AuditLogEntry {
@@ -237,15 +327,39 @@ export interface AuditLogEntry {
 }
 
 /* -------------------------------------------------------------------------- */
-/* emailCodes/{codeId}  — server-only, never read by clients                 */
+/* emailCodes/{emailHash} — server-only, never read by clients               */
 /* -------------------------------------------------------------------------- */
 
+/** Document id is `sha256(emailLower)`. */
 export interface EmailLoginCode {
   id: Id;
-  emailHash: string;
-  codeHash: string;
+  /** HMAC-SHA256(pepper, email + ':' + code). */
+  codeHmac: string;
   expiresAt: IsoDateTime;
   attempts: number;
   consumedAt?: IsoDateTime;
   createdAt: IsoDateTime;
+}
+
+/* -------------------------------------------------------------------------- */
+/* rateLimits/{bucket}:{sha256(subject)} — server-only                       */
+/* -------------------------------------------------------------------------- */
+
+export interface RateLimit {
+  id: Id;
+  windowStart: IsoDateTime;
+  count: number;
+}
+
+/* -------------------------------------------------------------------------- */
+/* imports/{importId} — server-only                                          */
+/* -------------------------------------------------------------------------- */
+
+export interface ImportRecord {
+  id: Id;
+  kind: 'members' | 'programme';
+  actorMemberId: Id;
+  startedAt: IsoDateTime;
+  finishedAt?: IsoDateTime;
+  report?: unknown;
 }

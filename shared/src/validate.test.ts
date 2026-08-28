@@ -3,14 +3,12 @@ import {
   assertIsoDate,
   isIsoDate,
   normaliseEmail,
-  pairingMismatchReason,
   parseBooleanCell,
   parseDateList,
   parseGrade,
   parseOptionalInt,
   parseWeekday,
 } from './validate.js';
-import type { Entry } from './models.js';
 
 describe('parseBooleanCell', () => {
   it.each([
@@ -91,48 +89,5 @@ describe('normaliseEmail', () => {
   });
 });
 
-describe('pairingMismatchReason', () => {
-  const base: Entry = {
-    id: 'e1',
-    sessionId: 's1',
-    date: '2027-01-12',
-    seriesId: 'ser1',
-    memberId: 'm1',
-    partnerMemberId: 'm2',
-    status: 'confirmed',
-    pairingId: 'p1',
-    createdBy: 'm1',
-    createdAt: '2026-08-28T00:00:00.000Z',
-    updatedAt: '2026-08-28T00:00:00.000Z',
-  };
-
-  it('accepts a valid mirror', () => {
-    const a = base;
-    const b: Entry = { ...base, id: 'e2', memberId: 'm2', partnerMemberId: 'm1' };
-    expect(pairingMismatchReason(a, b)).toBeNull();
-  });
-
-  it('rejects a non-mirrored partner', () => {
-    const a = base;
-    const b: Entry = { ...base, id: 'e2', memberId: 'm3', partnerMemberId: 'm1' };
-    expect(pairingMismatchReason(a, b)).toMatch(/mirrored/);
-  });
-
-  it('rejects a mismatched pairingId', () => {
-    const a = base;
-    const b: Entry = { ...base, id: 'e2', memberId: 'm2', partnerMemberId: 'm1', pairingId: 'p2' };
-    expect(pairingMismatchReason(a, b)).toMatch(/pairingId/);
-  });
-
-  it('rejects a one-sided substitute', () => {
-    const a: Entry = { ...base, substituteMemberId: 'm9' };
-    const b: Entry = { ...base, id: 'e2', memberId: 'm2', partnerMemberId: 'm1' };
-    expect(pairingMismatchReason(a, b)).toMatch(/substitute/);
-  });
-
-  it('rejects when either side is not confirmed', () => {
-    const a: Entry = { ...base, status: 'looking_for_partner' };
-    const b: Entry = { ...base, id: 'e2', memberId: 'm2', partnerMemberId: 'm1' };
-    expect(pairingMismatchReason(a, b)).toMatch(/confirmed/);
-  });
-});
+// The pairing/team invariant checks (I1–I6, I9) now live in `pairing.ts` and
+// are covered by `pairing.test.ts`.

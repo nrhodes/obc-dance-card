@@ -11,6 +11,21 @@ export const paths = {
   members: () => 'members',
   member: (memberId: Id) => `members/${memberId}`,
 
+  memberPrivates: () => 'memberPrivate',
+  memberPrivate: (memberId: Id) => `memberPrivate/${memberId}`,
+
+  visitors: () => 'visitors',
+  visitor: (visitorId: Id) => `visitors/${visitorId}`,
+
+  teams: () => 'teams',
+  team: (teamId: Id) => `teams/${teamId}`,
+
+  rateLimits: () => 'rateLimits',
+  rateLimit: (key: Id) => `rateLimits/${key}`,
+
+  imports: () => 'imports',
+  import: (importId: Id) => `imports/${importId}`,
+
   programmes: () => 'programmes',
   programme: (year: number | string) => `programmes/${year}`,
 

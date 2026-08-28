@@ -49,6 +49,10 @@ export interface SeriesCsvRow {
   note: string;
   /** `;`-separated ISO dates, e.g. `2027-01-12;2027-01-19;2027-01-26`. */
   dates: string;
+  /** Integer, or blank; ignored unless `format` is `Teams`. Defaults to 4. */
+  teamMin?: string;
+  /** Integer, or blank; ignored unless `format` is `Teams`. Defaults to 6. */
+  teamMax?: string;
 }
 
 /** singles.csv — Holiday Bridge / No Bridge one-off dates. */

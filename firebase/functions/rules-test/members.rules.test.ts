@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, it } from 'vitest';
-import { setDoc, doc, getDoc, updateDoc } from 'firebase/firestore';
+import { deleteDoc, doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 import type { RulesTestEnvironment } from '@firebase/rules-unit-testing';
-import { asAdmin, asInactive, asMember, assertFails, assertSucceeds, makeTestEnv } from './harness.js';
+import { assertFails, assertSucceeds, clientAnon, clientAs, makeTestEnv, seedMember } from './harness.js';
 
 let env: RulesTestEnvironment;
 
@@ -13,68 +13,45 @@ afterAll(async () => {
 });
 beforeEach(async () => {
   await env.clearFirestore();
-  await env.withSecurityRulesDisabled(async (ctx) => {
-    const db = ctx.firestore();
-    await setDoc(doc(db, 'members/alice'), {
-      id: 'alice',
-      firstName: 'Alice',
-      lastName: 'A',
-      emailLower: 'alice@example.org',
-      phone: '021 000 0001',
-      grade: 'Open',
-      role: 'member',
-      active: true,
-    });
-    await setDoc(doc(db, 'members/bob'), {
-      id: 'bob',
-      firstName: 'Bob',
-      lastName: 'B',
-      emailLower: 'bob@example.org',
-      phone: '021 000 0002',
-      grade: 'Junior',
-      role: 'member',
-      active: true,
-    });
-  });
+  await seedMember(env, 'alice', { firstName: 'Alice', active: true, role: 'member' });
 });
 
 describe('members collection rules', () => {
-  it('an active member can read any member (roster visibility)', async () => {
-    const db = env.authenticatedContext('bob', asMember).firestore();
-    await assertSucceeds(getDoc(doc(db, 'members/alice')));
+  it('unauthenticated: cannot read', async () => {
+    await assertFails(getDoc(doc(clientAnon(env), 'members/alice')));
   });
 
-  it('an inactive member cannot read members', async () => {
-    const db = env.authenticatedContext('bob', asInactive).firestore();
-    await assertFails(getDoc(doc(db, 'members/alice')));
+  it('inactive member: cannot read', async () => {
+    await seedMember(env, 'bob', { active: false });
+    await assertFails(getDoc(doc(clientAs(env, 'bob'), 'members/alice')));
   });
 
-  it('a signed-out user cannot read members', async () => {
-    const db = env.unauthenticatedContext().firestore();
-    await assertFails(getDoc(doc(db, 'members/alice')));
+  it('active member (self): can read their own doc', async () => {
+    await assertSucceeds(getDoc(doc(clientAs(env, 'alice'), 'members/alice')));
   });
 
-  it('a member may update only their own phone / prefs / devices', async () => {
-    const db = env.authenticatedContext('alice', asMember).firestore();
-    await assertSucceeds(
-      updateDoc(doc(db, 'members/alice'), { phone: '021 999 9999', updatedAt: 'now' }),
-    );
-    await assertFails(updateDoc(doc(db, 'members/alice'), { role: 'admin' }));
-    await assertFails(updateDoc(doc(db, 'members/alice'), { active: false }));
+  it('active member (other): can read another active member (roster parity)', async () => {
+    await seedMember(env, 'bob', { active: true });
+    await assertSucceeds(getDoc(doc(clientAs(env, 'bob'), 'members/alice')));
   });
 
-  it('a member cannot update another member', async () => {
-    const db = env.authenticatedContext('alice', asMember).firestore();
-    await assertFails(updateDoc(doc(db, 'members/bob'), { phone: '021 111 1111' }));
+  it('active member: cannot read a deactivated member other than themselves', async () => {
+    await seedMember(env, 'bob', { active: true });
+    await seedMember(env, 'carol', { active: false });
+    await assertFails(getDoc(doc(clientAs(env, 'bob'), 'members/carol')));
   });
 
-  it('an admin may update any member', async () => {
-    const db = env.authenticatedContext('carol', asAdmin).firestore();
-    await assertSucceeds(updateDoc(doc(db, 'members/bob'), { grade: 'Intermediate' }));
+  it('admin: can read any member, active or not', async () => {
+    await seedMember(env, 'admin1', { role: 'admin', active: true });
+    await seedMember(env, 'carol', { active: false });
+    await assertSucceeds(getDoc(doc(clientAs(env, 'admin1'), 'members/carol')));
   });
 
-  it('nobody may create or delete members from the client', async () => {
-    const db = env.authenticatedContext('carol', asAdmin).firestore();
-    await assertFails(setDoc(doc(db, 'members/dave'), { id: 'dave', active: true }));
+  it('no client — member, or admin — may create, update, or delete a member doc', async () => {
+    await seedMember(env, 'admin1', { role: 'admin', active: true });
+    await assertFails(setDoc(doc(clientAs(env, 'admin1'), 'members/dave'), { id: 'dave', active: true }));
+    await assertFails(updateDoc(doc(clientAs(env, 'alice'), 'members/alice'), { phone: '021 999 9999' }));
+    await assertFails(updateDoc(doc(clientAs(env, 'admin1'), 'members/alice'), { role: 'admin' }));
+    await assertFails(deleteDoc(doc(clientAs(env, 'admin1'), 'members/alice')));
   });
 });

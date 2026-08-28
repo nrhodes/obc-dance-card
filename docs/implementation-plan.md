@@ -278,12 +278,16 @@ Let `G(pairingId)` = all non-cancelled entries with that `pairingId`.
   `partner = null`, `pairingId = null`.
 - **I7 Locked sessions are immutable** to members (§6).
 - **I9 Team consistency.** For every team `T` with status `active`/`forming` and every
-  session `S` in `T.seriesId`: the set of non-cancelled entries with `teamId = T.id`
-  and `teamSessionOnly = false` equals `T.members` restricted to member-kind refs
-  (visitor team members have no entry — they are listed on the team doc only). Team
-  entries have `partner = null`, `pairingId = null`, no substitution fields. A
-  `teamSessionOnly` entry exists only for a session where some team member's entry
-  is `cancelled`. `T.captainMemberId` is in `T.members`. `|T.members| ≤ series.teamMax`.
+  session `S` in `T.seriesId`: every member-kind ref in `T.members` has an entry
+  `S_M` with `teamId = T.id`, `teamSessionOnly = false`, and status `confirmed` **or**
+  `cancelled` (a cancelled team entry is a one-session absence, §9.3 — the team is
+  unchanged); every non-cancelled entry with `teamId = T.id` and
+  `teamSessionOnly = false` belongs to a rostered member. Visitor team members have
+  no entry — they are listed on the team doc only. Team entries have `partner = null`,
+  `pairingId = null`, no substitution fields. A `teamSessionOnly` entry is `confirmed`,
+  belongs to a non-rostered member, and exists only for a session where some rostered
+  member's entry is `cancelled`. `T.captainMemberId` is in `T.members`; `T.members` has
+  no duplicate refs; `|T.members| ≤ series.teamMax`.
 - **I8 Visitors never authenticate.** No Auth user may exist whose email matches a
   visitor's email unless that email is also an active member's (the import may
   later promote a visitor — §12.5).
@@ -568,6 +572,11 @@ PR.)
 must not collide with an active member's full name (warn, not block).
 
 12.7 **Substitutes** may be visitors (`setSubstitute` with `kind:'visitor'`).
+
+12.8 **A visitor partner cannot be substituted.** Substitution is modelled only for
+member–member pairings (I4). If a visitor cannot come, the member cancels the entry
+and re-pairs (with a member, another visitor, or the noticeboard). The UI offers
+"Change partner" on visitor pairings, which is cancel + sign-up in one step.
 
 ## 12A. Teams (feature spec)
 

@@ -2,157 +2,130 @@ rules_version = '2';
 
 // OBC Dance Card — Firestore security rules.
 //
-// Model summary:
-//  * Every signed-in user has a `members/{uid}` document (id == auth uid),
-//    provisioned by a Cloud Function from the admin-loaded allowlist on first
-//    sign-in. Custom claims `role` ("member" | "admin") and `active` (bool)
-//    mirror that document so most checks avoid an extra read.
-//  * Clients may only ever touch their OWN solo entry (looking_for_partner /
-//    available / cancel-while-solo) and a whitelisted slice of their own member
-//    doc. Anything that pairs two members, imports data, or acts on behalf of
-//    someone runs in a Cloud Function with the Admin SDK, which bypasses rules.
+// Model summary (plan §10):
+//  * Clients never write Firestore, with exactly one exception: a member may
+//    flip `read`/`readAt` on their own `notifications` doc. Every other
+//    mutation is a Cloud Function callable using the Admin SDK, which bypasses
+//    these rules and carries its own authorisation logic (plan §9).
+//  * "Active member" / "admin" are determined by reading the caller's own
+//    `members/{uid}` document with `get()` — never from custom claims/token
+//    data, so a deactivation or role change takes effect on the caller's very
+//    next request instead of waiting for a token refresh.
 
 service cloud.firestore {
   match /databases/{database}/documents {
 
     /* --------------------------- helpers --------------------------- */
 
-    function isSignedIn() {
-      return request.auth != null;
-    }
-
-    function claims() {
-      return request.auth.token;
+    function callerDoc() {
+      return get(/databases/$(database)/documents/members/$(request.auth.uid)).data;
     }
 
     function isActiveMember() {
-      return isSignedIn() && claims().get('active', false) == true;
+      return request.auth != null && callerDoc().active == true;
     }
 
     function isAdmin() {
-      return isSignedIn() && claims().get('role', 'member') == 'admin';
+      return isActiveMember() && callerDoc().role == 'admin';
     }
 
-    // Fields a member is allowed to change on their own member document.
-    function memberSelfWritableOnly() {
-      return request.resource.data.diff(resource.data).affectedKeys()
-        .hasOnly(['phone', 'notificationPrefs', 'devices', 'updatedAt']);
+    function isSelf(id) {
+      return request.auth != null && request.auth.uid == id;
     }
 
-    // A brand-new entry the caller is allowed to self-create: their own, solo,
-    // publicly advertising availability. No partner, no pairing.
-    function isSelfSoloCreate() {
-      let d = request.resource.data;
-      return d.memberId == request.auth.uid
-        && d.createdBy == request.auth.uid
-        && d.partnerMemberId == null
-        && d.pairingId == null
-        && d.get('substituteMemberId', null) == null
-        && d.get('isSubstituteFor', null) == null
-        && d.status in ['looking_for_partner', 'available'];
-    }
-
-    // A self-update the caller may make to their own entry: tweak the note, swap
-    // between the two solo statuses, or cancel — but only while it is still solo
-    // (an unpaired entry). Paired entries can only be changed by a function.
-    function isSelfSoloUpdate() {
-      let before = resource.data;
-      let after = request.resource.data;
-      return before.memberId == request.auth.uid
-        && before.partnerMemberId == null
-        && before.pairingId == null
-        && after.memberId == before.memberId
-        && after.partnerMemberId == null
-        && after.pairingId == null
-        && after.status in ['looking_for_partner', 'available', 'cancelled']
-        && after.diff(before).affectedKeys().hasOnly(['status', 'note', 'updatedAt']);
+    function programmePublished(year) {
+      return get(/databases/$(database)/documents/programmes/$(year)).data.status == 'published';
     }
 
     /* --------------------------- members --------------------------- */
 
-    match /members/{memberId} {
+    match /members/{id} {
       // The printed booklet lists every member's name and phone; mirror that —
-      // any active member may read any member.
-      allow read: if isActiveMember();
+      // any active member may read any other *active* member, and always
+      // their own doc (even if it has just been deactivated).
+      allow read: if isAdmin() || (isActiveMember() && (resource.data.active == true || isSelf(id)));
+      allow write: if false; // provisioning, imports, role/active changes: functions only.
+    }
 
-      allow update: if isAdmin()
-        || (request.auth.uid == memberId && isActiveMember() && memberSelfWritableOnly());
+    /* ------------------------ memberPrivate -------------------------- */
 
-      // Provisioning, imports, deactivation, role changes: functions only.
-      allow create, delete: if false;
+    match /memberPrivate/{id} {
+      allow read: if (isSelf(id) && isActiveMember()) || isAdmin();
+      allow write: if false;
+    }
+
+    /* --------------------------- visitors ----------------------------- */
+
+    match /visitors/{id} {
+      allow read: if isAdmin() || (isActiveMember() && resource.data.createdByMemberId == request.auth.uid);
+      allow write: if false;
     }
 
     /* ------------------------- programmes -------------------------- */
 
     match /programmes/{year} {
-      allow read: if isAdmin()
-        || (isActiveMember() && resource.data.status == 'published');
-      allow write: if isAdmin();
+      allow read: if isAdmin() || (isActiveMember() && resource.data.status == 'published');
+      allow write: if false;
 
-      match /weekdays/{weekday} {
-        allow read: if isAdmin() || isActiveMember();
-        allow write: if isAdmin();
-      }
-      match /series/{seriesId} {
-        allow read: if isAdmin() || isActiveMember();
-        allow write: if isAdmin();
-      }
-      match /sessions/{sessionId} {
-        allow read: if isAdmin() || isActiveMember();
-        allow write: if isAdmin();
+      // weekdays/{id}, series/{id}, sessions/{id} — gated on the parent
+      // programme's publish status for non-admins.
+      match /{sub}/{id} {
+        allow read: if isAdmin() || (isActiveMember() && programmePublished(year));
+        allow write: if false;
       }
     }
 
     /* --------------------------- entries -------------------------- */
 
-    match /entries/{entryId} {
+    match /entries/{id} {
       // Roster visibility: any active member can see who is playing / looking.
+      // Every write — solo status, pairing, substitute, cancel, team roster —
+      // goes through a callable so pairing/team invariants can be enforced
+      // transactionally (plan §7).
       allow read: if isActiveMember();
+      allow write: if false;
+    }
 
-      allow create: if isActiveMember() && isSelfSoloCreate();
-      allow update: if isActiveMember() && isSelfSoloUpdate();
+    /* ---------------------------- teams ------------------------------ */
 
-      // Paired create/update, substitutes, on-behalf, and all deletes: functions.
-      allow delete: if false;
+    match /teams/{id} {
+      // Roster parity: the booklet would list team members.
+      allow read: if isActiveMember();
+      allow write: if false;
     }
 
     /* --------------------------- invites -------------------------- */
 
-    match /invites/{inviteId} {
+    match /invites/{id} {
       allow read: if isAdmin()
         || (isActiveMember()
             && request.auth.uid in [resource.data.fromMemberId, resource.data.toMemberId]);
-
-      // Sending / responding / cancelling all go through callables.
-      allow write: if false;
+      allow write: if false; // sending / responding / cancelling all go through callables.
     }
 
     /* ------------------------ notifications ---------------------- */
 
-    match /notifications/{notificationId} {
-      allow read: if isActiveMember() && request.auth.uid == resource.data.memberId;
+    match /notifications/{id} {
+      allow read: if isActiveMember() && resource.data.memberId == request.auth.uid;
 
-      // Only the "read" flag may be toggled by the owner.
+      // The one exception to "no client writes": the owner may toggle their
+      // own read flag, and nothing else.
       allow update: if isActiveMember()
-        && request.auth.uid == resource.data.memberId
-        && request.resource.data.diff(resource.data).affectedKeys()
-             .hasOnly(['read', 'readAt']);
+        && resource.data.memberId == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read', 'readAt'])
+        && request.resource.data.read is bool;
 
       allow create, delete: if false;
     }
 
-    /* -------------------------- audit log ----------------------- */
-
-    match /auditLog/{logId} {
-      allow read: if isAdmin();
-      allow write: if false;
-    }
-
     /* ------------------- server-only collections ---------------- */
 
-    match /emailCodes/{codeId} {
-      allow read, write: if false;
-    }
+    // Admins read the audit log through the paged `listAuditLog` callable, not
+    // directly, to keep the rules surface minimal.
+    match /auditLog/{id} { allow read, write: if false; }
+    match /emailCodes/{id} { allow read, write: if false; }
+    match /rateLimits/{id} { allow read, write: if false; }
+    match /imports/{id} { allow read, write: if false; }
 
     // Deny anything not matched above.
     match /{document=**} {
