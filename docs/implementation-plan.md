@@ -307,7 +307,7 @@ re-validates inside its transaction before commit; the nightly sweep runs both.
 | Member emails, device tokens | Read by other members | Split into `memberPrivate`; owner/admin only |
 | Visitor PII | Read by non-sponsors | `visitors` readable by sponsor + admin only; only `displayName` denormalised onto entries |
 | Accounts | Login-code brute force | CSPRNG 6-digit; HMAC-SHA256 with secret pepper; 10-min TTL; 5 attempts then invalidated; single use; new request invalidates old; constant-time compare |
-| Accounts | Code-request flooding / email bombing | Rate limits: 3 per email / 15 min, 10 per IP / hour; App Check; generic response |
+| Accounts | Code-request flooding / email bombing | Rate limits: 3 per email / 15 min; 10 verifies per email / 15 min; per-IP limits kept loose (30 requests, 60 verifies / hour) because the club wifi NATs many members behind one address; App Check; generic response |
 | Accounts | Enumeration | Uniform response + timing for known/unknown emails; Firebase "email enumeration protection" ON |
 | Accounts | Self-signup / visitor signs in | `beforeUserCreated` rejects all client creations; `beforeSignIn` requires `members/{uid}.active === true`; visitors have no Auth user |
 | Accounts | Password attacks | Firebase password policy (min 8, require 1 letter+1 number); Firebase's built-in sign-in throttling; no reset-email flow exposed |
@@ -410,7 +410,7 @@ export const sendInvite = onCall(opts, async (req) => {
 | `updateMyContact` | member | `{phone?}` | — | `members/{uid}.phone` | — | — |
 | `updateMyPrefs` | member | `NotificationPrefs` | — | `memberPrivate.notificationPrefs` | — | — |
 | `registerDevice` / `unregisterDevice` | member | `{token, platform, label?}` | ≤10 devices | `memberPrivate.devices` | — | — |
-| `importMembers` | admin | `{csv, dryRun?}` | size limits | §8.2 provisioning; `imports/{id}` | `member_import` | — |
+| `importMembers` | admin | `{csv, dryRun?, allowMassDeactivation?}` | size limits; refuses to deactivate more than max(5, 20% of active) without opt-in | §8.2 provisioning; `imports/{id}` | `member_import` | — |
 | `setMemberRole` | admin | `{memberId, role}` | not last admin | role; revoke tokens | `role_changed` | target: "you are now an admin" |
 | `deactivateMember` / `reactivateMember` | admin | `{memberId}` | — | active flag; Auth disabled; revoke; cancel future entries (cascade §9.3) | `member_deactivated` | partners of cancelled sessions |
 | `eraseMember` | admin | `{memberId, confirmName}` | inactive ≥ 30 days | scrub PII (names → "Former member", phone/email removed, visitors owned → deleted), keep entries anonymised | `member_erased` | — |
@@ -630,7 +630,11 @@ Unchanged from v1 in format (see `docs/csv-formats.md`, templates in
   `format=Teams`; defaults 4 and 6). Update `shared/templates/series.csv` and
   `docs/csv-formats.md`.
 - `importMembers` is the only path that creates Auth users. Emails are normalised;
-  duplicates within the file are an error.
+  duplicates within the file are an error. A member is protected from
+  deactivation if their email appears *anywhere* in the file, even on a row that
+  failed validation. Deactivating more than max(5, 20% of active members) in one
+  run requires `allowMassDeactivation: true` (guards against uploading the wrong
+  file). Admins are never deactivated by import.
 - `importProgramme` on an already-published year requires `replace: true`
   and refuses if any session that would be removed has non-cancelled entries.
 

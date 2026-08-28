@@ -74,6 +74,8 @@ export interface MemberImportReport {
   deactivated: number;
   unchanged: number;
   errors: CsvRowError[];
+  /** Non-fatal notices, e.g. "admin X was absent from the file and was not deactivated". */
+  warnings: string[];
 }
 
 /** Outcome of a programme import (weekdays + series + singles), per year draft. */

@@ -80,6 +80,8 @@ const csvText = z.string().max(1_000_000, 'CSV must be 1 MB or smaller');
 export const ImportMembersInputSchema = z.object({
   csv: csvText,
   dryRun: z.boolean().optional(),
+  /** Required to deactivate more than max(5, 20% of active members) in one import. */
+  allowMassDeactivation: z.boolean().optional(),
 });
 export type ImportMembersInput = z.infer<typeof ImportMembersInputSchema>;
 

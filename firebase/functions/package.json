@@ -14,22 +14,25 @@
     "serve": "npm run build && firebase emulators:start --only functions,firestore,auth",
     "test": "vitest run",
     "test:rules": "firebase --project demo-obc emulators:exec --only firestore \"vitest run --config vitest.rules.config.ts\"",
-    "seed": "node --loader ts-node/esm ./seed/seed.ts",
+    "test:emu": "firebase --project demo-obc emulators:exec --only firestore,auth \"vitest run --config vitest.emu.config.ts\"",
+    "seed": "tsx ../seed/seed.ts",
     "lint": "eslint src"
   },
   "dependencies": {
     "@obc/shared": "*",
     "firebase-admin": "^13.0.2",
     "firebase-functions": "^6.2.0",
+    "nodemailer": "^6.9.16",
     "papaparse": "^5.4.1"
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "^4.0.1",
     "@types/node": "^20.17.10",
+    "@types/nodemailer": "^6.4.17",
     "@types/papaparse": "^5.3.15",
     "firebase": "^11.1.0",
     "firebase-functions-test": "^3.4.0",
-    "ts-node": "^10.9.2",
+    "tsx": "^4.19.2",
     "typescript": "^5.7.2",
     "vitest": "^2.1.8"
   }

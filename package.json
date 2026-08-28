@@ -18,7 +18,7 @@
     "lint": "eslint .",
     "test": "npm run build -w @obc/shared && npm run test --workspaces --if-present",
     "typecheck": "npm run build -w @obc/shared && npm run typecheck --workspaces --if-present",
-    "emulators": "firebase --project demo-obc emulators:start",
+    "emulators": "firebase --project demo-obc --config firebase/firebase.json emulators:start",
     "seed": "npm run seed -w @obc/functions",
     "format": "prettier --write \"**/*.{ts,tsx,js,json,md}\""
   },

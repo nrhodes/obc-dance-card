@@ -3,8 +3,11 @@ import tseslint from 'typescript-eslint';
 export default tseslint.config(
   {
     ignores: [
+      // Compiled output only — anchored so it doesn't also match the *source*
+      // directory `firebase/functions/src/lib/**`, which a bare `**/lib/**`
+      // would (and silently did, pre-Phase-1a).
       '**/dist/**',
-      '**/lib/**',
+      'firebase/functions/lib/**',
       '**/node_modules/**',
       '**/*.config.js',
       '**/*.config.ts',
