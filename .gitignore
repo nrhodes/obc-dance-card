@@ -71,3 +71,6 @@ ios/**/*.xcuserstate
 ios/**/xcuserdata/
 ios/**/GoogleService-Info.plist
 ios/**/DerivedData/
+
+# Hosting staging copy of web/dist (built by the hosting predeploy hook)
+firebase/web-dist/
