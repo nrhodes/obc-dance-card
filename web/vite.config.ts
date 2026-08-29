@@ -5,32 +5,45 @@ import { VitePWA } from 'vite-plugin-pwa';
 
 // PWA precaching MUST NOT touch anything that talks to Firebase (plan §8.1,
 // §14.1: shared devices, no caching of Firestore/Functions responses). We
-// precache the built app shell only, and explicitly deny navigation fallback
-// and runtime caching for every Google/Firebase-hosted origin and the local
-// emulator ports so a stale cached response can never stand in for a live
-// call.
-const NEVER_CACHE = [
-  /^https:\/\/[^/]*\.googleapis\.com\//,
-  /^https:\/\/[^/]*\.cloudfunctions\.net\//,
-  /^https:\/\/[^/]*\.run\.app\//,
-  /^http:\/\/127\.0\.0\.1:(9099|8080|5001|4000|5000|8085)\//,
-  /^http:\/\/localhost:(9099|8080|5001|4000|5000|8085)\//,
-];
-
+// precache the built app shell only.
+//
+// Phase 5b (web push) needs a service worker that can also receive FCM
+// background messages (`onBackgroundMessage`, `notificationclick`) — and a
+// page may only ever be controlled by ONE active service worker per scope.
+// Rather than register a second worker alongside the Workbox one (which
+// would race the app-shell worker for control of the page and make the
+// "does push still work offline-cached" story unclear), this project builds
+// a single worker from its own TypeScript source (`src/push/sw.ts`) via
+// vite-plugin-pwa's `injectManifest` strategy: our source calls
+// `precacheAndRoute(self.__WB_MANIFEST)` itself (replacing the
+// `workbox: {...}` config generateSW used to consume) *and* sets up FCM. See
+// `src/push/sw.ts` and `docs/web-push.md` for the full rationale.
+//
+// `filename: 'sw.ts'` (relative to `srcDir`) becomes `dist/sw.js` — a single
+// file at the site root, scope `/`. The app never relies on FCM's default
+// `/firebase-messaging-sw.js` path lookup (it passes `serviceWorkerRegistration`
+// explicitly to `getToken`, per `src/push/usePush.ts`), so the merged
+// worker's filename is free to describe what it now actually is: the app's
+// one and only service worker, not "the FCM one".
 export default defineConfig({
   plugins: [
     react(),
     VitePWA({
       registerType: 'autoUpdate',
       injectRegister: 'auto',
-      workbox: {
-        // Precache the built app shell (HTML/JS/CSS/icons) only.
+      strategies: 'injectManifest',
+      srcDir: 'src/push',
+      filename: 'sw.ts',
+      injectManifest: {
+        // Precache the built app shell (HTML/JS/CSS/icons) only — same
+        // globs as the old generateSW config. No `runtimeCaching`-style
+        // option exists for injectManifest: because `sw.ts` never imports
+        // `workbox-strategies` or calls `registerRoute` for anything other
+        // than the same-origin SPA-shell fallback, nothing dynamic
+        // (Firestore, callables, auth, or anything on *.googleapis.com /
+        // *.cloudfunctions.net / *.run.app) is EVER written to a Workbox
+        // cache — there is simply no route registered that could catch it.
         globPatterns: ['**/*.{js,css,html,svg,png,ico,webmanifest}'],
-        navigateFallback: 'index.html',
-        navigateFallbackDenylist: NEVER_CACHE,
-        // No runtime caching entries at all: nothing dynamic (Firestore,
-        // callables, auth) is ever written to the Workbox cache.
-        runtimeCaching: [],
       },
       manifest: {
         name: 'Orewa Bridge Club Dance Card',

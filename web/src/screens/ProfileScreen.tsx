@@ -6,6 +6,7 @@ import { toAppError } from '../firebase';
 import { mapGenericError } from '../auth/errors';
 import { NotificationPrefsForm } from './NotificationPrefsForm';
 import { PasswordSection } from './PasswordSection';
+import { PushSettings } from '../push/PushSettings';
 
 export function ProfileScreen() {
   const { member, memberPrivate, signOut } = useAuth();
@@ -40,6 +41,10 @@ export function ProfileScreen() {
 
       <div className="card">
         <NotificationPrefsForm initialPrefs={memberPrivate.notificationPrefs} />
+      </div>
+
+      <div className="card">
+        <PushSettings />
       </div>
 
       <div className="card">
