@@ -416,3 +416,56 @@ starting the emulators + seed + dev server first).
 - [ ] Run `verifyPairingConsistency` (the scheduled job) directly and confirm
       it produces the same kind of `auditLog` entry when `PAIRING_SWEEP_REPAIR`
       is enabled.
+
+## 8. Hardening checks (Phase 7b)
+
+- [ ] **StrictMode.** Confirm `web/src/main.tsx` renders `<App />` inside
+      `<StrictMode>` with no `VITE_DISABLE_STRICT_MODE` set (check
+      `web/.env`/`.env.example` don't set it). Run the two-context specs
+      (`dancecard.spec.ts`, `teams.spec.ts`, `admin.spec.ts`) against a
+      freshly restarted emulator at least twice — no permanently-stuck
+      "Loading…" screen and no `INTERNAL ASSERTION FAILED` in the browser
+      console. See `docs/web-hardening.md` for the investigation and what to
+      do if this ever regresses.
+- [ ] **Accessibility.** `npx playwright test e2e/a11y.spec.ts` passes (axe,
+      zero `serious`/`critical` violations, on every top-level route incl.
+      every admin screen; and no horizontal overflow at a 320px viewport with
+      the root font size doubled). Manually: tab through the sign-in screen,
+      a session page, and a dialog (e.g. "Play with a partner") using only
+      the keyboard — every control is reachable, in a sensible order, with a
+      visible focus ring; Escape closes a dialog and returns focus to what
+      opened it.
+- [ ] **Offline banner.** With the emulator/dev server running, open the
+      app, then take the browser offline (DevTools → Network → Offline, or
+      disconnect Wi-Fi). "You're offline — the card may be out of date."
+      appears near the top of the page within a second or two. Reconnect —
+      the banner disappears.
+- [ ] **PWA update prompt.** Build and serve the app (`npm run build -w web
+      && npm run preview -w web`), open it, change some UI text, rebuild,
+      and reload the tab once (so the new service worker installs in the
+      background) without a second hard reload — "A new version is ready —
+      Reload" appears; clicking **Reload** picks up the change.
+- [ ] **Idle sign-out (simulated).** Sign in, open DevTools → Application →
+      Local Storage, and edit `obc.lastActivityAt` to a timestamp more than
+      30 days in the past (`Date.now() - 31*24*60*60*1000`). Reload the
+      page — you're signed out. Sign in again, reload without editing
+      anything — you stay signed in (a recent timestamp is written on
+      mount).
+- [ ] **Not you? / Sign out.** On any member screen, at every viewport width
+      (resize to 320px), both the header's "Not you? Sign out" link and the
+      nav's "Sign out" button are visible and reachable within one tap/click,
+      and each immediately signs out.
+- [ ] **Error boundary.** Temporarily throw in a screen component (e.g.
+      `throw new Error('test')` at the top of `HomeScreen`), reload — the
+      plain "Something went wrong" card with a **Reload** button appears,
+      never a stack trace. Remove the throw afterwards.
+- [ ] **Privacy / Help pages.** `/privacy` opens signed out (from the
+      sign-in screen's footer) and signed in (from Profile); `/help` opens
+      from the nav. Both render without the surrounding app chrome issue
+      seen in `/privacy`'s case being anything other than intentional (no
+      nav — `/privacy` is a standalone route so it works signed out).
+- [ ] **CSP.** `grep -o 'Content-Security-Policy.*' firebase/firebase.json`
+      includes `worker-src 'self'` and `manifest-src 'self'`. Deploy (or
+      serve `dist/` with the same headers locally) and confirm
+      `manifest.webmanifest` and `sw.js` both load with no console CSP
+      violations.

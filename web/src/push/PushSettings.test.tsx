@@ -15,7 +15,14 @@ function memberPrivate(push: boolean): MemberPrivate {
   return {
     id: 'm1',
     emailLower: 'a@example.org',
-    notificationPrefs: { push, email: true, reminders: true, matchmakingAlerts: false, digest: 'immediate', reminderDaysBefore: 2 },
+    notificationPrefs: {
+      push,
+      email: true,
+      reminders: true,
+      matchmakingAlerts: false,
+      digest: 'immediate',
+      reminderDaysBefore: 2,
+    },
     devices: [],
     hasPassword: false,
     createdAt: '2027-01-01T00:00:00.000Z',
@@ -29,8 +36,6 @@ function push(overrides: Partial<UsePushResult>): UsePushResult {
     busy: false,
     isIos: false,
     error: null,
-    toast: null,
-    dismissToast: vi.fn(),
     enable: vi.fn(),
     disable: vi.fn(),
     ...overrides,
@@ -93,20 +98,10 @@ describe('PushSettings', () => {
 
   it('shows an error message in state error', () => {
     useAuthMock.mockReturnValue({ memberPrivate: memberPrivate(true) });
-    usePushMock.mockReturnValue(push({ state: 'error', error: { code: 'unknown', message: 'boom' } }));
+    usePushMock.mockReturnValue(
+      push({ state: 'error', error: { code: 'unknown', message: 'boom' } }),
+    );
     render(<PushSettings />);
     expect(screen.getByRole('alert')).toBeTruthy();
-  });
-
-  it('shows a dismissible, accessible toast for a foreground message', async () => {
-    const user = userEvent.setup();
-    const dismissToast = vi.fn();
-    useAuthMock.mockReturnValue({ memberPrivate: memberPrivate(true) });
-    usePushMock.mockReturnValue(push({ state: 'enabled', toast: 'Your partner accepted', dismissToast }));
-    render(<PushSettings />);
-    const status = screen.getByRole('status');
-    expect(status.textContent).toMatch(/Your partner accepted/);
-    await user.click(screen.getByRole('button', { name: /dismiss/i }));
-    expect(dismissToast).toHaveBeenCalled();
   });
 });

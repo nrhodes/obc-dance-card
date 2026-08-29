@@ -1,3 +1,4 @@
+import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import { App } from './App';
@@ -8,21 +9,27 @@ if (!rootEl) {
   throw new Error('#root element not found');
 }
 
-// No <StrictMode> (plan Phase 3b finding): its dev-only double-invoked
-// effects — mount, cleanup, mount again — multiply every onSnapshot
-// subscription this app now has (My Card, Invites, Notifications, the
-// session page's own entries/teams listeners, on top of the shared
-// programme/members providers). Against the Firestore *emulator* specifically
-// (not observed against production Firestore), that churn — especially with
-// a second concurrent browser session also subscribing/unsubscribing, as in
-// `e2e/dancecard.spec.ts` — reliably triggers a Firestore JS SDK internal
-// bug ("INTERNAL ASSERTION FAILED: Unexpected state (ID: ca9)") in the
-// watch-stream target bookkeeping that leaves every listener in the tab
-// permanently stuck loading. StrictMode has no effect in production builds
-// either way, so removing it costs nothing there and fixes real e2e/dev
-// reliability against the emulator.
-createRoot(rootEl).render(
+// <StrictMode> is back on (Phase 7b task deliverable A). Phase 3b removed it
+// after StrictMode's dev-only double-invoked effects (mount, cleanup, mount
+// again) reliably triggered a Firestore JS SDK internal assertion against
+// the *emulator* with two concurrent sessions. Root cause and fix are
+// documented in `docs/web-hardening.md`; see that file before touching this
+// again. It is guarded off only for the E2E suite, which still exercises
+// two concurrent real browser contexts against the emulator in
+// `dancecard.spec.ts`/`teams.spec.ts`/`admin.spec.ts` — see the doc for why
+// that residual case needs the guard even after the fix.
+const strictModeDisabled = import.meta.env.VITE_DISABLE_STRICT_MODE === 'true';
+
+const tree = strictModeDisabled ? (
   <BrowserRouter>
     <App />
-  </BrowserRouter>,
+  </BrowserRouter>
+) : (
+  <StrictMode>
+    <BrowserRouter>
+      <App />
+    </BrowserRouter>
+  </StrictMode>
 );
+
+createRoot(rootEl).render(tree);

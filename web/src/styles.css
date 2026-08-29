@@ -34,6 +34,22 @@
   box-sizing: border-box;
 }
 
+/*
+ * Respect `prefers-reduced-motion` (Phase 7b task deliverable B) — a global
+ * safety net for any transition/animation added in future; nothing in this
+ * stylesheet currently animates.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 html {
   font-size: var(--font-size-base);
 }
@@ -200,10 +216,25 @@ textarea {
   padding: var(--space-2);
 }
 
+.app-header-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
 .app-header .title {
   font-size: var(--font-size-large);
   font-weight: 700;
   margin: 0 0 var(--space-1) 0;
+}
+
+.not-you-link {
+  color: var(--color-primary-contrast);
+  text-decoration: underline;
+  min-height: var(--tap-target);
+  font-size: 1rem;
 }
 
 .app-nav {

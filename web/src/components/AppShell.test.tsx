@@ -12,10 +12,15 @@ import { AppShell } from './AppShell';
 
 let memberFixture: Member | null = null;
 let actingAsFixture: { memberId: string; name: string } | null = null;
+let toastFixture: string | null = null;
+let needsRefreshFixture = false;
 const stopActingAsMock = vi.fn();
+const signOutMock = vi.fn();
+const dismissToastMock = vi.fn();
+const reloadMock = vi.fn();
 
 vi.mock('../auth/useAuth', () => ({
-  useAuth: () => ({ member: memberFixture, signOut: vi.fn() }),
+  useAuth: () => ({ member: memberFixture, signOut: signOutMock }),
 }));
 
 vi.mock('../invites/useInvites', () => ({
@@ -27,7 +32,23 @@ vi.mock('../notifications/useNotifications', () => ({
 }));
 
 vi.mock('../admin/useActingAs', () => ({
-  useActingAs: () => ({ actingAs: actingAsFixture, startActingAs: vi.fn(), stopActingAs: stopActingAsMock }),
+  useActingAs: () => ({
+    actingAs: actingAsFixture,
+    startActingAs: vi.fn(),
+    stopActingAs: stopActingAsMock,
+  }),
+}));
+
+vi.mock('../push/usePushForeground', () => ({
+  usePushForeground: () => ({ toast: toastFixture, dismissToast: dismissToastMock }),
+}));
+
+vi.mock('../pwa/usePwaUpdate', () => ({
+  usePwaUpdate: () => ({ needsRefresh: needsRefreshFixture, reload: reloadMock }),
+}));
+
+vi.mock('../session/useIdleSignOut', () => ({
+  useIdleSignOut: () => undefined,
 }));
 
 function member(overrides: Partial<Member> = {}): Member {
@@ -88,5 +109,43 @@ describe('AppShell', () => {
     actingAsFixture = null;
     renderShell();
     expect(screen.queryByText(/Acting on behalf of/)).toBeNull();
+  });
+
+  it('shows a "Not you? Sign out" link that signs out (task deliverable C)', async () => {
+    memberFixture = member();
+    actingAsFixture = null;
+    const user = userEvent.setup();
+    renderShell();
+    await user.click(screen.getByRole('button', { name: /not you\? sign out/i }));
+    expect(signOutMock).toHaveBeenCalled();
+  });
+
+  it('has a Help link in the main nav', () => {
+    memberFixture = member();
+    renderShell();
+    expect(screen.getByRole('link', { name: 'Help' })).toBeTruthy();
+  });
+
+  it('shows a dismissible foreground push toast from anywhere in the app (task deliverable F)', async () => {
+    memberFixture = member();
+    toastFixture = 'Your partner accepted';
+    const user = userEvent.setup();
+    renderShell();
+    const statuses = screen.getAllByRole('status');
+    expect(statuses.some((el) => /Your partner accepted/.test(el.textContent ?? ''))).toBe(true);
+    await user.click(screen.getByRole('button', { name: /dismiss/i }));
+    expect(dismissToastMock).toHaveBeenCalled();
+    toastFixture = null;
+  });
+
+  it('shows a PWA update prompt when a new version is waiting (task deliverable D)', async () => {
+    memberFixture = member();
+    needsRefreshFixture = true;
+    const user = userEvent.setup();
+    renderShell();
+    expect(screen.getByText(/new version is ready/i)).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: /reload/i }));
+    expect(reloadMock).toHaveBeenCalled();
+    needsRefreshFixture = false;
   });
 });

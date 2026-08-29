@@ -44,13 +44,17 @@ import { notificationEmail } from '../email/templates/notification.js';
  * enough that batching them into the next day's digest would be a bad
  * default.
  */
-const ALWAYS_IMMEDIATE_EMAIL_TYPES: readonly NotificationType[] = ['security', 'broadcast', 'on_behalf_action'];
+const ALWAYS_IMMEDIATE_EMAIL_TYPES: readonly NotificationType[] = [
+  'security',
+  'broadcast',
+  'on_behalf_action',
+];
 
 /* ----------------------------------- push ---------------------------------- */
 
 export interface PushSendInput {
   memberId: string;
-  tokens: string[];
+  devices: RegisteredDevice[];
   title: string;
   body: string;
   data: Record<string, string>;
@@ -71,18 +75,51 @@ const DEAD_TOKEN_CODES = new Set([
   'messaging/invalid-registration-token',
 ]);
 
-/** Real push delivery via the Admin SDK's FCM multicast send — used only when deployed. */
+/**
+ * Real push delivery via the Admin SDK's FCM multicast send — used only
+ * when deployed.
+ *
+ * Sends two separate multicasts, one per platform (Phase 7b task
+ * deliverable F): `platform: 'ios'` tokens get the usual `notification` +
+ * `data` payload (iOS needs the `notification` block to display anything
+ * while backgrounded). `platform: 'web'` tokens get a **data-only** message
+ * — `title`/`body` folded into `data`, no `notification` block — because
+ * some browsers auto-display a pure `notification`-payload web push using
+ * the worker's default click action instead of ever invoking
+ * `onBackgroundMessage`, bypassing this app's per-notification deep link
+ * (see `docs/web-push.md`). `sw.ts`'s `onBackgroundMessage` handler builds
+ * the notification itself from `data.title`/`data.body` in that case.
+ * `webpush.headers.Urgency: 'normal'` asks browser push services not to
+ * silently coalesce/drop it as low-priority, matching how important the
+ * `notification`-payload path was already treated.
+ */
 export class FcmPushProvider implements PushProvider {
-  async send({ tokens, title, body, data }: PushSendInput): Promise<PushSendResult> {
-    if (tokens.length === 0) return { invalidTokens: [] };
-    const message: MulticastMessage = { tokens, notification: { title, body }, data };
-    const response = await getMessaging().sendEachForMulticast(message);
+  async send({ devices, title, body, data }: PushSendInput): Promise<PushSendResult> {
+    if (devices.length === 0) return { invalidTokens: [] };
     const invalidTokens: string[] = [];
-    response.responses.forEach((r, i) => {
-      if (!r.success && r.error && DEAD_TOKEN_CODES.has(r.error.code)) {
-        invalidTokens.push(tokens[i]!);
-      }
+
+    async function sendGroup(
+      tokens: string[],
+      rest: Omit<MulticastMessage, 'tokens'>,
+    ): Promise<void> {
+      if (tokens.length === 0) return;
+      const response = await getMessaging().sendEachForMulticast({ tokens, ...rest });
+      response.responses.forEach((r, i) => {
+        if (!r.success && r.error && DEAD_TOKEN_CODES.has(r.error.code)) {
+          invalidTokens.push(tokens[i]!);
+        }
+      });
+    }
+
+    const iosTokens = devices.filter((d) => d.platform === 'ios').map((d) => d.token);
+    const webTokens = devices.filter((d) => d.platform === 'web').map((d) => d.token);
+
+    await sendGroup(iosTokens, { notification: { title, body }, data });
+    await sendGroup(webTokens, {
+      data: { ...data, title, body },
+      webpush: { headers: { Urgency: 'normal' } },
     });
+
     return { invalidTokens };
   }
 }
@@ -180,7 +217,10 @@ export interface DispatchDeps {
  * id (see module doc comment). No-ops silently if the notification or the
  * recipient's `memberPrivate` doc has since been deleted.
  */
-export async function dispatchNotification(notificationId: string, deps: DispatchDeps = {}): Promise<void> {
+export async function dispatchNotification(
+  notificationId: string,
+  deps: DispatchDeps = {},
+): Promise<void> {
   const ref = db.doc(paths.notification(notificationId));
   const snap = await ref.get();
   const notification = snap.data() as Notification | undefined;
@@ -193,7 +233,11 @@ export async function dispatchNotification(notificationId: string, deps: Dispatc
     return;
   }
 
-  const wanted = wantedChannels(notification.type, memberPrivate.notificationPrefs, memberPrivate.devices);
+  const wanted = wantedChannels(
+    notification.type,
+    memberPrivate.notificationPrefs,
+    memberPrivate.devices,
+  );
   const alreadySent = new Set(notification.channelsSent);
   const pending = wanted.filter((channel) => !alreadySent.has(channel));
   if (pending.length === 0) return;
@@ -206,17 +250,27 @@ export async function dispatchNotification(notificationId: string, deps: Dispatc
     }
     // Mark this channel done before moving to the next, so a crash partway
     // through never repeats a channel that already succeeded.
-    await ref.update({ channelsSent: FieldValue.arrayUnion(channel), updatedAt: new Date().toISOString() });
-    logger.info('notification_dispatched', { type: notification.type, channel, memberId: notification.memberId });
+    await ref.update({
+      channelsSent: FieldValue.arrayUnion(channel),
+      updatedAt: new Date().toISOString(),
+    });
+    logger.info('notification_dispatched', {
+      type: notification.type,
+      channel,
+      memberId: notification.memberId,
+    });
   }
 }
 
-async function sendPush(notification: Notification, memberPrivate: MemberPrivate, override?: PushProvider): Promise<void> {
+async function sendPush(
+  notification: Notification,
+  memberPrivate: MemberPrivate,
+  override?: PushProvider,
+): Promise<void> {
   const provider = selectPushProvider(override);
-  const tokens = memberPrivate.devices.map((d) => d.token);
   const result = await provider.send({
     memberId: notification.memberId,
-    tokens,
+    devices: memberPrivate.devices,
     title: notification.title,
     body: notification.body,
     data: notification.data,
@@ -234,7 +288,10 @@ async function sendPush(notification: Notification, memberPrivate: MemberPrivate
   }
 }
 
-async function sendEmailImmediate(notification: Notification, memberPrivate: MemberPrivate): Promise<void> {
+async function sendEmailImmediate(
+  notification: Notification,
+  memberPrivate: MemberPrivate,
+): Promise<void> {
   const content = notificationEmail(notification.title, notification.body);
   await getEmailProvider().send({
     to: memberPrivate.emailLower,

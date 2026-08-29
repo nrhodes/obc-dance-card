@@ -25,10 +25,16 @@
  * detect **token rotation**: FCM occasionally rotates a device's token, and
  * the old one must be unregistered so `memberPrivate.devices` doesn't
  * accumulate dead entries.
+ *
+ * The foreground-message toast used to be read off this hook too, but that
+ * meant it only fired while `<PushSettings />` (Profile) was mounted (see
+ * `docs/web-push.md`'s former "known limitation"). Phase 7b task deliverable
+ * F moved it to its own `usePushForeground()` hook, mounted once in
+ * `AppShell` so it works on every page — see `usePushForeground.ts`.
  */
 import { useEffect, useRef, useState } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
-import { deleteToken, getToken, onMessage } from 'firebase/messaging';
+import { deleteToken, getToken } from 'firebase/messaging';
 import { auth, getMessagingIfSupported, toAppError, type AppError } from '../firebase';
 import { registerDevice, unregisterDevice } from './api';
 import { browserDeviceLabel } from './deviceLabel';
@@ -48,7 +54,8 @@ const IOS_UA = /iPad|iPhone|iPod/;
  * `.env.example`, is expected).
  */
 function getTokenOptions(serviceWorkerRegistration: ServiceWorkerRegistration) {
-  const vapidKey = (import.meta.env as Record<string, string | undefined>).VITE_FIREBASE_VAPID_KEY || undefined;
+  const vapidKey =
+    (import.meta.env as Record<string, string | undefined>).VITE_FIREBASE_VAPID_KEY || undefined;
   return { serviceWorkerRegistration, ...(vapidKey ? { vapidKey } : {}) };
 }
 
@@ -59,9 +66,6 @@ export interface UsePushResult {
   /** True when the UA looks like iOS/iPadOS — drives the Home Screen install hint under `unsupported`. */
   isIos: boolean;
   error: AppError | null;
-  /** Latest foreground push body, for an in-app toast; `null` once dismissed. */
-  toast: string | null;
-  dismissToast: () => void;
   enable: () => Promise<void>;
   disable: () => Promise<void>;
 }
@@ -70,7 +74,6 @@ export function usePush(): UsePushResult {
   const [state, setState] = useState<PushState>('prompt');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<AppError | null>(null);
-  const [toast, setToast] = useState<string | null>(null);
   const mounted = useRef(true);
 
   useEffect(() => {
@@ -112,7 +115,11 @@ export function usePush(): UsePushResult {
         const registration = await navigator.serviceWorker.ready;
         const token = await getToken(messaging, getTokenOptions(registration));
         if (token && token !== storedToken) {
-          await registerDevice({ token, platform: 'web', label: browserDeviceLabel(navigator.userAgent) });
+          await registerDevice({
+            token,
+            platform: 'web',
+            label: browserDeviceLabel(navigator.userAgent),
+          });
           await unregisterDevice({ token: storedToken }).catch(() => undefined);
           localStorage.setItem(PUSH_TOKEN_STORAGE_KEY, token);
         }
@@ -123,21 +130,6 @@ export function usePush(): UsePushResult {
         if (mounted.current) setState('enabled');
       }
     })();
-  }, []);
-
-  // Foreground messages: an in-app toast only, never an OS notification
-  // while the tab is open (task brief B).
-  useEffect(() => {
-    let unsubscribe: (() => void) | undefined;
-    void (async () => {
-      const messaging = await getMessagingIfSupported();
-      if (!messaging || !mounted.current) return;
-      unsubscribe = onMessage(messaging, (payload) => {
-        const body = payload.notification?.body ?? payload.notification?.title;
-        if (body) setToast(body);
-      });
-    })();
-    return () => unsubscribe?.();
   }, []);
 
   // Sign-out: never delete the server-side registration (the server prunes
@@ -173,7 +165,11 @@ export function usePush(): UsePushResult {
         return;
       }
       const oldToken = localStorage.getItem(PUSH_TOKEN_STORAGE_KEY);
-      await registerDevice({ token, platform: 'web', label: browserDeviceLabel(navigator.userAgent) });
+      await registerDevice({
+        token,
+        platform: 'web',
+        label: browserDeviceLabel(navigator.userAgent),
+      });
       if (oldToken && oldToken !== token) {
         await unregisterDevice({ token: oldToken }).catch(() => undefined);
       }
@@ -201,7 +197,9 @@ export function usePush(): UsePushResult {
       }
       localStorage.removeItem(PUSH_TOKEN_STORAGE_KEY);
       setState(
-        typeof Notification !== 'undefined' && Notification.permission === 'denied' ? 'denied' : 'prompt',
+        typeof Notification !== 'undefined' && Notification.permission === 'denied'
+          ? 'denied'
+          : 'prompt',
       );
     } catch (err) {
       setState('error');
@@ -211,9 +209,5 @@ export function usePush(): UsePushResult {
     }
   }
 
-  function dismissToast(): void {
-    setToast(null);
-  }
-
-  return { state, busy, isIos: IOS_UA.test(navigator.userAgent), error, toast, dismissToast, enable, disable };
+  return { state, busy, isIos: IOS_UA.test(navigator.userAgent), error, enable, disable };
 }

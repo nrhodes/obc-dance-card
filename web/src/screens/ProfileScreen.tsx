@@ -56,6 +56,10 @@ export function ProfileScreen() {
           Sign out
         </button>
       </div>
+
+      <p className="muted">
+        <Link to="/help">Getting started / Help</Link> · <Link to="/privacy">Privacy</Link>
+      </p>
     </div>
   );
 }
@@ -105,7 +109,12 @@ function ContactForm({ initialPhone }: { initialPhone: string }) {
           }}
         />
       </div>
-      <button type="button" className="button button-secondary" disabled={saving} onClick={() => void handleSave()}>
+      <button
+        type="button"
+        className="button button-secondary"
+        disabled={saving}
+        onClick={() => void handleSave()}
+      >
         {saving ? 'Saving…' : 'Save phone number'}
       </button>
     </div>

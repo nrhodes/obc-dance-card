@@ -15,21 +15,12 @@ import { usePush } from './usePush';
 
 export function PushSettings() {
   const { memberPrivate } = useAuth();
-  const { state, busy, isIos, error, toast, dismissToast, enable, disable } = usePush();
+  const { state, busy, isIos, error, enable, disable } = usePush();
   const prefsAllowPush = memberPrivate?.notificationPrefs.push ?? true;
 
   return (
     <div>
       <h2>Push notifications on this device</h2>
-
-      {toast && (
-        <div className="alert alert-info" role="status">
-          {toast}{' '}
-          <button type="button" className="button button-secondary" onClick={dismissToast}>
-            Dismiss
-          </button>
-        </div>
-      )}
 
       {state === 'unsupported' && (
         <p className="muted">
@@ -41,15 +32,15 @@ export function PushSettings() {
 
       {state === 'denied' && (
         <p className="muted">
-          Notifications are blocked for this site in your browser. Allow them in your browser&apos;s site
-          settings, then reload this page.
+          Notifications are blocked for this site in your browser. Allow them in your browser&apos;s
+          site settings, then reload this page.
         </p>
       )}
 
       {(state === 'prompt' || state === 'enabled' || state === 'error') && !prefsAllowPush && (
         <p className="muted">
-          Push notifications are turned off in your preferences above. Turn &quot;Push notifications&quot; on
-          there first.
+          Push notifications are turned off in your preferences above. Turn &quot;Push
+          notifications&quot; on there first.
         </p>
       )}
 
@@ -72,7 +63,12 @@ export function PushSettings() {
       {state === 'enabled' && (
         <>
           <p>Notifications are on for this device.</p>
-          <button type="button" className="button button-secondary" disabled={busy} onClick={() => void disable()}>
+          <button
+            type="button"
+            className="button button-secondary"
+            disabled={busy}
+            onClick={() => void disable()}
+          >
             Turn off on this device
           </button>
         </>

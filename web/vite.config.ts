@@ -29,8 +29,15 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      registerType: 'autoUpdate',
-      injectRegister: 'auto',
+      // 'prompt' + injectRegister: false (Phase 7b task deliverable D): a
+      // member mid-invite should never have the page swapped out from under
+      // them by a silent auto-update. `src/pwa/usePwaUpdate.ts` calls
+      // `registerSW` itself and shows "A new version is ready — Reload" from
+      // `AppShell` when `onNeedRefresh` fires, instead of the plugin's
+      // default injected script auto-registering with no user-visible
+      // control over *when* the new version takes over.
+      registerType: 'prompt',
+      injectRegister: false,
       strategies: 'injectManifest',
       srcDir: 'src/push',
       filename: 'sw.ts',

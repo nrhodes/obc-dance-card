@@ -121,7 +121,18 @@ only ever invoked from the "Turn on notifications on this device" button.
   add this site to your Home Screen (Share → Add to Home Screen) to receive
   notifications."
 
-### A known limitation: the toast only fires while Profile is open
+### Resolved in Phase 7b: the toast now fires app-wide
+
+The limitation described below (kept for history) is fixed. The
+foreground-message listener moved out of `usePush`/`PushSettings` into its
+own `usePushForeground()` hook (`src/push/usePushForeground.ts`), mounted
+once from `AppShell` — so the in-app toast now shows on whichever screen the
+member happens to be on, not just Profile. `usePush` itself no longer knows
+anything about the toast; it's purely the enable/disable/registration state
+machine now.
+
+<details>
+<summary>Original note (Phase 5b)</summary>
 
 `usePush`'s foreground-message listener is only mounted while
 `<PushSettings />` is — i.e. only while the member is on the Profile screen.
@@ -133,6 +144,8 @@ with a one-line change" — so this is the honest trade-off of that scope, not
 an oversight. A background push (the actual point of this feature) is
 unaffected either way — `onBackgroundMessage` in `sw.ts` fires regardless of
 which screen, or whether the app, is open.
+
+</details>
 
 ## VAPID key setup
 
@@ -190,9 +203,11 @@ event against it directly without needing a second device.
 
 ## CSP
 
-Not this phase's file to edit (`firebase/firebase.json`'s `hosting.headers`
-is owned elsewhere) — this is the analysis, for the orchestrator to apply if
-they agree.
+Resolved in Phase 7b: `firebase/firebase.json`'s CSP now includes the
+`worker-src 'self'` clause this section recommended (plus `manifest-src
+'self'`, for the web app manifest). Covered by
+`web/src/lib/csp.test.ts`. The rest of this section is kept for the
+original analysis of why it was optional in the first place.
 
 **Verdict: no change is required.** Web push needs two things from CSP:
 
@@ -228,15 +243,17 @@ inserted `worker-src 'self';` clause.)
 
 ## Follow-ups noted but not implemented (out of this phase's scope)
 
-- `dispatchNotification`'s push payload (`dispatch.ts`) sends both a
-  `notification` and a `data` block. Some browsers auto-display a pure
-  `notification`-payload web push without ever invoking
-  `onBackgroundMessage` at all, using the worker's *default* click action
-  (just opening the app) rather than our per-notification deep link. A
-  fully robust fix would have the server send a **data-only** message
-  (fold `title`/`body` into `data` and have `sw.ts` build the notification
-  itself in all cases) — that's a `firebase/functions` change, outside this
-  phase's file ownership.
+- ~~`dispatchNotification`'s push payload (`dispatch.ts`) sends both a
+  `notification` and a `data` block...~~ **Resolved in Phase 7b.**
+  `FcmPushProvider` (`dispatch.ts`) now sends two separate multicasts:
+  `platform: 'ios'` tokens keep `notification` + `data` (iOS needs the
+  `notification` block while backgrounded); `platform: 'web'` tokens get a
+  data-only message (`title`/`body` folded into `data`,
+  `webpush.headers.Urgency: 'normal'`), and `sw.ts`'s
+  `onBackgroundMessage` builds the notification itself from
+  `data.title`/`data.body`. Covered by `dispatch.test.ts` (the
+  `FcmPushProvider` split, mocked FCM) — `dispatch.emu.test.ts` can't
+  exercise this itself, since the emulator always uses `NoopPushProvider`.
 - No app icon is configured yet (`manifest.icons: []`,
   `web/vite.config.ts`) — `showNotification` in `sw.ts` therefore doesn't
   pass an `icon`, so notifications use the browser's generic icon. Once

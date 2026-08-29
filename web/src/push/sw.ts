@@ -28,7 +28,11 @@
  * below via a single boundary cast, instead of augmenting `self`'s global
  * type. Everything past that boundary is fully typed.
  */
-import { precacheAndRoute, cleanupOutdatedCaches, createHandlerBoundToURL } from 'workbox-precaching';
+import {
+  precacheAndRoute,
+  cleanupOutdatedCaches,
+  createHandlerBoundToURL,
+} from 'workbox-precaching';
 import { registerRoute, NavigationRoute } from 'workbox-routing';
 import { initializeApp } from 'firebase/app';
 import { getMessaging, onBackgroundMessage } from 'firebase/messaging/sw';
@@ -51,7 +55,10 @@ interface WorkerScope {
     matchAll(options: { type: 'window'; includeUncontrolled: boolean }): Promise<WorkerClient[]>;
     openWindow(url: string): Promise<WorkerClient | null>;
   };
-  addEventListener(type: 'notificationclick', listener: (event: NotificationClickEvent) => void): void;
+  addEventListener(
+    type: 'notificationclick',
+    listener: (event: NotificationClickEvent) => void,
+  ): void;
 }
 
 interface NotificationClickEvent {
@@ -71,7 +78,9 @@ const worker = self as unknown as WorkerScope;
 // `self.__WB_MANIFEST` in the built output (its `injectionPoint` default) —
 // so this one call must spell it out as `self.__WB_MANIFEST`, not go
 // through the `worker` alias above.
-precacheAndRoute((self as unknown as WorkerScope).__WB_MANIFEST as Parameters<typeof precacheAndRoute>[0]);
+precacheAndRoute(
+  (self as unknown as WorkerScope).__WB_MANIFEST as Parameters<typeof precacheAndRoute>[0],
+);
 cleanupOutdatedCaches();
 
 // SPA fallback for a same-origin navigation that isn't itself precached
@@ -83,7 +92,9 @@ cleanupOutdatedCaches();
 // keep Firebase Hosting's own reserved `/__/...` paths (auth helpers, the
 // dynamic `/__/firebase/init.json`, etc.) working normally rather than
 // being swallowed into the cached app shell.
-registerRoute(new NavigationRoute(createHandlerBoundToURL('index.html'), { denylist: [/^\/__\//] }));
+registerRoute(
+  new NavigationRoute(createHandlerBoundToURL('index.html'), { denylist: [/^\/__\//] }),
+);
 
 /* --------------------------------- FCM background ------------------------------- */
 
@@ -94,7 +105,8 @@ registerRoute(new NavigationRoute(createHandlerBoundToURL('index.html'), { denyl
 // time instead (vite-plugin-pwa's `injectManifest` build runs `sw.ts`
 // through a real Vite build using the same config/env, not a bare esbuild
 // pass — see docs/web-push.md).
-const senderId = (import.meta.env as Record<string, string | undefined>).VITE_FIREBASE_MESSAGING_SENDER_ID;
+const senderId = (import.meta.env as Record<string, string | undefined>)
+  .VITE_FIREBASE_MESSAGING_SENDER_ID;
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
@@ -108,10 +120,18 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const messaging = getMessaging(app);
 
+// Phase 7b task deliverable F: `dispatch.ts` now sends `platform: 'web'`
+// tokens a **data-only** message (no `notification` block) so this handler
+// always fires and builds the notification itself — some browsers
+// auto-display a pure `notification`-payload push using the worker's
+// default click action, bypassing this app's per-notification deep link
+// (see `docs/web-push.md`). `title`/`body` therefore come from `data` in
+// the normal case; `payload.notification` is checked first only so an
+// old/mixed payload (e.g. during a rolling deploy) still degrades gracefully.
 onBackgroundMessage(messaging, (payload) => {
-  const title = payload.notification?.title ?? 'Orewa Bridge Club';
-  const body = payload.notification?.body ?? '';
-  const data = (payload.data ?? {}) as DeepLinkData;
+  const data = (payload.data ?? {}) as DeepLinkData & { title?: string; body?: string };
+  const title = payload.notification?.title ?? data.title ?? 'Orewa Bridge Club';
+  const body = payload.notification?.body ?? data.body ?? '';
   void worker.registration.showNotification(title, { body, data });
 });
 

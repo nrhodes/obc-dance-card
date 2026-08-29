@@ -8,6 +8,7 @@
  * copy always says "type this code", never "click".
  */
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { signInWithCustomToken, signInWithEmailAndPassword } from 'firebase/auth';
 import { auth, toAppError } from '../firebase';
 import { EmailCodeStep } from '../auth/EmailCodeStep';
@@ -58,6 +59,9 @@ export function SignInScreen() {
           onVerified={handleVerified}
           onUseDifferentEmail={() => setStep('chooser')}
         />
+        <p className="muted">
+          <Link to="/privacy">Privacy</Link>
+        </p>
       </div>
     );
   }
@@ -124,6 +128,9 @@ export function SignInScreen() {
           </button>
         </div>
       )}
+      <p className="muted">
+        <Link to="/privacy">Privacy</Link>
+      </p>
     </div>
   );
 }
