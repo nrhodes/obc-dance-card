@@ -14,35 +14,19 @@
  * and refuses to run against anything but a `demo-*` project id.
  */
 
-function getProjectId(): string | undefined {
-  const argIdx = process.argv.findIndex((a) => a === '--project');
-  if (argIdx >= 0 && process.argv[argIdx + 1]) return process.argv[argIdx + 1];
-  return process.env.GCLOUD_PROJECT ?? process.env.FIREBASE_PROJECT ?? process.env.GCP_PROJECT;
-}
+// A static import, not a dynamic one like the Admin-SDK-touching modules
+// below: `seedGuard.ts` has zero imports of its own and does no I/O, so
+// importing it here does not risk initialising anything before the guard has
+// had a chance to run (and it's what `seedGuard.test.ts` exercises directly).
+import { checkEmulatorSafe } from '../functions/src/lib/seedGuard.js';
 
 function assertEmulatorSafe(): string {
-  const firestoreHost = process.env.FIRESTORE_EMULATOR_HOST;
-  const authHost = process.env.FIREBASE_AUTH_EMULATOR_HOST;
-
-  if (!firestoreHost || !authHost) {
-    console.error(
-      'Refusing to seed: FIRESTORE_EMULATOR_HOST and FIREBASE_AUTH_EMULATOR_HOST must both be set.\n' +
-        'Start the emulators first (npm run emulators), which sets these for anything run via\n' +
-        '`firebase emulators:exec`, or export them yourself if the emulators are already running.',
-    );
+  try {
+    return checkEmulatorSafe(process.env, process.argv);
+  } catch (err) {
+    console.error(err instanceof Error ? err.message : String(err));
     process.exit(1);
   }
-
-  const projectId = getProjectId();
-  if (!projectId || !projectId.startsWith('demo-')) {
-    console.error(
-      `Refusing to seed: project id must start with "demo-" (got ${projectId ?? '(none)'}). ` +
-        'Pass --project demo-obc or set GCLOUD_PROJECT.',
-    );
-    process.exit(1);
-  }
-
-  return projectId;
 }
 
 interface SeedMemberSpec {

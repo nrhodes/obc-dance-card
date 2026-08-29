@@ -35,7 +35,13 @@ firebase-export-*/
 .env.local
 .env.*.local
 serviceAccountKey*.json
+*-firebase-adminsdk-*.json
+*service-account*.json
 .firebaserc.local
+
+# The real project ids live only in the (gitignored) copy of this file;
+# `.firebaserc.example` (committed, placeholder projects) is unaffected.
+firebase/.firebaserc
 
 # Editor / OS
 .DS_Store

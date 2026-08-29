@@ -46,7 +46,10 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  rules-test:
+  emulator-tests:
+    # Combines the Firestore rules suite and the functions-against-emulator
+    # suite in one job: both need the same Java + Firestore/Auth emulator
+    # setup, so running them separately just pays that setup cost twice.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -62,6 +65,14 @@ jobs:
           distribution: temurin
           java-version: 21
 
+      - name: Cache Firebase emulator binaries
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/firebase/emulators
+          key: firebase-emulators-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            firebase-emulators-${{ runner.os }}-
+
       - name: Install
         run: npm ci
 
@@ -70,6 +81,9 @@ jobs:
 
       - name: Firestore rules tests
         run: npm run test:rules -w @obc/functions
+
+      - name: Functions emulator tests
+        run: npm run test:emu -w @obc/functions
 
   e2e-test:
     # Verified working locally (Phase 1b): emulators + seed + `npm run dev -w

@@ -20,7 +20,11 @@
     "typecheck": "npm run build -w @obc/shared && npm run typecheck --workspaces --if-present",
     "emulators": "firebase --project demo-obc --config firebase/firebase.json emulators:start",
     "seed": "npm run seed -w @obc/functions",
-    "format": "prettier --write \"**/*.{ts,tsx,js,json,md}\""
+    "format": "prettier --write \"**/*.{ts,tsx,js,json,md}\"",
+    "deploy:rules": "firebase --config firebase/firebase.json --project \"${FIREBASE_PROJECT:-default}\" deploy --only firestore:rules,firestore:indexes",
+    "deploy:functions": "firebase --config firebase/firebase.json --project \"${FIREBASE_PROJECT:-default}\" deploy --only functions",
+    "deploy:hosting": "firebase --config firebase/firebase.json --project \"${FIREBASE_PROJECT:-default}\" deploy --only hosting",
+    "deploy": "npm run deploy:rules && npm run deploy:functions && npm run deploy:hosting"
   },
   "devDependencies": {
     "eslint": "^9.17.0",

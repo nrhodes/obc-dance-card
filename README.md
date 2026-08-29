@@ -13,10 +13,10 @@ low-friction.
 | Path | Purpose |
 |---|---|
 | `shared/` | TypeScript types, zod schemas, pairing/time helpers, and CSV import templates — the single source of truth for the data model and callable contracts. Consumed by `web` and `firebase/functions`; the iOS app mirrors these as `Codable` structs. |
-| `firebase/` | `firebase.json`, Firestore rules + indexes, emulator config, Cloud Functions (`functions/`, Node 22, gen2), seed scripts (`seed/`). |
+| `firebase/` | `firebase.json`, Firestore rules + indexes, emulator config, Cloud Functions (`functions/`, Node 22, gen2), seed scripts (`seed/`), one-off ops scripts requiring a service account (`scripts/`: `make-admin.ts`, `check-auth-config.ts`). |
 | `web/` | React + Vite + TypeScript PWA. Also the Android / desktop experience. |
 | `ios/` | Native SwiftUI app (added in Phase 2). |
-| `docs/` | Data model, CSV formats, ops runbook, manual test script. |
+| `docs/` | Data model, CSV formats, ops runbook, security checklist, manual test script. |
 
 ## Scope
 
@@ -83,6 +83,22 @@ export GCLOUD_PROJECT=demo-obc
 
 See [`web/README.md`](web/README.md) for the web app's own dev/test/E2E
 instructions.
+
+## Deploying
+
+```sh
+FIREBASE_PROJECT=default npm run deploy:rules      # firestore:rules,firestore:indexes
+FIREBASE_PROJECT=default npm run deploy:functions
+FIREBASE_PROJECT=default npm run deploy:hosting    # builds @obc/shared then web first
+FIREBASE_PROJECT=default npm run deploy             # all three, in that order
+```
+
+`FIREBASE_PROJECT` selects the `.firebaserc` alias (`default` →
+`obc-dance-card`, `dev` → `obc-dance-card-dev`; see
+`firebase/.firebaserc.example`) and defaults to `default` if unset. See
+`docs/ops-runbook.md` for the full first-time-setup sequence (App Check,
+email provider, first admin) and `docs/security-checklist.md` for what must
+be verified before a real deploy goes live.
 
 ## Cost
 

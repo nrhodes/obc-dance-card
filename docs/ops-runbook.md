@@ -13,18 +13,48 @@ project ids. Copy `firebase/functions/.env.example` to `.env` for local runs.
 
 ## First-time setup (prod)
 
-1. Create the Firebase project; upgrade to **Blaze**; set a **budget alert**.
-2. Enable **Authentication** → Email/Password provider.
+1. Create the Firebase project; upgrade to **Blaze**; set a **budget alert**
+   (see "Backups and disaster recovery" below for the exact `gcloud` command).
+2. Enable **Authentication** → Email/Password provider. In **Authentication →
+   Settings**: turn on "Email enumeration protection" and set a password
+   policy (min length 8, require ≥1 letter + ≥1 number) — see
+   `docs/security-checklist.md` items 2–3 for the exact click-path and a
+   script (`check-auth-config.ts`) that verifies both are on.
 3. Enable **Identity Platform** (required for the sign-in blocking function).
-4. `firebase deploy --only firestore:rules,firestore:indexes,functions`
-5. Configure email: set `EMAIL_PROVIDER` + credentials as Firebase Secrets
+4. Set `ENFORCE_APP_CHECK=true` in `firebase/functions/.env.<projectId>`
+   (e.g. `.env.obc-dance-card`) — **not** in the shared `.env`/`.env.example`
+   — and configure App Check providers (reCAPTCHA Enterprise for web, App
+   Attest for iOS) and Firestore enforcement in the **App Check** console tab
+   before the first production deploy.
+5. `npm run deploy:rules` / `npm run deploy:functions` / `npm run
+   deploy:hosting` (or `npm run deploy` for all three, in that order) from the
+   repo root, with `FIREBASE_PROJECT=<alias>` set to the `.firebaserc` alias
+   for this project (`default` for `obc-dance-card`, `dev` for
+   `obc-dance-card-dev`). These wrap `firebase --config firebase/firebase.json
+   --project <alias> deploy --only ...`; hosting's `predeploy` hook builds
+   `@obc/shared` then `web` automatically.
+6. Configure email: set `EMAIL_PROVIDER` + credentials as Firebase Secrets
    (`firebase functions:secrets:set ...`). For the zero-cost option, install the
    **Trigger Email from Firestore** extension pointed at the club's Google
    Workspace SMTP.
-6. Import members (`importMembers` callable via the admin UI) — this also
-   provisions the first admin: set one member's `role` to `admin` directly in the
-   console, then manage the rest in-app.
-7. Import the programme CSVs (`importProgramme`), review, `publishProgramme`.
+7. Import members (`importMembers` callable via the admin UI). This creates
+   every member as a plain `member` — there is no admin yet to call
+   `setMemberRole`. Bootstrap the first admin with a service account instead
+   of a manual console edit, so it is repeatable and auditable
+   (plan §19; writes a `role_changed` audit-log row with
+   `actorMemberId: 'bootstrap-script'`):
+
+   ```sh
+   GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json \
+     npx tsx firebase/scripts/make-admin.ts --email admin@orewabridgeclub.org.nz --project obc-dance-card
+   ```
+
+   The script refuses to run against a `demo-*` project (unless `--allow-demo`
+   is passed — only useful for smoke-testing the script itself against the
+   emulator) and is idempotent: re-running it against an existing admin
+   reports "already an admin" and makes no change. Manage every admin after
+   the first one in-app via `setMemberRole`.
+8. Import the programme CSVs (`importProgramme`), review, `publishProgramme`.
 
 ## Local development
 
@@ -49,7 +79,15 @@ or the distro package).
 
 ## Common tasks
 
-- **Add/adjust an admin:** `setMemberRole` callable (admin-only) or the console.
+- **Add/adjust an admin:** `setMemberRole` callable (admin-only), used from the
+  admin UI once at least one admin exists. For the very first admin on a new
+  project (no admin exists yet to call it), use
+  `firebase/scripts/make-admin.ts` — see step 7 above. Never set `role`
+  directly in the Firestore console: rules deny all client writes to
+  `members` regardless of who is signed in, so a console edit would only be
+  possible via the project owner's Firestore *admin* access (bypassing rules
+  entirely) and would skip the refresh-token revocation and audit-log entry
+  the callable/script both do.
 - **A member changed email:** update the row and re-run `importMembers`; the old
   address stops working, the new one starts. Their card is keyed on uid, so it
   survives if the uid is unchanged — for an email change, the member re-links on
@@ -140,3 +178,86 @@ once retention needs are clearly past:
   entries from the run's time window before assuming everything is fine —
   the sweep never blocks or crashes on a shape it doesn't recognise, it just
   leaves it in the report for a human to look at.
+
+## Backups and disaster recovery
+
+Plan §8.1 "Backups" / §18 checklist items 11–12. All commands below need the
+`gcloud` CLI authenticated against the target project
+(`gcloud config set project <projectId>`, or pass `--project` explicitly).
+
+### Daily backups (30-day retention)
+
+```sh
+gcloud firestore backups schedules create \
+  --database='(default)' \
+  --recurrence=daily \
+  --retention=30d \
+  --project=obc-dance-card
+```
+
+Repeat for `obc-dance-card-dev` if the dev project holds anything worth
+protecting. List existing schedules with:
+
+```sh
+gcloud firestore backups schedules list --database='(default)' --project=obc-dance-card
+```
+
+Point-in-time recovery (PITR) is a separate, complementary setting — it lets
+you restore to any point in the last 1–7 days rather than only to a daily
+snapshot. Enable it once per database if the extra cost (storage for the
+change log) is acceptable at club scale:
+
+```sh
+gcloud firestore databases update --database='(default)' \
+  --point-in-time-recovery --project=obc-dance-card
+```
+
+### Restore rehearsal (do this once, in the dev project, before pilot)
+
+Restoring **always creates a new database** — it never overwrites the
+source — so this is safe to rehearse without touching live data:
+
+```sh
+# 1. List available backups for the dev project.
+gcloud firestore backups list --project=obc-dance-card-dev
+
+# 2. Restore the most recent one into a fresh database in the same project.
+gcloud firestore databases restore \
+  --source-backup=<BACKUP_NAME_FROM_STEP_1> \
+  --destination-database='restore-rehearsal' \
+  --project=obc-dance-card-dev
+
+# 3. Point a local emulator-free sanity check at it (Firebase console →
+#    Firestore → switch database selector to "restore-rehearsal") and spot
+#    check a few `members`/`entries` docs look right.
+
+# 4. Clean up — restores are billed like any other database.
+gcloud firestore databases delete --database='restore-rehearsal' \
+  --project=obc-dance-card-dev
+```
+
+Record the date of the last rehearsal in this file (or a note in the team's
+tracker) so "restore rehearsed once in the dev project" (checklist item 11)
+has a timestamp, not just a checkbox.
+
+### Budget alert
+
+```sh
+# Find the billing account linked to the project first:
+gcloud billing projects describe obc-dance-card --format='value(billingAccountName)'
+
+gcloud billing budgets create \
+  --billing-account=<BILLING_ACCOUNT_ID> \
+  --display-name="OBC Dance Card — NZ$5 alert" \
+  --budget-amount=5NZD \
+  --threshold-rule=percent=0.5 \
+  --threshold-rule=percent=1.0 \
+  --threshold-rule=percent=1.5 \
+  --filter-projects=projects/obc-dance-card
+```
+
+This is the console-equivalent of **Billing → Budgets & alerts → Create
+budget**, scoped to the one project, alerting at 50/100/150% of NZ$5/month —
+comfortably below what club-scale usage should ever reach (see "Cost watch"
+above), so any alert firing is a signal something is actually wrong (a
+runaway function, a misconfigured `maxInstances`, etc.), not routine.
