@@ -51,5 +51,9 @@ export const paths = {
   notification: (notificationId: Id) => `notifications/${notificationId}`,
 
   auditLog: () => 'auditLog',
+  auditLogEntry: (id: Id) => `auditLog/${id}`,
   emailCodes: () => 'emailCodes',
+
+  integrity: () => 'integrity',
+  integrityRun: (id: Id) => `integrity/${id}`,
 } as const;

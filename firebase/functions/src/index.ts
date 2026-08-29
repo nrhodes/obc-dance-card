@@ -56,11 +56,12 @@ export {
 export { onNotificationCreated } from './notifications/dispatch.js';
 export { sendSessionReminders, sendDailyDigest, purgeExpired } from './notifications/scheduled.js';
 
-/*
- * Phase 6 — admin extras + integrity
- * export { broadcast, setMemberRole, deactivateMember, reactivateMember, eraseMember } from './admin/misc.js';
- * export { updateSeries, updateSession } from './admin/programme.js';
- * export { listAuditLog } from './admin/audit.js';
- * export { verifyPairingConsistency, purgeExpired } from './integrity/verifyPairings.js';
- * export { runPairingSweep } from './integrity/sweep.js';
- */
+// Phase 6 — admin extras + integrity
+export { setMemberRole, deactivateMember, reactivateMember, eraseMember } from './admin/members.js';
+export { updateSeries, updateSession } from './admin/programmeEdit.js';
+export { broadcast, listAuditLog } from './admin/misc.js';
+// The deployed callable name is `runPairingSweep` (plan §9.2's canonical
+// name); `sweep.ts` names its `onCall` wrapper `runPairingSweepCallable` to
+// avoid colliding with the plain, directly-testable `runPairingSweep`
+// function it also exports (see that file's module doc comment).
+export { verifyPairingConsistency, runPairingSweepCallable as runPairingSweep } from './integrity/sweep.js';

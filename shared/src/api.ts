@@ -10,7 +10,7 @@
 
 import type { MemberImportReport, ProgrammeImportReport } from './csv.js';
 import type { Weekday } from './enums.js';
-import type { Entry, Invite, Member, Notification, Team, Visitor } from './models.js';
+import type { AuditLogEntry, Entry, IntegrityViolation, Invite, Member, Notification, Series, Session, Team, Visitor } from './models.js';
 import type { Id, IsoDate } from './primitives.js';
 
 export type {
@@ -33,6 +33,7 @@ export type {
   ImportProgrammeInput,
   InviteToTeamInput,
   LeaveTeamInput,
+  ListAuditLogInput,
   MarkNotificationsReadInput,
   MarkPasswordSetInput,
   PingInput,
@@ -55,7 +56,9 @@ export type {
   UpdateMyContactInput,
   UpdateMyPrefsInput,
   UpdateSeriesInput,
+  UpdateSeriesPatch,
   UpdateSessionInput,
+  UpdateSessionPatch,
   UpdateVisitorInput,
   VerifyLoginCodeInput,
 } from './schemas.js';
@@ -193,6 +196,52 @@ export interface PublishProgrammeResult {
 
 export interface BroadcastResult {
   recipients: number;
+}
+
+export interface ListAuditLogResult {
+  entries: AuditLogEntry[];
+  /** Pass as `before` to fetch the next page; absent when this is the last page. */
+  nextBefore?: string;
+}
+
+/* --------------------------- admin: members --------------------------- */
+
+export interface SetMemberRoleResult {
+  member: Member;
+}
+
+export interface DeactivateMemberResult {
+  member: Member;
+  cancelledEntries: number;
+  expiredInvites: number;
+}
+
+export interface ReactivateMemberResult {
+  member: Member;
+}
+
+export interface EraseMemberResult {
+  ok: true;
+}
+
+/* --------------------------- admin: programme edits --------------------------- */
+
+export interface UpdateSeriesResult {
+  series: Series;
+}
+
+export interface UpdateSessionResult {
+  session: Session | null;
+  removed: boolean;
+}
+
+/* --------------------------- integrity --------------------------- */
+
+export interface RunPairingSweepResult {
+  checkedSessions: number;
+  checkedTeams: number;
+  violations: IntegrityViolation[];
+  repaired: number;
 }
 
 /* --------------------------- read helpers --------------------------- */

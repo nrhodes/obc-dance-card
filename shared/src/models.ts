@@ -48,6 +48,10 @@ export interface Member extends Timestamps {
   active: boolean;
   /** Set when this member was created/updated by a CSV import. */
   lastImportId?: Id;
+  /** Set by `deactivateMember`; `eraseMember`'s 30-day wait is measured from here. */
+  deactivatedAt?: IsoDateTime;
+  /** Set by `eraseMember`, once PII has been scrubbed (§8.1 "Privacy law"). */
+  erasedAt?: IsoDateTime;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -389,4 +393,25 @@ export interface ImportRecord {
   startedAt: IsoDateTime;
   finishedAt?: IsoDateTime;
   report?: unknown;
+}
+
+/* -------------------------------------------------------------------------- */
+/* integrity/{runId} — server-only, written by the nightly sweep / admin      */
+/* -------------------------------------------------------------------------- */
+
+export interface IntegrityViolation {
+  kind: 'pairing' | 'team';
+  /** `pairingId` (pairing violations) or `teamId` (team violations). */
+  id: Id;
+  issues: string[];
+}
+
+export interface IntegrityRun {
+  id: Id;
+  at: IsoDateTime;
+  repair: boolean;
+  checkedSessions: number;
+  checkedTeams: number;
+  violations: IntegrityViolation[];
+  repaired: number;
 }

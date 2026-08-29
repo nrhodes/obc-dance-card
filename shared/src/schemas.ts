@@ -7,7 +7,7 @@
  */
 
 import { z } from 'zod';
-import { MEMBER_ROLES, WEEKDAYS } from './enums.js';
+import { AUDIT_ACTIONS, MEMBER_ROLES, SCORING_TYPES, SERIES_FORMATS, SESSION_KINDS, WEEKDAYS } from './enums.js';
 
 /* ------------------------------- primitives ------------------------------ */
 
@@ -94,7 +94,10 @@ export const SetMemberRoleInputSchema = z.object({
 });
 export type SetMemberRoleInput = z.infer<typeof SetMemberRoleInputSchema>;
 
-export const DeactivateMemberInputSchema = z.object({ memberId: id });
+export const DeactivateMemberInputSchema = z.object({
+  memberId: id,
+  reason: z.string().trim().max(500).optional(),
+});
 export type DeactivateMemberInput = z.infer<typeof DeactivateMemberInputSchema>;
 
 export const ReactivateMemberInputSchema = z.object({ memberId: id });
@@ -123,11 +126,16 @@ export type ImportProgrammeInput = z.infer<typeof ImportProgrammeInputSchema>;
 export const PublishProgrammeInputSchema = z.object({ year: z.number().int().min(2000).max(2100) });
 export type PublishProgrammeInput = z.infer<typeof PublishProgrammeInputSchema>;
 
-export const UpdateSeriesInputSchema = z
+const bestOfPatch = z
+  .object({ n: z.number().int().min(1).max(50), m: z.number().int().min(1).max(50) })
+  .nullable();
+
+export const UpdateSeriesPatchSchema = z
   .object({
-    year: z.number().int().min(2000).max(2100),
-    seriesId: id,
     name: z.string().trim().min(1).max(200).optional(),
+    scoring: z.enum(SCORING_TYPES).optional(),
+    format: z.enum(SERIES_FORMATS).optional(),
+    bestOf: bestOfPatch.optional(),
     allowSubstitute: z.boolean().optional(),
     eligibilityNote: z.string().trim().max(500).optional(),
     generalNote: z.string().trim().max(500).optional(),
@@ -135,16 +143,34 @@ export const UpdateSeriesInputSchema = z
     teamMax: z.number().int().min(1).max(20).optional(),
   })
   .strict();
+export type UpdateSeriesPatch = z.infer<typeof UpdateSeriesPatchSchema>;
+
+export const UpdateSeriesInputSchema = z
+  .object({
+    year: z.number().int().min(2000).max(2100),
+    seriesId: id,
+    patch: UpdateSeriesPatchSchema,
+  })
+  .strict();
 export type UpdateSeriesInput = z.infer<typeof UpdateSeriesInputSchema>;
+
+export const UpdateSessionPatchSchema = z
+  .object({
+    date: isoDate.optional(),
+    title: z.string().trim().min(1).max(200).optional(),
+    partnerRequired: z.boolean().optional(),
+    kind: z.enum(SESSION_KINDS).optional(),
+    /** Admin removes a session by setting this true; cascades §9.3. */
+    remove: z.literal(true).optional(),
+  })
+  .strict();
+export type UpdateSessionPatch = z.infer<typeof UpdateSessionPatchSchema>;
 
 export const UpdateSessionInputSchema = z
   .object({
     year: z.number().int().min(2000).max(2100),
     sessionId: id,
-    title: z.string().trim().min(1).max(200).optional(),
-    partnerRequired: z.boolean().optional(),
-    /** Admin removes a session by setting this true; cascades §9.3. */
-    remove: z.boolean().optional(),
+    patch: UpdateSessionPatchSchema,
   })
   .strict();
 export type UpdateSessionInput = z.infer<typeof UpdateSessionInputSchema>;
@@ -356,14 +382,24 @@ export type MarkNotificationsReadInput = z.infer<typeof MarkNotificationsReadInp
 /* --------------------------------- admin: misc ------------------------------ */
 
 export const BroadcastInputSchema = z.object({
-  title: z.string().trim().min(1).max(120),
-  body: z.string().trim().min(1).max(2000),
+  title: z.string().trim().min(1).max(80),
+  body: z.string().trim().min(1).max(1000),
   weekdays: z.array(weekday).optional(),
 });
 export type BroadcastInput = z.infer<typeof BroadcastInputSchema>;
 
 export const RunPairingSweepInputSchema = z.object({ repair: z.boolean().optional() });
 export type RunPairingSweepInput = z.infer<typeof RunPairingSweepInputSchema>;
+
+export const ListAuditLogInputSchema = z.object({
+  limit: z.number().int().min(1).max(100).optional(),
+  /** ISO instant cursor: return entries strictly before this `at`. */
+  before: z.string().trim().min(1).max(40).optional(),
+  actorMemberId: id.optional(),
+  action: z.enum(AUDIT_ACTIONS).optional(),
+  targetMemberId: id.optional(),
+});
+export type ListAuditLogInput = z.infer<typeof ListAuditLogInputSchema>;
 
 export const PingInputSchema = z.object({}).strict();
 export type PingInput = z.infer<typeof PingInputSchema>;

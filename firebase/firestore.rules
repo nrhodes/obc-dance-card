@@ -126,6 +126,9 @@ service cloud.firestore {
     match /emailCodes/{id} { allow read, write: if false; }
     match /rateLimits/{id} { allow read, write: if false; }
     match /imports/{id} { allow read, write: if false; }
+    // Nightly/admin integrity sweep runs (plan §16 Phase 6) — read only through
+    // logs/`runPairingSweep`'s return value, never directly.
+    match /integrity/{id} { allow read, write: if false; }
 
     // Deny anything not matched above.
     match /{document=**} {

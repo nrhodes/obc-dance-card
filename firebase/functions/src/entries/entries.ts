@@ -11,7 +11,6 @@ import {
   ClearSoloStatusInputSchema,
   SetSoloStatusInputSchema,
   paths,
-  validatePairingGroup,
   type CancelEntryInput,
   type CancelEntryResult,
   type ClaimLookingForPartnerInput,
@@ -20,7 +19,6 @@ import {
   type ClearSoloStatusResult,
   type Entry,
   type Member,
-  type NotificationType,
   type SetSoloStatusInput,
   type SetSoloStatusResult,
   type Team,
@@ -34,7 +32,19 @@ import { createNotification } from '../notifications/create.js';
 import { sendMatchmakingAlerts } from '../notifications/matchmaking.js';
 import { getEmailProvider } from '../email/provider.js';
 import { visitorCancelledEmail } from '../email/templates/visitorCourtesy.js';
-import { assertForceAllowed, assertSessionOpen, entryId, isFree, loadSession, memberRef, readEntry, repeatPartnerWarning, writePair } from './lib.js';
+import {
+  assertForceAllowed,
+  assertSessionOpen,
+  cancelEntryInTx,
+  entryId,
+  isFree,
+  loadSession,
+  memberRef,
+  readEntry,
+  repeatPartnerWarning,
+  writePair,
+  type CancelEntryTxResult,
+} from './lib.js';
 import { parseInput } from '../lib/parseInput.js';
 import {
   assertTeamValid,
@@ -312,22 +322,6 @@ export const claimLookingForPartner = onCall(callableOptions, claimLookingForPar
 
 /* ------------------------------------ cancelEntry ----------------------------- */
 
-interface PendingNotification {
-  memberId: string;
-  type: NotificationType;
-  title: string;
-  body: string;
-  data: Record<string, string>;
-}
-
-interface CancelEntryTxResult {
-  ownEntry: Entry;
-  partnerEntry?: Entry;
-  notify: PendingNotification[];
-  /** Set only on the visitor-pairing branch: the visitor to courtesy-email, if any. */
-  cancelledVisitorId?: string;
-}
-
 export async function cancelEntryHandler(req: CallableRequest<CancelEntryInput>): Promise<CancelEntryResult> {
   const input = parseInput(CancelEntryInputSchema, req.data);
   const caller = await requireMember(req);
@@ -355,196 +349,7 @@ export async function cancelEntryHandler(req: CallableRequest<CancelEntryInput>)
     // not apply here. See that function's doc comment.
     assertSessionOpen(loaded.session, loaded.weekday, loaded.programme, { force: input.force, allowTeamsSession: true });
 
-    const now = new Date().toISOString();
-
-    // ---- team entry: cancel only this entry, notify the captain (§9.3) ----
-    if (entry.teamId) {
-      const teamSnap = await tx.get(db.doc(paths.team(entry.teamId)));
-      const team = teamSnap.data() as Team | undefined;
-      const cancelled: Entry = { ...entry, status: 'cancelled', updatedAt: now };
-      tx.set(entryRef, cancelled);
-
-      const issues = validatePairingGroup([cancelled]);
-      if (issues.length > 0) {
-        throw new HttpsError('internal', `Pairing invariant violated: ${issues.join('; ')}`);
-      }
-
-      const notify: PendingNotification[] = [];
-      if (team) {
-        notify.push({
-          memberId: team.captainMemberId,
-          type: 'team_member_absent',
-          title: 'A team member is absent',
-          body: `${actorName} cannot play on ${entry.date}.`,
-          data: { teamId: team.id, sessionId: entry.sessionId, memberId: entry.memberId },
-        });
-      }
-      return { ownEntry: cancelled, notify };
-    }
-
-    // ---- visitor pairing: one-sided, cancel just this entry (plan §12.8) ----
-    if (entry.partner?.kind === 'visitor') {
-      const cancelled: Entry = { ...entry, status: 'cancelled', partner: null, pairingId: null, updatedAt: now };
-      tx.set(entryRef, cancelled);
-
-      const issues = validatePairingGroup([cancelled]);
-      if (issues.length > 0) {
-        throw new HttpsError('internal', `Pairing invariant violated: ${issues.join('; ')}`);
-      }
-      // Courtesy *cancellation* email (plan §9.3 / §12.4) is sent after the
-      // transaction commits, once we know it did — see below.
-      return { ownEntry: cancelled, notify: [], cancelledVisitorId: entry.partner.visitorId };
-    }
-
-    if (!entry.pairingId) {
-      throw new HttpsError('internal', 'A member-paired entry is missing its pairingId.');
-    }
-
-    const groupSnap = await tx.get(db.collection(paths.entries()).where('pairingId', '==', entry.pairingId));
-    const group = groupSnap.docs.map((d) => d.data() as Entry);
-    const writes: Entry[] = [];
-    const notify: PendingNotification[] = [];
-    let partnerEntry: Entry | undefined;
-
-    if (entry.isSubstituteFor) {
-      // ---- case: the substitute themselves cancels — revert to the plain I2 shape ----
-      const coveredId = entry.isSubstituteFor;
-      const remainingId = entry.partner?.kind === 'member' ? entry.partner.memberId : null;
-      const covered = group.find((e) => e.memberId === coveredId);
-      const remaining = remainingId ? group.find((e) => e.memberId === remainingId) : undefined;
-      if (!covered || !remaining) {
-        throw new HttpsError('internal', 'Substitute pairing group is missing an expected entry.');
-      }
-
-      const cancelledSelf: Entry = {
-        ...entry,
-        status: 'cancelled',
-        partner: null,
-        pairingId: null,
-        isSubstituteFor: null,
-        updatedAt: now,
-      };
-      const revertedCovered: Entry = { ...covered, status: 'confirmed', substitute: null, updatedAt: now };
-      const revertedRemaining: Entry = { ...remaining, partnerSubstitute: null, updatedAt: now };
-      writes.push(cancelledSelf, revertedCovered, revertedRemaining);
-
-      notify.push(
-        {
-          memberId: covered.memberId,
-          type: 'substitute_cleared',
-          title: 'Your substitute is no longer available',
-          body: `${actorName} can no longer stand in for you on ${entry.date}.`,
-          data: { sessionId: entry.sessionId },
-        },
-        {
-          memberId: remaining.memberId,
-          type: 'substitute_cleared',
-          title: 'Your partner’s substitute is no longer available',
-          body: `${actorName} can no longer stand in on ${entry.date}.`,
-          data: { sessionId: entry.sessionId },
-        },
-      );
-    } else if (entry.status === 'substituted') {
-      // ---- case: the covered member leaves permanently; their stand-in is promoted (§9.3) ----
-      const remainingId = entry.partner?.kind === 'member' ? entry.partner.memberId : null;
-      const remaining = remainingId ? group.find((e) => e.memberId === remainingId) : undefined;
-      const sub = entry.substitute;
-      if (!remaining || !sub) {
-        throw new HttpsError('internal', 'Substituted pairing group is missing an expected entry.');
-      }
-
-      const cancelledSelf: Entry = {
-        ...entry,
-        status: 'cancelled',
-        partner: null,
-        pairingId: null,
-        substitute: null,
-        updatedAt: now,
-      };
-      const promotedRemaining: Entry = { ...remaining, partner: sub, partnerSubstitute: null, updatedAt: now };
-      writes.push(cancelledSelf, promotedRemaining);
-      partnerEntry = promotedRemaining;
-
-      if (sub.kind === 'member') {
-        const subEntry = group.find((e) => e.memberId === sub.memberId && e.isSubstituteFor === entry.memberId);
-        if (!subEntry) {
-          throw new HttpsError('internal', 'Promoted substitute is missing their own entry.');
-        }
-        writes.push({ ...subEntry, isSubstituteFor: null, updatedAt: now });
-      }
-      notify.push({
-        memberId: remaining.memberId,
-        type: 'partner_cancelled',
-        title: 'Your partner has withdrawn',
-        body: `${actorName} has withdrawn for ${entry.date}. ${sub.displayName} is now your partner for this session.`,
-        data: { sessionId: entry.sessionId, year: String(year) },
-      });
-    } else {
-      // ---- case: plain departure — the partner is freed to look for someone new ----
-      const partnerId = entry.partner?.kind === 'member' ? entry.partner.memberId : null;
-      const partner = partnerId ? group.find((e) => e.memberId === partnerId) : undefined;
-      if (!partner) {
-        throw new HttpsError('internal', 'Pairing group is missing the partner entry.');
-      }
-
-      const cancelledSelf: Entry = {
-        ...entry,
-        status: 'cancelled',
-        partner: null,
-        pairingId: null,
-        substitute: null,
-        partnerSubstitute: null,
-        isSubstituteFor: null,
-        updatedAt: now,
-      };
-      const freedPartner: Entry = {
-        ...partner,
-        status: 'looking_for_partner',
-        partner: null,
-        pairingId: null,
-        substitute: null,
-        partnerSubstitute: null,
-        isSubstituteFor: null,
-        note: undefined,
-        updatedAt: now,
-      };
-      writes.push(cancelledSelf, freedPartner);
-      partnerEntry = freedPartner;
-
-      notify.push({
-        memberId: partner.memberId,
-        type: 'partner_cancelled',
-        title: 'Your partner cancelled',
-        body: `${actorName} cancelled for ${entry.date}. You are now looking for a partner.`,
-        data: { sessionId: entry.sessionId, year: String(year) },
-      });
-
-      const subEntry = group.find((e) => e.isSubstituteFor === partner.memberId);
-      if (subEntry) {
-        writes.push({ ...subEntry, status: 'cancelled', partner: null, pairingId: null, isSubstituteFor: null, updatedAt: now });
-        notify.push({
-          memberId: subEntry.memberId,
-          type: 'partner_cancelled',
-          title: 'Your substitute arrangement is cancelled',
-          body: `${actorName} cancelled for ${entry.date}, so your stand-in spot is no longer needed.`,
-          data: { sessionId: entry.sessionId },
-        });
-      }
-    }
-
-    for (const w of writes) {
-      tx.set(db.doc(paths.entry(w.id)), w);
-    }
-
-    const updatedById = new Map(writes.map((w) => [w.id, w]));
-    const postGroup = group.map((g) => updatedById.get(g.id) ?? g);
-    const issues = validatePairingGroup(postGroup);
-    if (issues.length > 0) {
-      throw new HttpsError('internal', `Pairing invariant violated: ${issues.join('; ')}`);
-    }
-
-    const ownEntry = updatedById.get(entry.id)!;
-    return { ownEntry, partnerEntry, notify };
+    return cancelEntryInTx(tx, entry, { actorMemberId: actor.memberId, actorName });
   });
 
   if (actor.onBehalfBy) {

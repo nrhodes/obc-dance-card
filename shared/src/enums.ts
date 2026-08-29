@@ -115,6 +115,8 @@ export const NOTIFICATION_TYPES = [
   'security',
   /** §12.5: a visitor's email now matches a newly-imported member. */
   'visitor_promoted',
+  /** Phase 6: `updateSeries`/`updateSession` changed something affecting a member's future entry. */
+  'programme_changed',
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 
