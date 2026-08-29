@@ -7,6 +7,7 @@ import { MembersDirectoryContext, type MembersDirectoryContextValue } from './Me
 export function MembersDirectoryProvider({ children }: { children: ReactNode }) {
   const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<{ code: string } | null>(null);
 
   useEffect(() => {
     const q = query(collection(db, paths.members()), where('active', '==', true));
@@ -14,10 +15,13 @@ export function MembersDirectoryProvider({ children }: { children: ReactNode }) 
       q,
       (snap) => {
         setMembers(snap.docs.map((d) => d.data() as Member));
+        setError(null);
         setLoading(false);
       },
-      () => {
+      (err) => {
+        console.error('subscription_failed', 'members', err.code);
         setMembers([]);
+        setError({ code: err.code });
         setLoading(false);
       },
     );
@@ -35,8 +39,8 @@ export function MembersDirectoryProvider({ children }: { children: ReactNode }) 
   );
 
   const value = useMemo<MembersDirectoryContextValue>(
-    () => ({ members, byId, nameOf, loading }),
-    [members, byId, nameOf, loading],
+    () => ({ members, byId, nameOf, loading, error }),
+    [members, byId, nameOf, loading, error],
   );
 
   return <MembersDirectoryContext.Provider value={value}>{children}</MembersDirectoryContext.Provider>;

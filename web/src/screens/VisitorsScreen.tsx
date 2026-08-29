@@ -13,10 +13,11 @@ import { createVisitor, deleteVisitor, updateVisitor } from '../api';
 import { mapActionError } from '../lib/actionErrors';
 import type { AppError } from '../firebase';
 import { ConfirmDialog } from '../components/ConfirmDialog';
+import { SubscriptionError } from '../components/SubscriptionError';
 import { VisitorForm, type VisitorFormValues } from '../components/VisitorForm';
 
 export function VisitorsScreen() {
-  const { visitors, loading } = useVisitors();
+  const { visitors, loading, error: subError } = useVisitors();
 
   const [adding, setAdding] = useState(false);
   const [addBusy, setAddBusy] = useState(false);
@@ -89,6 +90,7 @@ export function VisitorsScreen() {
       )}
 
       <div className="card">
+        {subError && <SubscriptionError resource="your visitors" />}
         {loading && <p>Loading…</p>}
         {!loading && visitors.length === 0 && !adding && <p className="muted">You haven&apos;t added any visitors yet.</p>}
         {!loading && visitors.length > 0 && (

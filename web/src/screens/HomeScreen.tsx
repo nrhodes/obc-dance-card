@@ -14,9 +14,11 @@ import { collection, documentId, onSnapshot, orderBy, query, where } from 'fireb
 import { paths, todayNZ, type Entry, type Team } from '@obc/shared';
 import { db } from '../firebase';
 import { useAuth } from '../auth/useAuth';
+import { useEffectiveMember } from '../admin/useEffectiveMember';
 import { useProgramme } from '../programme/useProgramme';
 import { formatDateNZ } from '../lib/format';
 import { buildPastRows, groupCardEntries, type CardRow } from '../lib/card';
+import { SubscriptionError } from '../components/SubscriptionError';
 
 const PAST_LIMIT = 10;
 const MAX_TEAM_IDS = 10; // Firestore `in` query cap
@@ -27,32 +29,40 @@ function entryYear(entry: Entry): number {
 
 export function HomeScreen() {
   const { member } = useAuth();
+  // Plan Phase 6b task deliverable 2: while an admin is acting on behalf of
+  // a member, "My dance card" shows that member's card instead of the
+  // admin's own.
+  const { effectiveMemberId, actingAsName } = useEffectiveMember();
   const { sessions, series, weekdays, loading: programmeLoading } = useProgramme();
 
   const [entries, setEntries] = useState<Entry[]>([]);
   const [entriesLoaded, setEntriesLoaded] = useState(false);
+  const [entriesError, setEntriesError] = useState<{ code: string } | null>(null);
   const [pastOpen, setPastOpen] = useState(false);
 
   useEffect(() => {
-    if (!member) {
+    if (!effectiveMemberId) {
       setEntries([]);
       setEntriesLoaded(true);
       return;
     }
     setEntriesLoaded(false);
-    const q = query(collection(db, paths.entries()), where('memberId', '==', member.id), orderBy('date', 'asc'));
+    const q = query(collection(db, paths.entries()), where('memberId', '==', effectiveMemberId), orderBy('date', 'asc'));
     return onSnapshot(
       q,
       (snap) => {
         setEntries(snap.docs.map((d) => d.data() as Entry));
+        setEntriesError(null);
         setEntriesLoaded(true);
       },
-      () => {
+      (err) => {
+        console.error('subscription_failed', 'home_entries', err.code);
         setEntries([]);
+        setEntriesError({ code: err.code });
         setEntriesLoaded(true);
       },
     );
-  }, [member]);
+  }, [effectiveMemberId]);
 
   const today = todayNZ();
   const futureEntries = useMemo(() => entries.filter((e) => e.date >= today), [entries, today]);
@@ -88,10 +98,12 @@ export function HomeScreen() {
     <div className="stack">
       <div className="card">
         <h1>Hello{member ? `, ${member.firstName}` : ''}</h1>
+        {actingAsName && <p className="muted">Showing {actingAsName}&apos;s dance card.</p>}
       </div>
 
       <div className="card">
         <h2>My dance card</h2>
+        {entriesError && <SubscriptionError resource="your dance card" />}
         {loading && <p>Loading…</p>}
         {!loading && !hasUpcoming && (
           <p className="muted">Nothing on your card yet — open the Programme to sign up.</p>

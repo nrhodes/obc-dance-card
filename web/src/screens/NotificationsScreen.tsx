@@ -10,6 +10,7 @@ import type { Notification } from '@obc/shared';
 import { useNotifications } from '../notifications/useNotifications';
 import { markNotificationsRead } from '../api';
 import { formatDateTimeNZ } from '../lib/format';
+import { SubscriptionError } from '../components/SubscriptionError';
 
 function deepLinkFor(notification: Notification): string | null {
   const { sessionId, year, inviteId } = notification.data;
@@ -19,7 +20,7 @@ function deepLinkFor(notification: Notification): string | null {
 }
 
 export function NotificationsScreen() {
-  const { notifications, unreadCount, loading } = useNotifications();
+  const { notifications, unreadCount, loading, error } = useNotifications();
   const navigate = useNavigate();
 
   async function handleOpen(notification: Notification) {
@@ -46,6 +47,7 @@ export function NotificationsScreen() {
       </div>
 
       <div className="card">
+        {error && <SubscriptionError resource="notifications" />}
         {loading && <p>Loading…</p>}
         {!loading && notifications.length === 0 && <p className="muted">Nothing here yet.</p>}
         {!loading &&

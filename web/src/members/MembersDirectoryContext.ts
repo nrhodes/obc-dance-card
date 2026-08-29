@@ -13,6 +13,8 @@ export interface MembersDirectoryContextValue {
   /** Full name for an active member id, or a display-safe fallback if unknown. */
   nameOf: (memberId: string) => string;
   loading: boolean;
+  /** Set when the live subscription itself failed (e.g. a rules denial) — never conflated with "no members". */
+  error: { code: string } | null;
 }
 
 export const MembersDirectoryContext = createContext<MembersDirectoryContextValue | undefined>(undefined);

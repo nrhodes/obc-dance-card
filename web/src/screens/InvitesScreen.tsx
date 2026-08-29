@@ -14,6 +14,7 @@ import { cancelInvite, respondToInvite } from '../api';
 import { mapActionError } from '../lib/actionErrors';
 import type { AppError } from '../firebase';
 import { formatDateNZ, formatDateTimeNZ } from '../lib/format';
+import { SubscriptionError } from '../components/SubscriptionError';
 
 function scopeLabel(invite: Invite): string {
   if (invite.scope === 'team') {
@@ -54,7 +55,7 @@ function inviteHeadline(
 }
 
 export function InvitesScreen() {
-  const { incoming, outgoing, resolved, loading } = useInvites();
+  const { incoming, outgoing, resolved, loading, error: subError } = useInvites();
   const { nameOf } = useMembersDirectory();
   const { sessions, series } = useProgramme();
   const { teamById } = useTeams();
@@ -128,6 +129,8 @@ export function InvitesScreen() {
           {notice}
         </div>
       )}
+
+      {subError && <SubscriptionError resource="invites" />}
 
       <div className="card">
         <h2>Incoming</h2>

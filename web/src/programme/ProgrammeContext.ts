@@ -23,6 +23,8 @@ export interface ProgrammeContextValue {
   sessions: Session[];
   /** True until the programme query *and* (if a year was found) its subcollections have loaded once. */
   loading: boolean;
+  /** Set when a live subscription failed (e.g. a rules denial) — never conflated with "no programme yet". */
+  error: { code: string } | null;
 }
 
 export const ProgrammeContext = createContext<ProgrammeContextValue | undefined>(undefined);

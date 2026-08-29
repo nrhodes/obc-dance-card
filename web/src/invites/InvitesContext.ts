@@ -14,6 +14,8 @@ export interface InvitesContextValue {
   /** Last 10 resolved (accepted/declined/expired/cancelled) invites in either direction, newest first. */
   resolved: Invite[];
   loading: boolean;
+  /** Set when a live subscription failed (e.g. a rules denial) — never conflated with "no invites". */
+  error: { code: string } | null;
 }
 
 export const InvitesContext = createContext<InvitesContextValue | undefined>(undefined);

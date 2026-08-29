@@ -70,6 +70,10 @@ export interface TeamPanelProps {
   members: Member[];
   nameOf: (memberId: string) => string;
   visitors: Visitor[];
+  /** Admin acting-on-behalf id (plan Phase 6b task deliverable 2), spread into every callable call here. */
+  onBehalfOfMemberId?: string;
+  /** True while acting on behalf of another member — see `ActionsPanel`'s doc comment in `SessionScreen.tsx`. */
+  disableSoloEdit?: boolean;
   onNotice: (message: string) => void;
   onSolo: (status: 'looking_for_partner' | 'available') => void;
   onChangeSolo: (status: 'looking_for_partner' | 'available') => void;
@@ -88,6 +92,8 @@ export function TeamPanel({
   members,
   nameOf,
   visitors,
+  onBehalfOfMemberId,
+  disableSoloEdit,
   onNotice,
   onSolo,
   onChangeSolo,
@@ -96,6 +102,7 @@ export function TeamPanel({
   const [dialog, setDialog] = useState<PanelDialog | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const onBehalf = onBehalfOfMemberId ? { onBehalfOfMemberId } : {};
 
   function close() {
     setDialog(null);
@@ -117,7 +124,7 @@ export function TeamPanel({
   }
 
   async function handleCreateVisitor(values: VisitorFormValues): Promise<Visitor> {
-    const result = await createVisitor(values);
+    const result = await createVisitor({ ...values, ...onBehalf });
     return result.visitor;
   }
 
@@ -127,20 +134,27 @@ export function TeamPanel({
     return (
       <div className="stack">
         {role.solo ? (
-          <div className="actions-row">
-            <button
-              type="button"
-              className="button button-secondary"
-              onClick={() =>
-                onChangeSolo(role.solo!.status === 'looking_for_partner' ? 'available' : 'looking_for_partner')
-              }
-            >
-              {role.solo.status === 'looking_for_partner' ? 'Switch to available for a team' : 'Switch to looking for a team'}
-            </button>
-            <button type="button" className="button button-danger" onClick={onRemoveSolo}>
-              Remove
-            </button>
-          </div>
+          disableSoloEdit ? (
+            <p className="muted">
+              Switching or removing a noticeboard listing isn&apos;t available while acting on behalf of another
+              member.
+            </p>
+          ) : (
+            <div className="actions-row">
+              <button
+                type="button"
+                className="button button-secondary"
+                onClick={() =>
+                  onChangeSolo(role.solo!.status === 'looking_for_partner' ? 'available' : 'looking_for_partner')
+                }
+              >
+                {role.solo.status === 'looking_for_partner' ? 'Switch to available for a team' : 'Switch to looking for a team'}
+              </button>
+              <button type="button" className="button button-danger" onClick={onRemoveSolo}>
+                Remove
+              </button>
+            </div>
+          )
         ) : (
           <div className="actions-row">
             <button type="button" className="button button-primary" onClick={() => setDialog({ kind: 'start' })}>
@@ -176,7 +190,7 @@ export function TeamPanel({
             onClose={close}
             onSubmit={(name) =>
               void run(async () => {
-                await createTeam({ year, seriesId: series.id, ...(name ? { name } : {}) });
+                await createTeam({ year, seriesId: series.id, ...(name ? { name } : {}), ...onBehalf });
               }, 'Team started.')
             }
           />
@@ -351,7 +365,7 @@ export function TeamPanel({
           onClose={close}
           onConfirm={() =>
             void run(async () => {
-              await leaveTeam({ teamId: team.id });
+              await leaveTeam({ teamId: team.id, ...onBehalf });
             }, "You've left the team.")
           }
         />
@@ -367,7 +381,7 @@ export function TeamPanel({
           onClose={close}
           onSubmit={(input) =>
             void run(async () => {
-              await inviteToTeam({ teamId: team.id, ...input });
+              await inviteToTeam({ teamId: team.id, ...input, ...onBehalf });
             }, 'Invite sent.')
           }
         />
@@ -382,7 +396,7 @@ export function TeamPanel({
           onClose={close}
           onSelect={(visitorId) =>
             void run(async () => {
-              await addVisitorToTeam({ teamId: team.id, visitorId });
+              await addVisitorToTeam({ teamId: team.id, visitorId, ...onBehalf });
             }, 'Visitor added to the team.')
           }
           onCreateVisitor={handleCreateVisitor}
@@ -400,7 +414,7 @@ export function TeamPanel({
           onClose={close}
           onConfirm={() =>
             void run(async () => {
-              await removeFromTeam({ teamId: team.id, ref: { kind: 'member', memberId: dialog.memberId } });
+              await removeFromTeam({ teamId: team.id, ref: { kind: 'member', memberId: dialog.memberId }, ...onBehalf });
             }, `${dialog.name} was removed from the team.`)
           }
         />
@@ -417,7 +431,7 @@ export function TeamPanel({
           onClose={close}
           onConfirm={() =>
             void run(async () => {
-              await removeVisitorFromTeam({ teamId: team.id, visitorId: dialog.visitorId });
+              await removeVisitorFromTeam({ teamId: team.id, visitorId: dialog.visitorId, ...onBehalf });
             }, `${dialog.name} was removed from the team.`)
           }
         />
@@ -431,7 +445,7 @@ export function TeamPanel({
           onClose={close}
           onSubmit={(toMemberId) =>
             void run(async () => {
-              await transferCaptaincy({ teamId: team.id, toMemberId });
+              await transferCaptaincy({ teamId: team.id, toMemberId, ...onBehalf });
             }, 'Captaincy offer sent.')
           }
         />
@@ -448,7 +462,7 @@ export function TeamPanel({
           onClose={close}
           onConfirm={() =>
             void run(async () => {
-              await disbandTeam({ teamId: team.id });
+              await disbandTeam({ teamId: team.id, ...onBehalf });
             }, 'Team disbanded.')
           }
         />
@@ -464,12 +478,12 @@ export function TeamPanel({
           onClose={close}
           onSelectMember={(memberId) =>
             void run(async () => {
-              await addTeamSessionSubstitute({ teamId: team.id, sessionId: session.id, ref: { kind: 'member', memberId } });
+              await addTeamSessionSubstitute({ teamId: team.id, sessionId: session.id, ref: { kind: 'member', memberId }, ...onBehalf });
             }, 'Substitute added for this session.')
           }
           onSelectVisitor={(visitorId) =>
             void run(async () => {
-              await addTeamSessionSubstitute({ teamId: team.id, sessionId: session.id, ref: { kind: 'visitor', visitorId } });
+              await addTeamSessionSubstitute({ teamId: team.id, sessionId: session.id, ref: { kind: 'visitor', visitorId }, ...onBehalf });
             }, 'Substitute added for this session.')
           }
           onCreateVisitor={handleCreateVisitor}
@@ -487,7 +501,7 @@ export function TeamPanel({
           onClose={close}
           onConfirm={() =>
             void run(async () => {
-              await clearTeamSessionSubstitute({ teamId: team.id, sessionId: session.id, ref: dialog.ref });
+              await clearTeamSessionSubstitute({ teamId: team.id, sessionId: session.id, ref: dialog.ref, ...onBehalf });
             }, 'Substitute removed.')
           }
         />

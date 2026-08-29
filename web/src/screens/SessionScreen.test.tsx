@@ -2,7 +2,7 @@ import type { ReactElement } from 'react';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Entry, Member, Series, Session, Team, Visitor, WeekdayProgramme } from '@obc/shared';
 import type { ProgrammeContextValue } from '../programme/ProgrammeContext';
 import { SessionScreen } from './SessionScreen';
@@ -23,18 +23,40 @@ vi.mock('../auth/useAuth', () => ({
   useAuth: () => ({ member: useAuthMemberMock() }),
 }));
 
-vi.mock('../members/useMembersDirectory', () => ({
-  useMembersDirectory: () => ({
-    members: [
-      member({ id: 'member-a', firstName: 'Jane', lastName: 'Doe' }),
-      member({ id: 'member-b', firstName: 'John', lastName: 'Smith' }),
-      member({ id: 'member-c', firstName: 'Amy', lastName: 'Lee' }),
-    ],
-    byId: new Map(),
-    nameOf: (id: string) => ({ 'member-a': 'Jane Doe', 'member-b': 'John Smith', 'member-c': 'Amy Lee' })[id] ?? id,
-    loading: false,
-  }),
+// No admin acting-as in these tests by default — the effective member is the
+// signed-in member (mirrors `ActingAsProvider`'s behaviour with nothing
+// set). The "acting on behalf" describe block below points
+// `effectiveOverride` at a different member to exercise the on-behalf path.
+let effectiveOverride: { effectiveMemberId: string; onBehalfOfMemberId?: string; actingAsName?: string | null } | null = null;
+vi.mock('../admin/useEffectiveMember', () => ({
+  useEffectiveMember: () => {
+    const signedInMember = useAuthMemberMock();
+    return (
+      effectiveOverride ?? {
+        effectiveMemberId: signedInMember?.id ?? null,
+        onBehalfOfMemberId: undefined,
+        actingAsName: null,
+      }
+    );
+  },
 }));
+
+vi.mock('../members/useMembersDirectory', () => {
+  const directoryMembers = [
+    member({ id: 'member-a', firstName: 'Jane', lastName: 'Doe' }),
+    member({ id: 'member-b', firstName: 'John', lastName: 'Smith' }),
+    member({ id: 'member-c', firstName: 'Amy', lastName: 'Lee' }),
+  ];
+  return {
+    useMembersDirectory: () => ({
+      members: directoryMembers,
+      byId: new Map(directoryMembers.map((m) => [m.id, m])),
+      nameOf: (id: string) => ({ 'member-a': 'Jane Doe', 'member-b': 'John Smith', 'member-c': 'Amy Lee' })[id] ?? id,
+      loading: false,
+      error: null,
+    }),
+  };
+});
 
 vi.mock('../visitors/useVisitors', () => ({
   useVisitors: () => ({ visitors: visitorsFixture, loading: false }),
@@ -44,6 +66,7 @@ vi.mock('../teams/useTeams', () => ({
   useTeams: () => ({
     teams: teamsForSeriesFixture,
     loading: false,
+    error: null,
     teamsForSeries: () => teamsForSeriesFixture,
     myTeamForSeries: () => myTeamFixture,
     teamById: (id: string) => teamsForSeriesFixture.find((t) => t.id === id),
@@ -249,6 +272,7 @@ function setProgramme(sessionsList: Session[], seriesList: Series[] = [series()]
     series: seriesList,
     sessions: sessionsList,
     loading: false,
+    error: null,
   });
 }
 
@@ -697,6 +721,97 @@ describe('SessionScreen', () => {
       useAuthMemberMock.mockReturnValue(null);
       myTeamFixture = null;
       teamsForSeriesFixture = [];
+    });
+  });
+
+  // Plan Phase 6b task deliverable 2 + Tests section: while an admin is
+  // acting on behalf of a member, every one of these callable payloads must
+  // carry `onBehalfOfMemberId` — asserted here by mocking `useEffectiveMember`
+  // (`effectiveOverride`) to a different member than the signed-in admin.
+  describe('acting on behalf', () => {
+    const actingAs = { effectiveMemberId: 'member-a', onBehalfOfMemberId: 'member-a', actingAsName: 'Jane Doe' };
+
+    afterEach(() => {
+      effectiveOverride = null;
+      useAuthMemberMock.mockReturnValue(null);
+      myTeamFixture = null;
+      teamsForSeriesFixture = [];
+      visitorsFixture = [];
+    });
+
+    it('includes onBehalfOfMemberId when sending an invite', async () => {
+      effectiveOverride = actingAs;
+      setProgramme([session()]);
+      useAuthMemberMock.mockReturnValue(member({ id: 'admin-1', role: 'admin' }));
+      entriesFixture = [entry({ id: 'e-b', memberId: 'member-b', status: 'available' })];
+      const user = userEvent.setup();
+      renderAt('/session/2027/monday-marion-taylor-pairs-2027-01-11', <SessionScreen />);
+      await user.click(screen.getByRole('button', { name: 'Invite John Smith' }));
+      await user.click(screen.getByRole('button', { name: 'Send invite' }));
+      expect(sendInviteMock).toHaveBeenCalledWith(expect.objectContaining({ onBehalfOfMemberId: 'member-a' }));
+    });
+
+    it('includes onBehalfOfMemberId when setting a solo status', async () => {
+      effectiveOverride = actingAs;
+      setProgramme([session()]);
+      useAuthMemberMock.mockReturnValue(member({ id: 'admin-1', role: 'admin' }));
+      entriesFixture = [];
+      const user = userEvent.setup();
+      renderAt('/session/2027/monday-marion-taylor-pairs-2027-01-11', <SessionScreen />);
+      await user.click(screen.getByRole('button', { name: "I'm looking for a partner" }));
+      await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Confirm' }));
+      expect(setSoloStatusMock).toHaveBeenCalledWith(expect.objectContaining({ onBehalfOfMemberId: 'member-a' }));
+    });
+
+    it('includes onBehalfOfMemberId when cancelling an entry', async () => {
+      cancelEntryMock.mockResolvedValueOnce({ entry: entry({ id: 'e-a', memberId: 'member-a', status: 'cancelled' }) });
+      effectiveOverride = actingAs;
+      setProgramme([session()]);
+      useAuthMemberMock.mockReturnValue(member({ id: 'admin-1', role: 'admin' }));
+      entriesFixture = [
+        entry({
+          id: 'e-a',
+          memberId: 'member-a',
+          status: 'confirmed',
+          pairingId: 'p1',
+          partner: { kind: 'member', memberId: 'member-b', displayName: 'John Smith' },
+        }),
+      ];
+      const user = userEvent.setup();
+      renderAt('/session/2027/monday-marion-taylor-pairs-2027-01-11', <SessionScreen />);
+      await user.click(screen.getByRole('button', { name: 'Cancel this session' }));
+      const dialog = screen.getByRole('dialog');
+      await user.click(within(dialog).getByRole('button', { name: 'Cancel this session' }));
+      expect(cancelEntryMock).toHaveBeenCalledWith(expect.objectContaining({ entryId: 'e-a', onBehalfOfMemberId: 'member-a' }));
+    });
+
+    it('includes onBehalfOfMemberId when signing up with a visitor', async () => {
+      signUpWithVisitorMock.mockResolvedValueOnce({ entries: [] });
+      effectiveOverride = actingAs;
+      visitorsFixture = [visitor()];
+      setProgramme([session()]);
+      useAuthMemberMock.mockReturnValue(member({ id: 'admin-1', role: 'admin' }));
+      entriesFixture = [];
+      const user = userEvent.setup();
+      renderAt('/session/2027/monday-marion-taylor-pairs-2027-01-11', <SessionScreen />);
+      await user.click(screen.getByRole('button', { name: 'Play with a visitor' }));
+      await user.click(screen.getByRole('button', { name: 'Bob Visitor' }));
+      expect(signUpWithVisitorMock).toHaveBeenCalledWith(expect.objectContaining({ onBehalfOfMemberId: 'member-a' }));
+    });
+
+    it('includes onBehalfOfMemberId when starting a team', async () => {
+      createTeamMock.mockResolvedValueOnce({ team: team(), entries: [] });
+      effectiveOverride = actingAs;
+      myTeamFixture = null;
+      teamsForSeriesFixture = [];
+      setProgramme([teamsSession], [teamsSeries]);
+      useAuthMemberMock.mockReturnValue(member({ id: 'admin-1', role: 'admin' }));
+      entriesFixture = [];
+      const user = userEvent.setup();
+      renderAt('/session/2027/monday-campbell-cave-teams-2027-09-20', <SessionScreen />);
+      await user.click(screen.getByRole('button', { name: 'Start a team' }));
+      await user.click(screen.getByRole('button', { name: 'Start team' }));
+      expect(createTeamMock).toHaveBeenCalledWith(expect.objectContaining({ onBehalfOfMemberId: 'member-a' }));
     });
   });
 });

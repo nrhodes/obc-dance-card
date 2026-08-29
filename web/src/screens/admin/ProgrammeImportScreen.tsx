@@ -12,6 +12,7 @@ import { mapGenericError } from '../../auth/errors';
 import { groupErrorsByFile, isAlreadyPublishedError, isWouldRemoveSessionsError } from './programmeImportErrors';
 import { defaultProgrammeImportYear } from './programmeYearDefault';
 import { AdminProgrammeList } from './AdminProgrammeList';
+import { ProgrammeEditor } from './ProgrammeEditor';
 
 interface ReviewedInputs {
   year: number;
@@ -292,6 +293,7 @@ export function ProgrammeImportScreen() {
       )}
 
       <AdminProgrammeList />
+      <ProgrammeEditor />
     </div>
   );
 }

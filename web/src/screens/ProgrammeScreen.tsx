@@ -12,9 +12,10 @@ import { useProgramme } from '../programme/useProgramme';
 import { useMembersDirectory } from '../members/useMembersDirectory';
 import { formatDateNZ, formatTimeOfDay, shortWeekdayLabel } from '../lib/format';
 import { buildWeekdayTimeline, defaultProgrammeWeekday, weekdaysWithData, type WeekdayTimelineItem } from '../lib/programmeView';
+import { SubscriptionError } from '../components/SubscriptionError';
 
 export function ProgrammeScreen() {
-  const { year, weekdays, series, sessions, loading } = useProgramme();
+  const { year, weekdays, series, sessions, loading, error } = useProgramme();
   const [activeWeekday, setActiveWeekday] = useState<Weekday>(defaultProgrammeWeekday());
 
   const presentWeekdays = useMemo(
@@ -61,6 +62,15 @@ export function ProgrammeScreen() {
     return (
       <div className="card">
         <p>Loading…</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="card">
+        <h1>Programme</h1>
+        <SubscriptionError resource="the programme" />
       </div>
     );
   }

@@ -15,11 +15,16 @@ vi.mock('../../firebase', () => ({
   toAppError: (err: unknown) => err,
 }));
 
-// The admin programme list has its own Firestore subscription (tested via
-// its own module / the E2E suite); stub it out here so these tests exercise
-// only the import form's gating/report/replace logic.
+// The admin programme list and the series/session editor each have their own
+// Firestore subscriptions (tested via their own modules / the E2E suite);
+// stub them out here so these tests exercise only the import form's
+// gating/report/replace logic.
 vi.mock('./AdminProgrammeList', () => ({
   AdminProgrammeList: () => null,
+}));
+
+vi.mock('./ProgrammeEditor', () => ({
+  ProgrammeEditor: () => null,
 }));
 
 function emptyReport(overrides: Partial<ProgrammeImportReport> = {}): ProgrammeImportReport {

@@ -10,10 +10,28 @@ export interface ConfirmDialogProps {
   busy?: boolean;
   error?: string | null;
   danger?: boolean;
+  /**
+   * Admin-only "override a locked session" checkbox (plan §6, Phase 6b task
+   * deliverable 2: offered only while acting on behalf of a member). Pass
+   * both `force`/`onForceChange` to render it; omit both to leave it out.
+   */
+  force?: boolean;
+  onForceChange?: (value: boolean) => void;
 }
 
 /** A generic accessible confirm/cancel dialog (plan Phase 3b task: cancel entry, claim a listing). */
-export function ConfirmDialog({ title, body, confirmLabel, onConfirm, onClose, busy, error, danger }: ConfirmDialogProps) {
+export function ConfirmDialog({
+  title,
+  body,
+  confirmLabel,
+  onConfirm,
+  onClose,
+  busy,
+  error,
+  danger,
+  force,
+  onForceChange,
+}: ConfirmDialogProps) {
   return (
     <Dialog title={title} onClose={onClose}>
       {error && (
@@ -22,6 +40,12 @@ export function ConfirmDialog({ title, body, confirmLabel, onConfirm, onClose, b
         </div>
       )}
       <p>{body}</p>
+      {onForceChange && (
+        <label className="checkbox-field">
+          <input type="checkbox" checked={!!force} onChange={(e) => onForceChange(e.target.checked)} />
+          Override a locked session (admin)
+        </label>
+      )}
       <div className="actions-row">
         <button
           type="button"

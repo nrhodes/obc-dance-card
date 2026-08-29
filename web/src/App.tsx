@@ -1,5 +1,6 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { AuthProvider } from './auth/AuthProvider';
+import { ActingAsProvider } from './admin/ActingAsProvider';
 import { MembersDirectoryProvider } from './members/MembersDirectoryProvider';
 import { ProgrammeProvider } from './programme/ProgrammeProvider';
 import { InvitesProvider } from './invites/InvitesProvider';
@@ -16,8 +17,11 @@ import { ProgrammeScreen } from './screens/ProgrammeScreen';
 import { SessionScreen } from './screens/SessionScreen';
 import { InvitesScreen } from './screens/InvitesScreen';
 import { NotificationsScreen } from './screens/NotificationsScreen';
-import { MembersImportScreen } from './screens/admin/MembersImportScreen';
+import { MembersScreen } from './screens/admin/MembersScreen';
 import { ProgrammeImportScreen } from './screens/admin/ProgrammeImportScreen';
+import { BroadcastScreen } from './screens/admin/BroadcastScreen';
+import { AuditLogScreen } from './screens/admin/AuditLogScreen';
+import { IntegrityScreen } from './screens/admin/IntegrityScreen';
 
 export function App() {
   return (
@@ -34,19 +38,21 @@ export function App() {
         <Route
           element={
             <RequireMember>
-              <MembersDirectoryProvider>
-                <ProgrammeProvider>
-                  <InvitesProvider>
-                    <NotificationsProvider>
-                      <VisitorsProvider>
-                        <TeamsProvider>
-                          <AppShell />
-                        </TeamsProvider>
-                      </VisitorsProvider>
-                    </NotificationsProvider>
-                  </InvitesProvider>
-                </ProgrammeProvider>
-              </MembersDirectoryProvider>
+              <ActingAsProvider>
+                <MembersDirectoryProvider>
+                  <ProgrammeProvider>
+                    <InvitesProvider>
+                      <NotificationsProvider>
+                        <VisitorsProvider>
+                          <TeamsProvider>
+                            <AppShell />
+                          </TeamsProvider>
+                        </VisitorsProvider>
+                      </NotificationsProvider>
+                    </InvitesProvider>
+                  </ProgrammeProvider>
+                </MembersDirectoryProvider>
+              </ActingAsProvider>
             </RequireMember>
           }
         >
@@ -61,7 +67,7 @@ export function App() {
             path="/admin/members"
             element={
               <RequireAdmin>
-                <MembersImportScreen />
+                <MembersScreen />
               </RequireAdmin>
             }
           />
@@ -70,6 +76,30 @@ export function App() {
             element={
               <RequireAdmin>
                 <ProgrammeImportScreen />
+              </RequireAdmin>
+            }
+          />
+          <Route
+            path="/admin/broadcast"
+            element={
+              <RequireAdmin>
+                <BroadcastScreen />
+              </RequireAdmin>
+            }
+          />
+          <Route
+            path="/admin/audit"
+            element={
+              <RequireAdmin>
+                <AuditLogScreen />
+              </RequireAdmin>
+            }
+          />
+          <Route
+            path="/admin/integrity"
+            element={
+              <RequireAdmin>
+                <IntegrityScreen />
               </RequireAdmin>
             }
           />

@@ -19,6 +19,7 @@ vi.mock('../members/useMembersDirectory', () => ({
     byId: new Map(),
     nameOf: (id: string) => `Member ${id}`,
     loading: false,
+    error: null,
   }),
 }));
 
@@ -78,13 +79,13 @@ function renderWithRouter(ui: ReactElement) {
 
 describe('ProgrammeScreen', () => {
   it('shows the empty state when there is no published programme', () => {
-    useProgrammeMock.mockReturnValue({ year: null, programme: null, weekdays: [], series: [], sessions: [], loading: false });
+    useProgrammeMock.mockReturnValue({ year: null, programme: null, weekdays: [], series: [], sessions: [], loading: false, error: null });
     renderWithRouter(<ProgrammeScreen />);
     expect(screen.getByText("The programme hasn't been published yet.")).toBeTruthy();
   });
 
   it('shows a loading state', () => {
-    useProgrammeMock.mockReturnValue({ year: null, programme: null, weekdays: [], series: [], sessions: [], loading: true });
+    useProgrammeMock.mockReturnValue({ year: null, programme: null, weekdays: [], series: [], sessions: [], loading: true, error: null });
     renderWithRouter(<ProgrammeScreen />);
     expect(screen.getByText('Loading…')).toBeTruthy();
   });
@@ -97,6 +98,7 @@ describe('ProgrammeScreen', () => {
       series: [series()],
       sessions: [session(), session({ id: 'monday-marion-taylor-pairs-2027-01-18', date: '2027-01-18' })],
       loading: false,
+      error: null,
     });
     renderWithRouter(<ProgrammeScreen />);
 
@@ -119,6 +121,7 @@ describe('ProgrammeScreen', () => {
       series: [series(), series({ id: 'friday-x', weekday: 'friday', name: 'Friday Pairs', order: 0 })],
       sessions: [session(), session({ id: 'friday-x-2027-01-15', date: '2027-01-15', weekday: 'friday', seriesId: 'friday-x', title: 'Friday Pairs' })],
       loading: false,
+      error: null,
     });
     const user = userEvent.setup();
     renderWithRouter(<ProgrammeScreen />);
@@ -145,6 +148,7 @@ describe('ProgrammeScreen', () => {
         }),
       ],
       loading: false,
+      error: null,
     });
     renderWithRouter(<ProgrammeScreen />);
     expect(screen.getByRole('link', { name: /Holiday Bridge/ })).toBeTruthy();

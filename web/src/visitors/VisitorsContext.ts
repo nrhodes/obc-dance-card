@@ -11,6 +11,8 @@ import type { Visitor } from '@obc/shared';
 export interface VisitorsContextValue {
   visitors: Visitor[];
   loading: boolean;
+  /** Set when the live subscription failed (e.g. a rules denial) — never conflated with "no visitors". */
+  error: { code: string } | null;
 }
 
 export const VisitorsContext = createContext<VisitorsContextValue | undefined>(undefined);

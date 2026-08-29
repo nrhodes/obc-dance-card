@@ -20,6 +20,16 @@ vi.mock('../auth/useAuth', () => ({
   useAuth: () => useAuthMock(),
 }));
 
+// No admin acting-as in these tests — the effective member is always the
+// signed-in member (mirrors `ActingAsProvider`'s behaviour with nothing set).
+vi.mock('../admin/useEffectiveMember', () => ({
+  useEffectiveMember: () => ({
+    effectiveMemberId: useAuthMock().member?.id ?? null,
+    onBehalfOfMemberId: undefined,
+    actingAsName: null,
+  }),
+}));
+
 vi.mock('../firebase', () => ({ db: {} }));
 
 interface FakeQuery {
@@ -132,6 +142,7 @@ function setProgramme(sessionsList: Session[] = [session()], seriesList: Series[
     series: seriesList,
     sessions: sessionsList,
     loading: false,
+    error: null,
   });
 }
 

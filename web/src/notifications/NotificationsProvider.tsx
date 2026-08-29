@@ -13,11 +13,13 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
 
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<{ code: string } | null>(null);
 
   useEffect(() => {
     if (!uid) {
       setNotifications([]);
       setLoading(true);
+      setError(null);
       return;
     }
     setLoading(true);
@@ -31,10 +33,13 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
       q,
       (snap) => {
         setNotifications(snap.docs.map((d) => d.data() as Notification));
+        setError(null);
         setLoading(false);
       },
-      () => {
+      (err) => {
+        console.error('subscription_failed', 'notifications', err.code);
         setNotifications([]);
+        setError({ code: err.code });
         setLoading(false);
       },
     );
@@ -42,8 +47,8 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
   }, [uid]);
 
   const value = useMemo<NotificationsContextValue>(
-    () => ({ notifications, unreadCount: notifications.filter((n) => !n.read).length, loading }),
-    [notifications, loading],
+    () => ({ notifications, unreadCount: notifications.filter((n) => !n.read).length, loading, error }),
+    [notifications, loading, error],
   );
 
   return <NotificationsContext.Provider value={value}>{children}</NotificationsContext.Provider>;

@@ -9,12 +9,14 @@ import { paths, type Programme } from '@obc/shared';
 import { db, toAppError } from '../../firebase';
 import { publishProgramme } from '../../api';
 import { mapGenericError } from '../../auth/errors';
+import { SubscriptionError } from '../../components/SubscriptionError';
 
 export function AdminProgrammeList() {
   const [programmes, setProgrammes] = useState<Programme[]>([]);
   const [loading, setLoading] = useState(true);
   const [publishingYear, setPublishingYear] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [subError, setSubError] = useState<{ code: string } | null>(null);
 
   useEffect(() => {
     const q = query(collection(db, paths.programmes()), orderBy('year', 'desc'));
@@ -22,10 +24,13 @@ export function AdminProgrammeList() {
       q,
       (snap) => {
         setProgrammes(snap.docs.map((d) => d.data() as Programme));
+        setSubError(null);
         setLoading(false);
       },
-      () => {
+      (err) => {
+        console.error('subscription_failed', 'admin_programmes', err.code);
         setProgrammes([]);
+        setSubError({ code: err.code });
         setLoading(false);
       },
     );
@@ -47,6 +52,7 @@ export function AdminProgrammeList() {
   return (
     <div className="card">
       <h2>All programmes</h2>
+      {subError && <SubscriptionError resource="the programme list" />}
       {error && (
         <div className="alert alert-error" role="alert">
           {error}

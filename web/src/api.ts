@@ -9,6 +9,8 @@ import type {
   AddTeamSessionSubstituteResult,
   AddVisitorToTeamInput,
   AddVisitorToTeamResult,
+  BroadcastInput,
+  BroadcastResult,
   CancelEntryInput,
   CancelEntryResult,
   CancelInviteInput,
@@ -25,10 +27,14 @@ import type {
   CreateTeamResult,
   CreateVisitorInput,
   CreateVisitorResult,
+  DeactivateMemberInput,
+  DeactivateMemberResult,
   DeleteVisitorInput,
   DeleteVisitorResult,
   DisbandTeamInput,
   DisbandTeamResult,
+  EraseMemberInput,
+  EraseMemberResult,
   ImportMembersInput,
   ImportMembersResult,
   ImportProgrammeInput,
@@ -37,10 +43,14 @@ import type {
   InviteToTeamResult,
   LeaveTeamInput,
   LeaveTeamResult,
+  ListAuditLogInput,
+  ListAuditLogResult,
   MarkNotificationsReadInput,
   MarkPasswordSetInput,
   PublishProgrammeInput,
   PublishProgrammeResult,
+  ReactivateMemberInput,
+  ReactivateMemberResult,
   RemoveFromTeamInput,
   RemoveFromTeamResult,
   RemovePasswordInput,
@@ -50,8 +60,12 @@ import type {
   RequestLoginCodeResult,
   RespondToInviteInput,
   RespondToInviteResult,
+  RunPairingSweepInput,
+  RunPairingSweepResult,
   SendInviteInput,
   SendInviteResult,
+  SetMemberRoleInput,
+  SetMemberRoleResult,
   SetSoloStatusInput,
   SetSoloStatusResult,
   SetSubstituteInput,
@@ -62,6 +76,10 @@ import type {
   TransferCaptaincyResult,
   UpdateMyContactInput,
   UpdateMyPrefsInput,
+  UpdateSeriesInput,
+  UpdateSeriesResult,
+  UpdateSessionInput,
+  UpdateSessionResult,
   UpdateVisitorInput,
   UpdateVisitorResult,
   VerifyLoginCodeInput,
@@ -118,3 +136,14 @@ export const addTeamSessionSubstitute = callable<AddTeamSessionSubstituteInput, 
 export const clearTeamSessionSubstitute = callable<ClearTeamSessionSubstituteInput, ClearTeamSessionSubstituteResult>(
   'clearTeamSessionSubstitute',
 );
+
+// Admin: members / on-behalf / integrity (plan §9.2, §16 Phase 6 — Phase 6b task)
+export const setMemberRole = callable<SetMemberRoleInput, SetMemberRoleResult>('setMemberRole');
+export const deactivateMember = callable<DeactivateMemberInput, DeactivateMemberResult>('deactivateMember');
+export const reactivateMember = callable<ReactivateMemberInput, ReactivateMemberResult>('reactivateMember');
+export const eraseMember = callable<EraseMemberInput, EraseMemberResult>('eraseMember');
+export const updateSeries = callable<UpdateSeriesInput, UpdateSeriesResult>('updateSeries');
+export const updateSession = callable<UpdateSessionInput, UpdateSessionResult>('updateSession');
+export const broadcast = callable<BroadcastInput, BroadcastResult>('broadcast');
+export const listAuditLog = callable<ListAuditLogInput, ListAuditLogResult>('listAuditLog');
+export const runPairingSweep = callable<RunPairingSweepInput, RunPairingSweepResult>('runPairingSweep');

@@ -310,16 +310,109 @@ starting the emulators + seed + dev server first).
       entries in the series are cancelled and all members are notified
       ("Your team has been disbanded").
 
-## 6. Admin on-behalf (Phase 6)
+## 6. Admin web UI: members, on-behalf, programme editing, broadcast, audit log (Phase 6b)
 
-- [ ] Admin searches for Member E (who "phoned in") and signs them up with
-      Member F for a session.
-- [ ] Both cards match; `auditLog` records the admin as actor with a timestamp.
-- [ ] Admin cancels an entry on behalf of a member — audit row written,
-      partner notified.
+### 6.1 Members
 
-## 7. Integrity (Phase 6)
+- [ ] Sign in as the admin. Click **Admin: Members** in the nav. The **Members**
+      tab is selected by default; click **Import CSV** and confirm the existing
+      members-import screen still works unchanged, then click back to **Members**.
+- [ ] Type a member's first name into **Search by name** — the table narrows to
+      matches. Clear it. Set **Status** to "Inactive" — the table shows only
+      deactivated members (none, on a fresh seed). Set it back to "All". Set
+      **Role** to "Admins only" — only the seeded admin row remains. Set it back
+      to "All".
+- [ ] On an ordinary member's row, click **Make admin**, confirm in the dialog —
+      the row's Role column now reads "admin"; click **Remove admin** on the
+      *same* row (now the only non-seed admin) to reverse it.
+- [ ] With only the seeded admin remaining an admin, click **Remove admin** on
+      *that* row and confirm — the dialog shows the server's last-admin error
+      ("You cannot demote the only active admin.") verbatim, and the role is
+      unchanged.
+- [ ] On Member E's row, click **Deactivate**. The dialog explains the cascade
+      (future pairings cancelled, partners notified, invites expired, teams
+      updated) before you confirm; optionally type a reason. Confirm — the row's
+      Active column flips to "No", and the row now offers **Reactivate** and
+      **Erase** instead of **Deactivate**.
+- [ ] Click **Erase** on Member E's row immediately after deactivating — the
+      dialog explains the 30-day rule and shows the server's verbatim refusal
+      when you try anyway (it has not been 30 days). Type the member's full name
+      into the confirmation field exactly, then a *wrong* name — the **Erase
+      permanently** button stays disabled until the typed text matches exactly.
+- [ ] Click **Reactivate** on Member E's row and confirm — Active flips back to
+      "Yes" and the row's actions return to **Deactivate**.
 
-- [ ] Manually corrupt one half of a pairing in the emulator console.
-- [ ] Run `verifyPairingConsistency` — the discrepancy is reported and (when
-      repair is enabled) fixed, with an `auditLog` entry.
+### 6.2 Act on behalf (Phase 6b task deliverable 2)
+
+- [ ] On Member F's row, click **Act on behalf**. A banner appears above the
+      page content: "Acting on behalf of `<Member F>` — Stop".
+- [ ] Click **Programme** in the nav, open a Pairs session, and click **I'm
+      looking for a partner** → **Confirm**. The roster's "Looking for a
+      partner" list shows *Member F*, not the admin — confirming the action was
+      performed as the acted-on member.
+- [ ] Click **My card** in the nav — it shows Member F's card ("Showing
+      `<name>`'s dance card."), not the admin's own.
+- [ ] Click **Stop** in the banner — it disappears, and **My card** now shows
+      the admin's own (empty) card again.
+- [ ] Repeat the act-on-behalf flow, this time sending an invite (**Invite a
+      partner**) and signing up with a visitor (**Play with a visitor**) as
+      Member F — both dialogs work exactly as they do for the signed-in member,
+      and the resulting invite/entry belongs to Member F.
+
+### 6.3 Programme editing
+
+- [ ] Click **Admin: Programme**. Scroll to **Edit series & sessions**, pick the
+      published year, and expand a series with no sign-ups. Click **Edit
+      series**, change the name, and save — the change appears in the expanded
+      session list's title column.
+- [ ] On a series with a non-cancelled entry (e.g. after 6.2's sign-up), try
+      changing that series' **Format** and saving — the server's verbatim
+      refusal ("Cannot change this series' format while it has non-cancelled
+      entries…") is shown.
+- [ ] Click **Edit** on a session with a non-cancelled sign-up — the dialog
+      shows the sign-up count and, on trying to change its date, shows the
+      verbatim "Cancel entries first…" refusal.
+- [ ] Click **Edit** on a session with no sign-ups, then **Remove session** —
+      the confirm dialog explains the cascade; confirming removes it from the
+      list.
+
+### 6.4 Broadcast
+
+- [ ] Click **Admin: Broadcast**. Type a title and body. With no weekday
+      checked, the preview reads "This will notify `<N>` members (all active
+      members)." Check one weekday — the count narrows to active members with a
+      future session that day.
+- [ ] Click **Preview & send**, confirm in the dialog — the screen shows "Sent
+      to `<N>` members." Sign in as one of the recipients in a second browser
+      (or context) and confirm their **Notifications** feed shows the broadcast.
+
+### 6.5 Audit log
+
+- [ ] Click **Admin: Audit log**. With no filter, the most recent 50 entries
+      show (including the role changes, deactivate/reactivate, and on-behalf
+      rows from 6.1–6.2). Click **Load more** if there are more than 50.
+- [ ] Set **Filter by** to "Action", pick `set_solo_status_on_behalf` — only
+      that action's rows remain, with the admin as actor and Member F as
+      target. Click **Details** on one — a `<pre>` block shows the raw
+      `entityRef` context as plain text (never rendered as HTML).
+- [ ] Set **Filter by** to "Actor" or "Target member" and confirm each narrows
+      the list to that member's rows.
+
+## 7. Integrity (Phase 6b)
+
+- [ ] Click **Admin: Integrity**. Click **Run check** — with a freshly seeded
+      or otherwise healthy emulator, it reports 0 violations and "No violations
+      found."
+- [ ] Manually corrupt one half of a pairing in the Firestore emulator UI (e.g.
+      clear one side's `partner` field while the other still points at it).
+      Click **Run check** again — the violation is listed (kind, id, issues)
+      but nothing is fixed.
+- [ ] Click **Run check and repair**, read the confirm dialog's explanation of
+      what repair does, and confirm — the corrupted entry is reverted to
+      "looking for a partner", the "Repaired" count is non-zero, and the
+      **Run check and repair** result offers a link to the audit log
+      pre-filtered to `pairing_repair`; following it shows the repair's
+      before/after in a `<pre>` block.
+- [ ] Run `verifyPairingConsistency` (the scheduled job) directly and confirm
+      it produces the same kind of `auditLog` entry when `PAIRING_SWEEP_REPAIR`
+      is enabled.

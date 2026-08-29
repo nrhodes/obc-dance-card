@@ -17,6 +17,8 @@ export interface TeamsContextValue {
   myTeamForSeries: (seriesId: string) => Team | null;
   /** A team by id, or undefined if it doesn't exist / isn't forming or active. */
   teamById: (teamId: string) => Team | undefined;
+  /** Set when the live subscription failed (e.g. a rules denial) — never conflated with "no teams". */
+  error: { code: string } | null;
 }
 
 export const TeamsContext = createContext<TeamsContextValue | undefined>(undefined);

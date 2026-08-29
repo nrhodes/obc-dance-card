@@ -13,6 +13,8 @@ export interface NotificationsContextValue {
   notifications: Notification[];
   unreadCount: number;
   loading: boolean;
+  /** Set when the live subscription failed (e.g. a rules denial) — never conflated with "no notifications". */
+  error: { code: string } | null;
 }
 
 export const NotificationsContext = createContext<NotificationsContextValue | undefined>(undefined);

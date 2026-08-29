@@ -13,6 +13,7 @@ import { paths, sessionCutoff, type Entry } from '@obc/shared';
 import { db } from '../firebase';
 import type { AppError } from '../firebase';
 import { useAuth } from '../auth/useAuth';
+import { useEffectiveMember } from '../admin/useEffectiveMember';
 import { useProgramme } from '../programme/useProgramme';
 import { useMembersDirectory } from '../members/useMembersDirectory';
 import { useVisitors } from '../visitors/useVisitors';
@@ -23,6 +24,7 @@ import { buildTeamSessionView } from '../lib/team';
 import { deriveSessionActions, describeCancelConsequence, type OwnEntryActionState } from '../lib/sessionActions';
 import { filterPickableMembers } from '../lib/memberPicker';
 import { mapActionError } from '../lib/actionErrors';
+import { SubscriptionError } from '../components/SubscriptionError';
 import {
   cancelEntry,
   claimLookingForPartner,
@@ -58,9 +60,17 @@ export function SessionScreen() {
   const year = Number(yearParam);
   const { sessions, series, weekdays, loading: programmeLoading } = useProgramme(year);
   const { member } = useAuth();
-  const { members, nameOf } = useMembersDirectory();
+  // Plan Phase 6b task deliverable 2: while an admin is acting on behalf of
+  // a member, every action on this page targets that member instead of the
+  // signed-in admin, and this page's roster/"own entry" reads as them too.
+  const { effectiveMemberId, onBehalfOfMemberId, actingAsName } = useEffectiveMember();
+  const { members, byId, nameOf } = useMembersDirectory();
   const { visitors } = useVisitors();
   const teamsCtx = useTeams();
+  const effectiveMember = effectiveMemberId
+    ? (byId.get(effectiveMemberId) ?? (member && effectiveMemberId === member.id ? member : null))
+    : null;
+  const [force, setForce] = useState(false);
 
   const session = sessions.find((s) => s.id === sessionId);
   const seriesDoc = session?.seriesId ? series.find((s) => s.id === session.seriesId) : undefined;
@@ -69,6 +79,7 @@ export function SessionScreen() {
 
   const [entries, setEntries] = useState<Entry[]>([]);
   const [entriesLoaded, setEntriesLoaded] = useState(false);
+  const [entriesError, setEntriesError] = useState<{ code: string } | null>(null);
 
   useEffect(() => {
     if (!sessionId) return;
@@ -78,10 +89,13 @@ export function SessionScreen() {
       q,
       (snap) => {
         setEntries(snap.docs.map((d) => d.data() as Entry));
+        setEntriesError(null);
         setEntriesLoaded(true);
       },
-      () => {
+      (err) => {
+        console.error('subscription_failed', 'session_entries', err.code);
         setEntries([]);
+        setEntriesError({ code: err.code });
         setEntriesLoaded(true);
       },
     );
@@ -162,7 +176,7 @@ export function SessionScreen() {
   }
 
   const locked = weekdayDoc ? new Date() >= sessionCutoff(session.date, weekdayDoc.startTime) : false;
-  const ownEntry = member ? entries.find((e) => e.memberId === member.id) : undefined;
+  const ownEntry = effectiveMemberId ? entries.find((e) => e.memberId === effectiveMemberId) : undefined;
   const ownSummary = ownEntry ? describeOwnEntry(ownEntry, seriesTeams) : null;
 
   const roster = buildSessionRoster(entries, nameOf);
@@ -177,7 +191,7 @@ export function SessionScreen() {
     ? deriveSessionActions(ownEntry ?? null, session, weekdayDoc, roster, new Date(), {
         series: seriesDoc ?? null,
         team: myTeam,
-        actorMemberId: member?.id ?? null,
+        actorMemberId: effectiveMemberId,
         hasAbsence,
       })
     : null;
@@ -208,6 +222,7 @@ export function SessionScreen() {
         ...(input.scope === 'session' ? { sessionId: session.id } : {}),
         ...(input.scope === 'series' && session.seriesId ? { seriesId: session.seriesId } : {}),
         ...(input.message ? { message: input.message } : {}),
+        ...(onBehalfOfMemberId ? { onBehalfOfMemberId } : {}),
       });
       setInviteDialog(null);
       setNotice('Invite sent.');
@@ -223,7 +238,11 @@ export function SessionScreen() {
     setTeamInviteBusy(true);
     setTeamInviteError(null);
     try {
-      await inviteToTeam({ teamId: myTeam.id, toMemberId: teamInviteTarget.memberId });
+      await inviteToTeam({
+        teamId: myTeam.id,
+        toMemberId: teamInviteTarget.memberId,
+        ...(onBehalfOfMemberId ? { onBehalfOfMemberId } : {}),
+      });
       setTeamInviteTarget(null);
       setNotice(`Invited ${teamInviteTarget.name} to your team.`);
     } catch (err) {
@@ -238,8 +257,15 @@ export function SessionScreen() {
     setClaimBusy(true);
     setClaimError(null);
     try {
-      const result = await claimLookingForPartner({ year, sessionId: session.id, posterMemberId: claimTarget.memberId });
+      const result = await claimLookingForPartner({
+        year,
+        sessionId: session.id,
+        posterMemberId: claimTarget.memberId,
+        ...(onBehalfOfMemberId ? { onBehalfOfMemberId } : {}),
+        ...(force ? { force: true } : {}),
+      });
       setClaimTarget(null);
+      setForce(false);
       setNotice(
         result.team
           ? `${claimTarget.name} has joined your team.`
@@ -262,7 +288,13 @@ export function SessionScreen() {
       // `httpsCallable` serialises `undefined` fields as `null`, which the
       // server's zod schema (an `.optional()` string) rejects — omit the key
       // entirely rather than send `note: undefined`.
-      await setSoloStatus({ year, sessionId: session.id, status, ...(note ? { note } : {}) });
+      await setSoloStatus({
+        year,
+        sessionId: session.id,
+        status,
+        ...(note ? { note } : {}),
+        ...(onBehalfOfMemberId ? { onBehalfOfMemberId } : {}),
+      });
       setSoloDialogStatus(null);
       setNotice(
         isTeamsSeries
@@ -282,6 +314,12 @@ export function SessionScreen() {
 
   async function handleChangeSolo(newStatus: 'looking_for_partner' | 'available') {
     if (!session || !ownEntry) return;
+    // `clearSoloStatus` deliberately has no `onBehalfOfMemberId` (plan §9.2
+    // schema note) — it always acts on the caller, so this compound
+    // clear-then-set can only ever be done as yourself. The buttons that
+    // call this are hidden while acting on behalf (see `ActionsPanel`); this
+    // guard is defence in depth against calling it anyway.
+    if (onBehalfOfMemberId) return;
     setSoloBusy(true);
     setSoloError(null);
     try {
@@ -297,6 +335,7 @@ export function SessionScreen() {
 
   async function handleRemoveSolo() {
     if (!session) return;
+    if (onBehalfOfMemberId) return; // see handleChangeSolo
     setSoloBusy(true);
     setSoloError(null);
     try {
@@ -314,8 +353,13 @@ export function SessionScreen() {
     setCancelBusy(true);
     setCancelError(null);
     try {
-      await cancelEntry({ entryId: ownEntry.id });
+      await cancelEntry({
+        entryId: ownEntry.id,
+        ...(onBehalfOfMemberId ? { onBehalfOfMemberId } : {}),
+        ...(force ? { force: true } : {}),
+      });
       setCancelDialogOpen(false);
+      setForce(false);
       setNotice('Your entry for this session has been cancelled.');
     } catch (err) {
       setCancelError(mapActionError(err as AppError));
@@ -325,7 +369,7 @@ export function SessionScreen() {
   }
 
   async function handleCreateVisitor(values: VisitorFormValues) {
-    const result = await createVisitor(values);
+    const result = await createVisitor({ ...values, ...(onBehalfOfMemberId ? { onBehalfOfMemberId } : {}) });
     return result.visitor;
   }
 
@@ -339,6 +383,7 @@ export function SessionScreen() {
         year,
         visitorId,
         ...(opts.wholeSeries && session.seriesId ? { seriesId: session.seriesId } : { sessionId: session.id }),
+        ...(onBehalfOfMemberId ? { onBehalfOfMemberId } : {}),
       });
       setVisitorDialogOpen(false);
       setNotice('Signed up to play with your visitor.');
@@ -354,7 +399,12 @@ export function SessionScreen() {
     setSubstituteBusy(true);
     setSubstituteError(null);
     try {
-      await setSubstitute({ entryId: ownEntry.id, substitute, coverFor });
+      await setSubstitute({
+        entryId: ownEntry.id,
+        substitute,
+        coverFor,
+        ...(onBehalfOfMemberId ? { onBehalfOfMemberId } : {}),
+      });
       setSubstituteDialogOpen(false);
       setNotice('Substitute arranged.');
     } catch (err) {
@@ -369,7 +419,7 @@ export function SessionScreen() {
     setRemoveSubBusy(true);
     setRemoveSubError(null);
     try {
-      await clearSubstitute({ entryId: ownEntry.id });
+      await clearSubstitute({ entryId: ownEntry.id, ...(onBehalfOfMemberId ? { onBehalfOfMemberId } : {}) });
       setRemoveSubOpen(false);
       setNotice('Substitute removed.');
     } catch (err) {
@@ -414,6 +464,14 @@ export function SessionScreen() {
           </div>
         )}
       </div>
+
+      {entriesError && <SubscriptionError resource="who's playing" />}
+
+      {actingAsName && (
+        <div className="card muted" role="status">
+          Showing {actingAsName}&apos;s card for this session.
+        </div>
+      )}
 
       {ownSummary && (
         <div className="card alert-success" role="status">
@@ -494,7 +552,7 @@ export function SessionScreen() {
         )}
       </div>
 
-      {actions && actions.state.kind === 'teamsFormat' && seriesDoc && member && (
+      {actions && actions.state.kind === 'teamsFormat' && seriesDoc && effectiveMember && (
         <div className="card">
           <h2>Team</h2>
           <TeamPanel
@@ -505,10 +563,12 @@ export function SessionScreen() {
             team={myTeam}
             otherTeams={otherTeams}
             sessionEntries={entries}
-            member={member}
+            member={effectiveMember}
             members={members}
             nameOf={nameOf}
             visitors={visitors}
+            {...(onBehalfOfMemberId ? { onBehalfOfMemberId } : {})}
+            disableSoloEdit={!!onBehalfOfMemberId}
             onNotice={setNotice}
             onSolo={(status) => {
               clearAllErrors();
@@ -527,6 +587,7 @@ export function SessionScreen() {
             actions={actions}
             ownEntry={ownEntry}
             nameOf={nameOf}
+            disableSoloEdit={!!onBehalfOfMemberId}
             onInvite={() => {
               clearAllErrors();
               setInviteDialog({ initialMemberId: null });
@@ -560,7 +621,7 @@ export function SessionScreen() {
       {inviteDialog && (
         <InvitePartnerDialog
           members={members}
-          selfId={member?.id ?? ''}
+          selfId={effectiveMemberId ?? ''}
           excludeMemberIds={confirmedMemberIds}
           seriesSessionCount={seriesDoc?.sessionIds.length}
           initialMemberId={inviteDialog.initialMemberId}
@@ -595,7 +656,11 @@ export function SessionScreen() {
           busy={claimBusy}
           error={claimError}
           onConfirm={() => void handleConfirmClaim()}
-          onClose={() => setClaimTarget(null)}
+          onClose={() => {
+            setClaimTarget(null);
+            setForce(false);
+          }}
+          {...(onBehalfOfMemberId ? { force, onForceChange: setForce } : {})}
         />
       )}
 
@@ -619,7 +684,11 @@ export function SessionScreen() {
           busy={cancelBusy}
           error={cancelError}
           onConfirm={() => void handleCancelEntry()}
-          onClose={() => setCancelDialogOpen(false)}
+          onClose={() => {
+            setCancelDialogOpen(false);
+            setForce(false);
+          }}
+          {...(onBehalfOfMemberId ? { force, onForceChange: setForce } : {})}
         />
       )}
 
@@ -639,7 +708,7 @@ export function SessionScreen() {
       {substituteDialogOpen && actions?.state.kind === 'confirmed' && (
         <SubstituteDialog
           partnerName={actions.state.partner.displayName}
-          members={filterPickableMembers(members, { selfId: member?.id ?? '', excludeMemberIds: confirmedMemberIds, query: '' })}
+          members={filterPickableMembers(members, { selfId: effectiveMemberId ?? '', excludeMemberIds: confirmedMemberIds, query: '' })}
           visitors={visitors}
           busy={substituteBusy}
           error={substituteError}
@@ -706,6 +775,7 @@ function ActionsPanel({
   actions,
   ownEntry,
   nameOf,
+  disableSoloEdit,
   onInvite,
   onSolo,
   onChangeSolo,
@@ -718,6 +788,8 @@ function ActionsPanel({
   actions: { state: OwnEntryActionState };
   ownEntry: Entry | undefined;
   nameOf: (memberId: string) => string;
+  /** True while acting on behalf of another member: `clearSoloStatus` can only ever target the caller (plan §9.2), so switching/removing a noticeboard listing isn't offered here. */
+  disableSoloEdit?: boolean;
   onInvite: () => void;
   onSolo: (status: 'looking_for_partner' | 'available') => void;
   onChangeSolo: (status: 'looking_for_partner' | 'available') => void;
@@ -755,6 +827,9 @@ function ActionsPanel({
   if (state.kind === 'solo') {
     const other = state.status === 'looking_for_partner' ? 'available' : 'looking_for_partner';
     const otherLabel = other === 'available' ? 'Switch to available' : 'Switch to looking for a partner';
+    if (disableSoloEdit) {
+      return <p className="muted">Switching or removing a noticeboard listing isn&apos;t available while acting on behalf of another member.</p>;
+    }
     return (
       <div className="actions-row">
         <button type="button" className="button button-secondary" onClick={() => onChangeSolo(other)}>
