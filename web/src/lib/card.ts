@@ -65,6 +65,8 @@ export interface CardRow {
   title: string;
   date: string;
   statusText: string;
+  /** True for a Teams-series entry — the row shows a "Team" badge (plan Phase 4c task, keep it simple). */
+  isTeam: boolean;
 }
 
 export interface CardGroup {
@@ -86,6 +88,7 @@ function toRow(entry: Entry, sessions: Session[], series: Series[], teams: Team[
     title: cardSessionTitle(entry, sessions, series),
     date: entry.date,
     statusText: describeCardStatus(entry, teams),
+    isTeam: entry.teamId != null,
   };
 }
 

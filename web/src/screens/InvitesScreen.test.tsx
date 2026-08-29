@@ -15,6 +15,7 @@ vi.mock('../api', () => ({
 afterEach(() => {
   respondToInviteMock.mockReset();
   cancelInviteMock.mockReset();
+  teamsFixture = [];
 });
 
 let invitesFixture: { incoming: Invite[]; outgoing: Invite[]; resolved: Invite[]; loading: boolean } = {
@@ -37,12 +38,40 @@ vi.mock('../members/useMembersDirectory', () => ({
   }),
 }));
 
+let teamsFixture: Array<{ id: string; name: string }> = [];
+
+vi.mock('../teams/useTeams', () => ({
+  useTeams: () => ({
+    teams: teamsFixture,
+    loading: false,
+    teamsForSeries: () => teamsFixture,
+    myTeamForSeries: () => null,
+    teamById: (id: string) => teamsFixture.find((t) => t.id === id),
+  }),
+}));
+
 vi.mock('../programme/useProgramme', () => ({
   useProgramme: () => ({
     year: 2027,
     programme: null,
     weekdays: [],
-    series: [],
+    series: [
+      {
+        id: 'monday-campbell-cave-teams',
+        weekday: 'monday',
+        name: 'Campbell Cave Teams',
+        scoring: 'Scr',
+        format: 'Teams',
+        bestOf: null,
+        allowSubstitute: true,
+        order: 0,
+        sessionIds: [],
+        teamMin: 4,
+        teamMax: 6,
+        createdAt: '',
+        updatedAt: '',
+      },
+    ],
     sessions: [
       {
         id: 's1',
@@ -151,6 +180,38 @@ describe('InvitesScreen', () => {
 
     await user.click(screen.getByRole('button', { name: 'Decline' }));
     expect((await screen.findByRole('alert')).textContent).toBe('Too many invites today');
+  });
+
+  it('labels a team join invite "Team invite from <captain> — <team name> (<series>)"', () => {
+    teamsFixture = [{ id: 'team-1', name: 'Doe team' }];
+    invitesFixture = {
+      incoming: [
+        invite({
+          scope: 'team',
+          kind: 'join',
+          teamId: 'team-1',
+          seriesId: 'monday-campbell-cave-teams',
+          sessionIds: ['s-teams-1'],
+        }),
+      ],
+      outgoing: [],
+      resolved: [],
+      loading: false,
+    };
+    render(<InvitesScreen />);
+    expect(screen.getByText('Team invite from John Smith — Doe team (Campbell Cave Teams)')).toBeTruthy();
+  });
+
+  it('labels a captaincy offer "<name> wants you to be captain of <team>"', () => {
+    teamsFixture = [{ id: 'team-1', name: 'Doe team' }];
+    invitesFixture = {
+      incoming: [invite({ scope: 'team', kind: 'captaincy', teamId: 'team-1', seriesId: 'monday-campbell-cave-teams', sessionIds: [] })],
+      outgoing: [],
+      resolved: [],
+      loading: false,
+    };
+    render(<InvitesScreen />);
+    expect(screen.getByText('John Smith wants you to be captain of Doe team')).toBeTruthy();
   });
 
   it('lists recently resolved invites read-only', () => {

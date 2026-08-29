@@ -1,30 +1,48 @@
 /**
- * Session page (`/session/:year/:sessionId`, plan Phase 3b task, §5.6, §6,
- * §9.2, §9.3, §12A.1). "Who's playing" is rendered from `entries` and (for a
- * Teams series) `teams`, as in Phase 2b; every action button now calls a
- * real callable (plan §3: clients never write Firestore — every mutation
- * here goes through `sendInvite` / `respondToInvite` / `setSoloStatus` /
- * `clearSoloStatus` / `claimLookingForPartner` / `cancelEntry`). Visitor
- * sign-up, substitutes, and teams actions remain disabled placeholders
- * (Phase 4 / 4b).
+ * Session page (`/session/:year/:sessionId`, plan Phase 3b task, extended
+ * Phase 4c for visitors/substitutes/teams; §5.6, §6, §9.2, §9.3, §12, §12A).
+ * "Who's playing" is rendered from `entries` and (for a Teams series)
+ * `teams`; every action button calls a real callable (plan §3: clients
+ * never write Firestore — every mutation here goes through a typed binding
+ * in `../api`).
  */
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
-import { paths, sessionCutoff, type Entry, type Team } from '@obc/shared';
+import { paths, sessionCutoff, type Entry } from '@obc/shared';
 import { db } from '../firebase';
 import type { AppError } from '../firebase';
 import { useAuth } from '../auth/useAuth';
 import { useProgramme } from '../programme/useProgramme';
 import { useMembersDirectory } from '../members/useMembersDirectory';
+import { useVisitors } from '../visitors/useVisitors';
+import { useTeams } from '../teams/useTeams';
 import { formatDateNZ, formatTimeOfDay } from '../lib/format';
 import { buildSessionRoster, describeOwnEntry, noticeboardLabels, teamMemberName, type SoloRow } from '../lib/roster';
-import { deriveSessionActions, describeCancelConsequence } from '../lib/sessionActions';
+import { buildTeamSessionView } from '../lib/team';
+import { deriveSessionActions, describeCancelConsequence, type OwnEntryActionState } from '../lib/sessionActions';
+import { filterPickableMembers } from '../lib/memberPicker';
 import { mapActionError } from '../lib/actionErrors';
-import { cancelEntry, claimLookingForPartner, clearSoloStatus, sendInvite, setSoloStatus } from '../api';
+import {
+  cancelEntry,
+  claimLookingForPartner,
+  clearSoloStatus,
+  clearSubstitute,
+  createVisitor,
+  inviteToTeam,
+  sendInvite,
+  setSoloStatus,
+  setSubstitute,
+  signUpWithVisitor,
+} from '../api';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { InvitePartnerDialog } from '../components/InvitePartnerDialog';
 import { SoloStatusDialog } from '../components/SoloStatusDialog';
+import { VisitorPickerDialog } from '../components/VisitorPickerDialog';
+import { SubstituteDialog } from '../components/SubstituteDialog';
+import type { PartnerRefInput } from '../components/PartnerPickerDialog';
+import { TeamPanel } from '../components/TeamPanel';
+import type { VisitorFormValues } from '../components/VisitorForm';
 
 interface InviteDialogState {
   initialMemberId: string | null;
@@ -41,6 +59,8 @@ export function SessionScreen() {
   const { sessions, series, weekdays, loading: programmeLoading } = useProgramme(year);
   const { member } = useAuth();
   const { members, nameOf } = useMembersDirectory();
+  const { visitors } = useVisitors();
+  const teamsCtx = useTeams();
 
   const session = sessions.find((s) => s.id === sessionId);
   const seriesDoc = session?.seriesId ? series.find((s) => s.id === session.seriesId) : undefined;
@@ -67,29 +87,10 @@ export function SessionScreen() {
     );
   }, [sessionId]);
 
-  const [teams, setTeams] = useState<Team[]>([]);
-  const [teamsLoaded, setTeamsLoaded] = useState(true);
-
-  useEffect(() => {
-    if (!seriesDoc || seriesDoc.format !== 'Teams') {
-      setTeams([]);
-      setTeamsLoaded(true);
-      return;
-    }
-    setTeamsLoaded(false);
-    const q = query(collection(db, paths.teams()), where('seriesId', '==', seriesDoc.id));
-    return onSnapshot(
-      q,
-      (snap) => {
-        setTeams(snap.docs.map((d) => d.data() as Team));
-        setTeamsLoaded(true);
-      },
-      () => {
-        setTeams([]);
-        setTeamsLoaded(true);
-      },
-    );
-  }, [seriesDoc]);
+  const seriesTeams = seriesDoc ? teamsCtx.teamsForSeries(seriesDoc.id) : [];
+  const myTeam = seriesDoc ? teamsCtx.myTeamForSeries(seriesDoc.id) : null;
+  const otherTeams = seriesTeams.filter((t) => t.id !== myTeam?.id);
+  const hasAbsence = myTeam && session ? buildTeamSessionView(myTeam, entries, session.id).hasAbsence : false;
 
   // ---- action dialogs / in-flight state ----
   const [notice, setNotice] = useState<string | null>(null);
@@ -97,6 +98,10 @@ export function SessionScreen() {
   const [inviteDialog, setInviteDialog] = useState<InviteDialogState | null>(null);
   const [inviteBusy, setInviteBusy] = useState(false);
   const [inviteError, setInviteError] = useState<string | null>(null);
+
+  const [teamInviteTarget, setTeamInviteTarget] = useState<ClaimTarget | null>(null);
+  const [teamInviteBusy, setTeamInviteBusy] = useState(false);
+  const [teamInviteError, setTeamInviteError] = useState<string | null>(null);
 
   const [claimTarget, setClaimTarget] = useState<ClaimTarget | null>(null);
   const [claimBusy, setClaimBusy] = useState(false);
@@ -110,7 +115,19 @@ export function SessionScreen() {
   const [cancelBusy, setCancelBusy] = useState(false);
   const [cancelError, setCancelError] = useState<string | null>(null);
 
-  if (programmeLoading || !entriesLoaded || !teamsLoaded) {
+  const [visitorDialogOpen, setVisitorDialogOpen] = useState(false);
+  const [visitorBusy, setVisitorBusy] = useState(false);
+  const [visitorError, setVisitorError] = useState<string | null>(null);
+
+  const [substituteDialogOpen, setSubstituteDialogOpen] = useState(false);
+  const [substituteBusy, setSubstituteBusy] = useState(false);
+  const [substituteError, setSubstituteError] = useState<string | null>(null);
+
+  const [removeSubOpen, setRemoveSubOpen] = useState(false);
+  const [removeSubBusy, setRemoveSubBusy] = useState(false);
+  const [removeSubError, setRemoveSubError] = useState<string | null>(null);
+
+  if (programmeLoading || !entriesLoaded || teamsCtx.loading) {
     return (
       <div className="card">
         <p>Loading…</p>
@@ -146,14 +163,24 @@ export function SessionScreen() {
 
   const locked = weekdayDoc ? new Date() >= sessionCutoff(session.date, weekdayDoc.startTime) : false;
   const ownEntry = member ? entries.find((e) => e.memberId === member.id) : undefined;
-  const ownSummary = ownEntry ? describeOwnEntry(ownEntry, teams) : null;
+  const ownSummary = ownEntry ? describeOwnEntry(ownEntry, seriesTeams) : null;
 
   const roster = buildSessionRoster(entries, nameOf);
   const labels = noticeboardLabels(seriesDoc?.format);
   const nobodySignedUp =
-    roster.pairs.length === 0 && roster.lookingForPartner.length === 0 && roster.available.length === 0 && teams.length === 0;
+    roster.pairs.length === 0 &&
+    roster.lookingForPartner.length === 0 &&
+    roster.available.length === 0 &&
+    seriesTeams.length === 0;
 
-  const actions = weekdayDoc ? deriveSessionActions(ownEntry ?? null, session, weekdayDoc, roster, new Date()) : null;
+  const actions = weekdayDoc
+    ? deriveSessionActions(ownEntry ?? null, session, weekdayDoc, roster, new Date(), {
+        series: seriesDoc ?? null,
+        team: myTeam,
+        actorMemberId: member?.id ?? null,
+        hasAbsence,
+      })
+    : null;
 
   const confirmedMemberIds = new Set<string>();
   for (const pair of roster.pairs) {
@@ -191,6 +218,21 @@ export function SessionScreen() {
     }
   }
 
+  async function handleConfirmTeamInvite() {
+    if (!teamInviteTarget || !myTeam) return;
+    setTeamInviteBusy(true);
+    setTeamInviteError(null);
+    try {
+      await inviteToTeam({ teamId: myTeam.id, toMemberId: teamInviteTarget.memberId });
+      setTeamInviteTarget(null);
+      setNotice(`Invited ${teamInviteTarget.name} to your team.`);
+    } catch (err) {
+      setTeamInviteError(mapActionError(err as AppError));
+    } finally {
+      setTeamInviteBusy(false);
+    }
+  }
+
   async function handleConfirmClaim() {
     if (!claimTarget || !session) return;
     setClaimBusy(true);
@@ -199,9 +241,11 @@ export function SessionScreen() {
       const result = await claimLookingForPartner({ year, sessionId: session.id, posterMemberId: claimTarget.memberId });
       setClaimTarget(null);
       setNotice(
-        result.repeatPartnerWarning
-          ? `You've already played with ${claimTarget.name} in this individual series.`
-          : `You're now playing with ${claimTarget.name}.`,
+        result.team
+          ? `${claimTarget.name} has joined your team.`
+          : result.repeatPartnerWarning
+            ? `You've already played with ${claimTarget.name} in this individual series.`
+            : `You're now playing with ${claimTarget.name}.`,
       );
     } catch (err) {
       setClaimError(mapActionError(err as AppError));
@@ -220,7 +264,15 @@ export function SessionScreen() {
       // entirely rather than send `note: undefined`.
       await setSoloStatus({ year, sessionId: session.id, status, ...(note ? { note } : {}) });
       setSoloDialogStatus(null);
-      setNotice(status === 'looking_for_partner' ? "You're now looking for a partner." : "You're now marked as available.");
+      setNotice(
+        isTeamsSeries
+          ? status === 'looking_for_partner'
+            ? "You're now looking for a team."
+            : "You're now available for a team."
+          : status === 'looking_for_partner'
+            ? "You're now looking for a partner."
+            : "You're now marked as available.",
+      );
     } catch (err) {
       setSoloError(mapActionError(err as AppError));
     } finally {
@@ -272,9 +324,64 @@ export function SessionScreen() {
     }
   }
 
+  async function handleCreateVisitor(values: VisitorFormValues) {
+    const result = await createVisitor(values);
+    return result.visitor;
+  }
+
+  async function handlePlayWithVisitor(visitorId: string, opts: { wholeSeries: boolean }) {
+    if (!session) return;
+    setVisitorBusy(true);
+    setVisitorError(null);
+    try {
+      await signUpWithVisitor({
+        scope: opts.wholeSeries ? 'series' : 'session',
+        year,
+        visitorId,
+        ...(opts.wholeSeries && session.seriesId ? { seriesId: session.seriesId } : { sessionId: session.id }),
+      });
+      setVisitorDialogOpen(false);
+      setNotice('Signed up to play with your visitor.');
+    } catch (err) {
+      setVisitorError(mapActionError(err as AppError));
+    } finally {
+      setVisitorBusy(false);
+    }
+  }
+
+  async function handleArrangeSubstitute(coverFor: 'self' | 'partner', substitute: PartnerRefInput) {
+    if (!ownEntry) return;
+    setSubstituteBusy(true);
+    setSubstituteError(null);
+    try {
+      await setSubstitute({ entryId: ownEntry.id, substitute, coverFor });
+      setSubstituteDialogOpen(false);
+      setNotice('Substitute arranged.');
+    } catch (err) {
+      setSubstituteError(mapActionError(err as AppError));
+    } finally {
+      setSubstituteBusy(false);
+    }
+  }
+
+  async function handleRemoveSubstitute() {
+    if (!ownEntry) return;
+    setRemoveSubBusy(true);
+    setRemoveSubError(null);
+    try {
+      await clearSubstitute({ entryId: ownEntry.id });
+      setRemoveSubOpen(false);
+      setNotice('Substitute removed.');
+    } catch (err) {
+      setRemoveSubError(mapActionError(err as AppError));
+    } finally {
+      setRemoveSubBusy(false);
+    }
+  }
+
   function claimLabelFor(row: SoloRow): string | null {
     if (!actions || !actions.claimableMemberIds.includes(row.memberId)) return null;
-    return `Play with ${row.name}`;
+    return isTeamsSeries ? `Add ${row.name} to my team` : `Play with ${row.name}`;
   }
 
   function inviteLabelFor(row: SoloRow): string | null {
@@ -337,9 +444,9 @@ export function SessionScreen() {
           </ul>
         )}
 
-        {isTeamsSeries && teams.length > 0 && (
+        {isTeamsSeries && seriesTeams.length > 0 && (
           <div className="stack">
-            {teams.map((team) => (
+            {seriesTeams.map((team) => (
               <div key={team.id} className="card team-card">
                 <h3>{team.name}</h3>
                 <p className="muted">
@@ -377,13 +484,43 @@ export function SessionScreen() {
             actionLabel={inviteLabelFor}
             onAction={(row) => {
               clearAllErrors();
-              setInviteDialog({ initialMemberId: row.memberId });
+              if (isTeamsSeries) {
+                setTeamInviteTarget({ memberId: row.memberId, name: row.name });
+              } else {
+                setInviteDialog({ initialMemberId: row.memberId });
+              }
             }}
           />
         )}
       </div>
 
-      {actions && (
+      {actions && actions.state.kind === 'teamsFormat' && seriesDoc && member && (
+        <div className="card">
+          <h2>Team</h2>
+          <TeamPanel
+            year={year}
+            series={seriesDoc}
+            session={session}
+            role={actions.state.role}
+            team={myTeam}
+            otherTeams={otherTeams}
+            sessionEntries={entries}
+            member={member}
+            members={members}
+            nameOf={nameOf}
+            visitors={visitors}
+            onNotice={setNotice}
+            onSolo={(status) => {
+              clearAllErrors();
+              setSoloDialogStatus(status);
+            }}
+            onChangeSolo={(status) => void handleChangeSolo(status)}
+            onRemoveSolo={() => void handleRemoveSolo()}
+          />
+        </div>
+      )}
+
+      {actions && actions.state.kind !== 'teamsFormat' && (
         <div className="card">
           <h2>Actions</h2>
           <ActionsPanel
@@ -404,6 +541,18 @@ export function SessionScreen() {
               clearAllErrors();
               setCancelDialogOpen(true);
             }}
+            onPlayWithVisitor={() => {
+              clearAllErrors();
+              setVisitorDialogOpen(true);
+            }}
+            onArrangeSubstitute={() => {
+              clearAllErrors();
+              setSubstituteDialogOpen(true);
+            }}
+            onRemoveSubstitute={() => {
+              clearAllErrors();
+              setRemoveSubOpen(true);
+            }}
           />
         </div>
       )}
@@ -422,11 +571,27 @@ export function SessionScreen() {
         />
       )}
 
+      {teamInviteTarget && (
+        <ConfirmDialog
+          title="Invite to your team?"
+          body={`${teamInviteTarget.name} will be sent an invite to join your team.`}
+          confirmLabel="Send invite"
+          busy={teamInviteBusy}
+          error={teamInviteError}
+          onConfirm={() => void handleConfirmTeamInvite()}
+          onClose={() => setTeamInviteTarget(null)}
+        />
+      )}
+
       {claimTarget && (
         <ConfirmDialog
-          title="Play with this partner?"
-          body={`You'll be paired with ${claimTarget.name} for this session.`}
-          confirmLabel="Play with them"
+          title={isTeamsSeries ? 'Add to your team?' : 'Play with this partner?'}
+          body={
+            isTeamsSeries
+              ? `${claimTarget.name} will join your team for every remaining session in this series.`
+              : `You'll be paired with ${claimTarget.name} for this session.`
+          }
+          confirmLabel={isTeamsSeries ? 'Add to my team' : 'Play with them'}
           busy={claimBusy}
           error={claimError}
           onConfirm={() => void handleConfirmClaim()}
@@ -437,6 +602,7 @@ export function SessionScreen() {
       {soloDialogStatus && (
         <SoloStatusDialog
           status={soloDialogStatus}
+          entityLabel={isTeamsSeries ? 'team' : 'partner'}
           busy={soloBusy}
           error={soloError}
           onClose={() => setSoloDialogStatus(null)}
@@ -454,6 +620,45 @@ export function SessionScreen() {
           error={cancelError}
           onConfirm={() => void handleCancelEntry()}
           onClose={() => setCancelDialogOpen(false)}
+        />
+      )}
+
+      {visitorDialogOpen && (
+        <VisitorPickerDialog
+          title="Play with a visitor"
+          visitors={visitors}
+          seriesSessionCount={seriesDoc?.sessionIds.length}
+          busy={visitorBusy}
+          error={visitorError}
+          onClose={() => setVisitorDialogOpen(false)}
+          onSelect={(visitorId, opts) => void handlePlayWithVisitor(visitorId, opts)}
+          onCreateVisitor={handleCreateVisitor}
+        />
+      )}
+
+      {substituteDialogOpen && actions?.state.kind === 'confirmed' && (
+        <SubstituteDialog
+          partnerName={actions.state.partner.displayName}
+          members={filterPickableMembers(members, { selfId: member?.id ?? '', excludeMemberIds: confirmedMemberIds, query: '' })}
+          visitors={visitors}
+          busy={substituteBusy}
+          error={substituteError}
+          onClose={() => setSubstituteDialogOpen(false)}
+          onSubmit={(coverFor, substitute) => void handleArrangeSubstitute(coverFor, substitute)}
+          onCreateVisitor={handleCreateVisitor}
+        />
+      )}
+
+      {removeSubOpen && (
+        <ConfirmDialog
+          title="Remove this substitute?"
+          body="The original pairing will be restored for this session."
+          confirmLabel="Remove substitute"
+          danger
+          busy={removeSubBusy}
+          error={removeSubError}
+          onConfirm={() => void handleRemoveSubstitute()}
+          onClose={() => setRemoveSubOpen(false)}
         />
       )}
     </div>
@@ -506,8 +711,11 @@ function ActionsPanel({
   onChangeSolo,
   onRemoveSolo,
   onCancel,
+  onPlayWithVisitor,
+  onArrangeSubstitute,
+  onRemoveSubstitute,
 }: {
-  actions: ReturnType<typeof deriveSessionActions>;
+  actions: { state: OwnEntryActionState };
   ownEntry: Entry | undefined;
   nameOf: (memberId: string) => string;
   onInvite: () => void;
@@ -515,24 +723,14 @@ function ActionsPanel({
   onChangeSolo: (status: 'looking_for_partner' | 'available') => void;
   onRemoveSolo: () => void;
   onCancel: () => void;
+  onPlayWithVisitor: () => void;
+  onArrangeSubstitute: () => void;
+  onRemoveSubstitute: () => void;
 }) {
   const { state } = actions;
 
   if (state.kind === 'locked') {
     return <p>This session has started.</p>;
-  }
-
-  if (state.kind === 'teamsFormat') {
-    return (
-      <div>
-        <p>This is a teams event.</p>
-        <div className="actions-row">
-          <button type="button" className="button button-primary" disabled title="Coming in a future update">
-            Start or join a team
-          </button>
-        </div>
-      </div>
-    );
   }
 
   if (state.kind === 'noEntryOpen') {
@@ -547,7 +745,7 @@ function ActionsPanel({
         <button type="button" className="button button-secondary" onClick={() => onSolo('available')}>
           I&apos;m available
         </button>
-        <button type="button" className="button button-secondary" disabled title="Coming soon">
+        <button type="button" className="button button-secondary" onClick={onPlayWithVisitor}>
           Play with a visitor
         </button>
       </div>
@@ -570,16 +768,37 @@ function ActionsPanel({
   }
 
   if (state.kind === 'confirmed' || state.kind === 'substituted') {
+    const arranged =
+      state.kind === 'substituted' ? state.substitute : state.substituteOption.kind === 'arranged' ? state.substituteOption.substitute : null;
     return (
-      <div className="actions-row">
-        <button type="button" className="button button-danger" onClick={onCancel}>
-          Cancel this session
-        </button>
-        {state.kind === 'confirmed' && (
-          <button type="button" className="button button-secondary" disabled title="Coming soon">
-            Arrange a substitute
-          </button>
+      <div className="stack">
+        {arranged && (
+          <p>
+            {arranged.displayName} is standing in {state.kind === 'substituted' ? 'for you' : `for ${state.partner.displayName}`} this
+            week.
+          </p>
         )}
+        {state.kind === 'confirmed' && state.substituteOption.kind === 'visitorPairing' && (
+          <p className="muted">To change a visitor partner, cancel and sign up again.</p>
+        )}
+        {state.kind === 'confirmed' && state.substituteOption.kind === 'notAllowed' && (
+          <p className="muted">This series does not allow substitutes.</p>
+        )}
+        <div className="actions-row">
+          <button type="button" className="button button-danger" onClick={onCancel}>
+            Cancel this session
+          </button>
+          {state.kind === 'confirmed' && state.substituteOption.kind === 'available' && (
+            <button type="button" className="button button-secondary" onClick={onArrangeSubstitute}>
+              Arrange a substitute
+            </button>
+          )}
+          {(state.kind === 'substituted' || (state.kind === 'confirmed' && state.substituteOption.kind === 'arranged')) && (
+            <button type="button" className="button button-secondary" onClick={onRemoveSubstitute}>
+              Remove substitute
+            </button>
+          )}
+        </div>
       </div>
     );
   }

@@ -1,37 +1,74 @@
 /**
- * Pure session-page action state machine (plan Phase 3b task, §5.6, §6, §9.2,
- * §9.3). Derives "what can the signed-in member do on this session page"
- * from their own entry (if any), the session/weekday, and the roster —
- * without touching React or Firestore, so every branch is unit-testable.
+ * Pure session-page action state machine (plan Phase 3b task, extended Phase
+ * 4c for visitors/substitutes/teams; §5.6, §6, §9.2, §9.3, §12, §12A). Derives
+ * "what can the signed-in member do on this session page" from their own
+ * entry (if any), the session/weekday/series, their team (if any), and the
+ * roster — without touching React or Firestore, so every branch is
+ * unit-testable.
  *
  * Precedence (plan §6/§9.2 `assertSessionOpen`, mirrored client-side for
  * display only — the server re-checks everything): a `noBridge` session
  * never has actions; a locked session never has actions regardless of
- * format; a Teams-format session always shows the teams placeholder
- * (join/start a team is Phase 4b) regardless of the member's own entry;
- * otherwise the member's own entry (or lack of one) decides the state.
+ * format; a Teams-format session always shows the Teams branch regardless of
+ * the member's own entry; otherwise the member's own entry (or lack of one)
+ * decides the state.
  */
-import { sessionCutoff, type Entry, type PartnerRef, type Session, type WeekdayProgramme } from '@obc/shared';
+import { sessionCutoff, type Entry, type PartnerRef, type Series, type Session, type Team, type WeekdayProgramme } from '@obc/shared';
 import type { SessionRosterView } from './roster';
+
+/**
+ * Whether/how a substitute may be arranged for a `confirmed` member–member
+ * pairing (plan §12.7/§12.8):
+ * - `visitorPairing`  — the partner is a visitor; substitution isn't modelled
+ *                       for visitor pairings (§12.8) — cancel and re-pair instead.
+ * - `notAllowed`      — `series.allowSubstitute` is false (or unknown — no series).
+ * - `arranged`        — the *remaining* partner's view once a sub is in place
+ *                       (`partnerSubstitute` set) — mirrors the `substituted` state's
+ *                       `substitute` field from the *covered* partner's view.
+ * - `available`       — free to arrange one.
+ */
+export type SubstituteOption =
+  | { kind: 'visitorPairing' }
+  | { kind: 'notAllowed' }
+  | { kind: 'arranged'; substitute: PartnerRef }
+  | { kind: 'available' };
+
+/** The signed-in member's relationship to a Teams-format series (plan §12A). */
+export type TeamsRole =
+  | { kind: 'notOnTeam'; solo: { status: 'looking_for_partner' | 'available'; note?: string } | null }
+  | { kind: 'member' }
+  | { kind: 'captain'; full: boolean; hasAbsence: boolean };
 
 export type OwnEntryActionState =
   | { kind: 'noBridge' }
   | { kind: 'locked' }
-  | { kind: 'teamsFormat'; hasOwnEntry: boolean }
+  | { kind: 'teamsFormat'; hasOwnEntry: boolean; teamId: string | null; role: TeamsRole }
   | { kind: 'noEntryOpen' }
   | { kind: 'solo'; status: 'looking_for_partner' | 'available'; note?: string }
-  | { kind: 'confirmed'; partner: PartnerRef; partnerSubstitute: PartnerRef | null }
+  | { kind: 'confirmed'; partner: PartnerRef; partnerSubstitute: PartnerRef | null; substituteOption: SubstituteOption }
   | { kind: 'substituted'; partner: PartnerRef | null; substitute: PartnerRef | null }
   | { kind: 'sub'; isSubstituteFor: string };
 
 export interface SessionActionsResult {
   state: OwnEntryActionState;
-  /** True only in `noEntryOpen` — the member is free to claim/be invited into a roster row. */
+  /** True when the member is free to claim/be invited into a roster row, or (Teams) is a captain with space to claim/invite. */
   canActOnRoster: boolean;
-  /** `looking_for_partner` roster rows the member may claim ("Play with X"). */
+  /** `looking_for_partner` roster rows the member may claim ("Play with X" / Teams: "Add X to my team"). */
   claimableMemberIds: string[];
-  /** `available` roster rows the member may invite ("Invite X", pre-filling the dialog). */
+  /** `available` roster rows the member may invite ("Invite X"). */
   inviteableMemberIds: string[];
+}
+
+/** Extra, mostly-optional context `deriveSessionActions` uses for the substitute/Teams branches. */
+export interface SessionActionsContext {
+  /** The session's series, when known — used for `allowSubstitute` and `teamMax`. */
+  series?: Series | null;
+  /** The signed-in member's team in this series, if any (Teams series only). */
+  team?: Team | null;
+  /** The signed-in member's own id — needed to tell captain from member, and to exclude self from noticeboard rows. */
+  actorMemberId?: string | null;
+  /** Teams only: whether some rostered team member's entry for *this* session is `cancelled` (captain's "add a substitute" gate). */
+  hasAbsence?: boolean;
 }
 
 /** True while an entry occupies no slot — never existed, or was cancelled (mirrors `entries/lib.ts#isFree`). */
@@ -43,12 +80,39 @@ function noAction(state: OwnEntryActionState): SessionActionsResult {
   return { state, canActOnRoster: false, claimableMemberIds: [], inviteableMemberIds: [] };
 }
 
+function deriveTeamsRole(ownEntry: Entry | null | undefined, ctx: SessionActionsContext): TeamsRole {
+  const team = ctx.team ?? null;
+  if (team) {
+    const isCaptain = !!ctx.actorMemberId && team.captainMemberId === ctx.actorMemberId;
+    if (isCaptain) {
+      const teamMax = ctx.series?.teamMax ?? Number.POSITIVE_INFINITY;
+      return { kind: 'captain', full: team.members.length >= teamMax, hasAbsence: !!ctx.hasAbsence };
+    }
+    return { kind: 'member' };
+  }
+  if (ownEntry && (ownEntry.status === 'looking_for_partner' || ownEntry.status === 'available')) {
+    return {
+      kind: 'notOnTeam',
+      solo: ownEntry.note === undefined ? { status: ownEntry.status } : { status: ownEntry.status, note: ownEntry.note },
+    };
+  }
+  return { kind: 'notOnTeam', solo: null };
+}
+
+function computeSubstituteOption(entry: Entry, series: Series | null | undefined): SubstituteOption {
+  if (entry.partner?.kind === 'visitor') return { kind: 'visitorPairing' };
+  if (entry.partnerSubstitute) return { kind: 'arranged', substitute: entry.partnerSubstitute };
+  if (!series || !series.allowSubstitute) return { kind: 'notAllowed' };
+  return { kind: 'available' };
+}
+
 export function deriveSessionActions(
   ownEntry: Entry | null | undefined,
   session: Session,
   weekday: WeekdayProgramme,
   roster: SessionRosterView,
   now: Date = new Date(),
+  context: SessionActionsContext = {},
 ): SessionActionsResult {
   if (session.kind === 'noBridge') {
     return noAction({ kind: 'noBridge' });
@@ -60,7 +124,15 @@ export function deriveSessionActions(
   }
 
   if (session.format === 'Teams') {
-    return noAction({ kind: 'teamsFormat', hasOwnEntry: !isFree(ownEntry) });
+    const role = deriveTeamsRole(ownEntry, context);
+    const canClaim = role.kind === 'captain' && !role.full;
+    const selfId = context.actorMemberId ?? ownEntry?.memberId;
+    return {
+      state: { kind: 'teamsFormat', hasOwnEntry: !isFree(ownEntry), teamId: context.team?.id ?? null, role },
+      canActOnRoster: canClaim,
+      claimableMemberIds: canClaim ? roster.lookingForPartner.filter((r) => r.memberId !== selfId).map((r) => r.memberId) : [],
+      inviteableMemberIds: canClaim ? roster.available.filter((r) => r.memberId !== selfId).map((r) => r.memberId) : [],
+    };
   }
 
   if (isFree(ownEntry)) {
@@ -92,7 +164,12 @@ export function deriveSessionActions(
   }
 
   // entry.status === 'confirmed'
-  return noAction({ kind: 'confirmed', partner: entry.partner!, partnerSubstitute: entry.partnerSubstitute });
+  return noAction({
+    kind: 'confirmed',
+    partner: entry.partner!,
+    partnerSubstitute: entry.partnerSubstitute,
+    substituteOption: computeSubstituteOption(entry, context.series),
+  });
 }
 
 /**
@@ -124,4 +201,3 @@ export function describeCancelConsequence(entry: Entry): string {
   }
   return 'This will remove your entry for this session.';
 }
-

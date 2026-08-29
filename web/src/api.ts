@@ -5,6 +5,10 @@
  * contract can never drift.
  */
 import type {
+  AddTeamSessionSubstituteInput,
+  AddTeamSessionSubstituteResult,
+  AddVisitorToTeamInput,
+  AddVisitorToTeamResult,
   CancelEntryInput,
   CancelEntryResult,
   CancelInviteInput,
@@ -13,15 +17,35 @@ import type {
   ClaimLookingForPartnerResult,
   ClearSoloStatusInput,
   ClearSoloStatusResult,
+  ClearSubstituteInput,
+  ClearSubstituteResult,
+  ClearTeamSessionSubstituteInput,
+  ClearTeamSessionSubstituteResult,
+  CreateTeamInput,
+  CreateTeamResult,
+  CreateVisitorInput,
+  CreateVisitorResult,
+  DeleteVisitorInput,
+  DeleteVisitorResult,
+  DisbandTeamInput,
+  DisbandTeamResult,
   ImportMembersInput,
   ImportMembersResult,
   ImportProgrammeInput,
   ImportProgrammeResult,
+  InviteToTeamInput,
+  InviteToTeamResult,
+  LeaveTeamInput,
+  LeaveTeamResult,
   MarkNotificationsReadInput,
   MarkPasswordSetInput,
   PublishProgrammeInput,
   PublishProgrammeResult,
+  RemoveFromTeamInput,
+  RemoveFromTeamResult,
   RemovePasswordInput,
+  RemoveVisitorFromTeamInput,
+  RemoveVisitorFromTeamResult,
   RequestLoginCodeInput,
   RequestLoginCodeResult,
   RespondToInviteInput,
@@ -30,8 +54,16 @@ import type {
   SendInviteResult,
   SetSoloStatusInput,
   SetSoloStatusResult,
+  SetSubstituteInput,
+  SetSubstituteResult,
+  SignUpWithVisitorInput,
+  SignUpWithVisitorResult,
+  TransferCaptaincyInput,
+  TransferCaptaincyResult,
   UpdateMyContactInput,
   UpdateMyPrefsInput,
+  UpdateVisitorInput,
+  UpdateVisitorResult,
   VerifyLoginCodeInput,
   VerifyLoginCodeResult,
 } from '@obc/shared';
@@ -58,3 +90,31 @@ export const claimLookingForPartner = callable<ClaimLookingForPartnerInput, Clai
 );
 export const cancelEntry = callable<CancelEntryInput, CancelEntryResult>('cancelEntry');
 export const markNotificationsRead = callable<MarkNotificationsReadInput, { ok: true }>('markNotificationsRead');
+
+// Visitors (plan §9.2, §12 — Phase 4c task)
+export const createVisitor = callable<CreateVisitorInput, CreateVisitorResult>('createVisitor');
+export const updateVisitor = callable<UpdateVisitorInput, UpdateVisitorResult>('updateVisitor');
+export const deleteVisitor = callable<DeleteVisitorInput, DeleteVisitorResult>('deleteVisitor');
+export const signUpWithVisitor = callable<SignUpWithVisitorInput, SignUpWithVisitorResult>('signUpWithVisitor');
+
+// Substitutes (plan §9.2, §12.7/§12.8 — Phase 4c task)
+export const setSubstitute = callable<SetSubstituteInput, SetSubstituteResult>('setSubstitute');
+export const clearSubstitute = callable<ClearSubstituteInput, ClearSubstituteResult>('clearSubstitute');
+
+// Teams (plan §9.2, §12A — Phase 4c task)
+export const createTeam = callable<CreateTeamInput, CreateTeamResult>('createTeam');
+export const inviteToTeam = callable<InviteToTeamInput, InviteToTeamResult>('inviteToTeam');
+export const addVisitorToTeam = callable<AddVisitorToTeamInput, AddVisitorToTeamResult>('addVisitorToTeam');
+export const removeVisitorFromTeam = callable<RemoveVisitorFromTeamInput, RemoveVisitorFromTeamResult>(
+  'removeVisitorFromTeam',
+);
+export const leaveTeam = callable<LeaveTeamInput, LeaveTeamResult>('leaveTeam');
+export const removeFromTeam = callable<RemoveFromTeamInput, RemoveFromTeamResult>('removeFromTeam');
+export const transferCaptaincy = callable<TransferCaptaincyInput, TransferCaptaincyResult>('transferCaptaincy');
+export const disbandTeam = callable<DisbandTeamInput, DisbandTeamResult>('disbandTeam');
+export const addTeamSessionSubstitute = callable<AddTeamSessionSubstituteInput, AddTeamSessionSubstituteResult>(
+  'addTeamSessionSubstitute',
+);
+export const clearTeamSessionSubstitute = callable<ClearTeamSessionSubstituteInput, ClearTeamSessionSubstituteResult>(
+  'clearTeamSessionSubstitute',
+);

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../auth/useAuth';
 import { updateMyContact } from '../api';
 import { toAppError } from '../firebase';
@@ -27,6 +28,14 @@ export function ProfileScreen() {
           <strong>Email:</strong> {memberPrivate.emailLower}
         </p>
         <ContactForm initialPhone={member.phone} />
+      </div>
+
+      <div className="card">
+        <h2>My visitors</h2>
+        <p className="muted">People who aren&apos;t members that you play with or sponsor.</p>
+        <p>
+          <Link to="/visitors">Manage my visitors</Link>
+        </p>
       </div>
 
       <div className="card">

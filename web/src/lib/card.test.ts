@@ -162,6 +162,17 @@ describe('groupCardEntries', () => {
     const entries: Entry[] = [baseEntry({ status: 'cancelled', partner: null })];
     expect(groupCardEntries(entries, [session()], [series()], [weekday()])).toEqual([]);
   });
+
+  it('marks a team entry\'s row isTeam, and a pair entry\'s row not', () => {
+    const entries: Entry[] = [
+      baseEntry({ id: 'e1', teamId: 'team-1', partner: null }),
+      baseEntry({ id: 'e2', date: '2027-02-08', sessionId: 'monday-campbell-cave-pairs-2027-02-08', seriesId: 'monday-campbell-cave-pairs', partner: { kind: 'member', memberId: 'member-b', displayName: 'John Smith' } }),
+    ];
+    const groups = groupCardEntries(entries, [session()], [series(), series({ id: 'monday-campbell-cave-pairs', name: 'Campbell Cave Pairs' })], [weekday()]);
+    const rows = groups[0]!.groups.flatMap((g) => g.rows);
+    expect(rows.find((r) => r.entry.id === 'e1')!.isTeam).toBe(true);
+    expect(rows.find((r) => r.entry.id === 'e2')!.isTeam).toBe(false);
+  });
 });
 
 describe('buildPastRows', () => {

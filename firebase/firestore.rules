@@ -97,9 +97,14 @@ service cloud.firestore {
     /* --------------------------- invites -------------------------- */
 
     match /invites/{id} {
+      // Written as two equalities (not `uid in [a, b]`): for *queries* the
+      // rules engine must prove the rule from the query's own filters, and it
+      // can do that for `toMemberId == uid` / `fromMemberId == uid` but not
+      // for list membership — the `in` form silently denied the inbox query.
       allow read: if isAdmin()
         || (isActiveMember()
-            && request.auth.uid in [resource.data.fromMemberId, resource.data.toMemberId]);
+            && (resource.data.toMemberId == request.auth.uid
+                || resource.data.fromMemberId == request.auth.uid));
       allow write: if false; // sending / responding / cancelling all go through callables.
     }
 

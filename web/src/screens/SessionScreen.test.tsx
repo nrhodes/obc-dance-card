@@ -3,7 +3,7 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
-import type { Entry, Member, Series, Session, Team, WeekdayProgramme } from '@obc/shared';
+import type { Entry, Member, Series, Session, Team, Visitor, WeekdayProgramme } from '@obc/shared';
 import type { ProgrammeContextValue } from '../programme/ProgrammeContext';
 import { SessionScreen } from './SessionScreen';
 
@@ -11,7 +11,9 @@ const useProgrammeMock = vi.fn<() => ProgrammeContextValue>();
 const useAuthMemberMock = vi.fn<() => Member | null>(() => null);
 
 let entriesFixture: Entry[] = [];
-let teamsFixture: Team[] = [];
+let visitorsFixture: Visitor[] = [];
+let teamsForSeriesFixture: Team[] = [];
+let myTeamFixture: Team | null = null;
 
 vi.mock('../programme/useProgramme', () => ({
   useProgramme: () => useProgrammeMock(),
@@ -23,10 +25,28 @@ vi.mock('../auth/useAuth', () => ({
 
 vi.mock('../members/useMembersDirectory', () => ({
   useMembersDirectory: () => ({
-    members: [],
+    members: [
+      member({ id: 'member-a', firstName: 'Jane', lastName: 'Doe' }),
+      member({ id: 'member-b', firstName: 'John', lastName: 'Smith' }),
+      member({ id: 'member-c', firstName: 'Amy', lastName: 'Lee' }),
+    ],
     byId: new Map(),
     nameOf: (id: string) => ({ 'member-a': 'Jane Doe', 'member-b': 'John Smith', 'member-c': 'Amy Lee' })[id] ?? id,
     loading: false,
+  }),
+}));
+
+vi.mock('../visitors/useVisitors', () => ({
+  useVisitors: () => ({ visitors: visitorsFixture, loading: false }),
+}));
+
+vi.mock('../teams/useTeams', () => ({
+  useTeams: () => ({
+    teams: teamsForSeriesFixture,
+    loading: false,
+    teamsForSeries: () => teamsForSeriesFixture,
+    myTeamForSeries: () => myTeamFixture,
+    teamById: (id: string) => teamsForSeriesFixture.find((t) => t.id === id),
   }),
 }));
 
@@ -37,6 +57,20 @@ const claimLookingForPartnerMock = vi.fn();
 const setSoloStatusMock = vi.fn();
 const clearSoloStatusMock = vi.fn();
 const cancelEntryMock = vi.fn();
+const signUpWithVisitorMock = vi.fn();
+const setSubstituteMock = vi.fn();
+const clearSubstituteMock = vi.fn();
+const createVisitorMock = vi.fn();
+const inviteToTeamMock = vi.fn();
+const createTeamMock = vi.fn();
+const addVisitorToTeamMock = vi.fn();
+const removeVisitorFromTeamMock = vi.fn();
+const leaveTeamMock = vi.fn();
+const removeFromTeamMock = vi.fn();
+const transferCaptaincyMock = vi.fn();
+const disbandTeamMock = vi.fn();
+const addTeamSessionSubstituteMock = vi.fn();
+const clearTeamSessionSubstituteMock = vi.fn();
 
 vi.mock('../api', () => ({
   sendInvite: (...args: unknown[]) => sendInviteMock(...args),
@@ -44,6 +78,20 @@ vi.mock('../api', () => ({
   setSoloStatus: (...args: unknown[]) => setSoloStatusMock(...args),
   clearSoloStatus: (...args: unknown[]) => clearSoloStatusMock(...args),
   cancelEntry: (...args: unknown[]) => cancelEntryMock(...args),
+  signUpWithVisitor: (...args: unknown[]) => signUpWithVisitorMock(...args),
+  setSubstitute: (...args: unknown[]) => setSubstituteMock(...args),
+  clearSubstitute: (...args: unknown[]) => clearSubstituteMock(...args),
+  createVisitor: (...args: unknown[]) => createVisitorMock(...args),
+  inviteToTeam: (...args: unknown[]) => inviteToTeamMock(...args),
+  createTeam: (...args: unknown[]) => createTeamMock(...args),
+  addVisitorToTeam: (...args: unknown[]) => addVisitorToTeamMock(...args),
+  removeVisitorFromTeam: (...args: unknown[]) => removeVisitorFromTeamMock(...args),
+  leaveTeam: (...args: unknown[]) => leaveTeamMock(...args),
+  removeFromTeam: (...args: unknown[]) => removeFromTeamMock(...args),
+  transferCaptaincy: (...args: unknown[]) => transferCaptaincyMock(...args),
+  disbandTeam: (...args: unknown[]) => disbandTeamMock(...args),
+  addTeamSessionSubstitute: (...args: unknown[]) => addTeamSessionSubstituteMock(...args),
+  clearTeamSessionSubstitute: (...args: unknown[]) => clearTeamSessionSubstituteMock(...args),
 }));
 
 interface FakeQuery {
@@ -58,7 +106,7 @@ vi.mock('firebase/firestore', () => ({
     q: FakeQuery,
     onNext: (snap: { docs: Array<{ data: () => unknown }> }) => void,
   ) => {
-    const docs = q.collectionPath === 'entries' ? entriesFixture : q.collectionPath === 'teams' ? teamsFixture : [];
+    const docs = q.collectionPath === 'entries' ? entriesFixture : [];
     onNext({ docs: docs.map((d) => ({ data: () => d })) });
     return () => {};
   },
@@ -152,6 +200,37 @@ function member(overrides: Partial<Member> = {}): Member {
   };
 }
 
+function visitor(overrides: Partial<Visitor> = {}): Visitor {
+  return {
+    id: 'v1',
+    displayName: 'Bob Visitor',
+    createdByMemberId: 'member-a',
+    courtesyEmails: false,
+    lastUsedAt: '2027-01-01T00:00:00.000Z',
+    createdAt: '2027-01-01T00:00:00.000Z',
+    updatedAt: '2027-01-01T00:00:00.000Z',
+    ...overrides,
+  };
+}
+
+function team(overrides: Partial<Team> = {}): Team {
+  return {
+    id: 'monday-campbell-cave-teams-member-a',
+    year: 2027,
+    seriesId: 'monday-campbell-cave-teams',
+    name: 'Doe team',
+    captainMemberId: 'member-a',
+    members: [
+      { ref: { kind: 'member', memberId: 'member-a', displayName: 'Jane Doe' }, joinedAt: '2027-01-01T00:00:00.000Z' },
+      { ref: { kind: 'member', memberId: 'member-b', displayName: 'John Smith' }, joinedAt: '2027-01-01T00:00:00.000Z' },
+    ],
+    status: 'forming',
+    createdAt: '2027-01-01T00:00:00.000Z',
+    updatedAt: '2027-01-01T00:00:00.000Z',
+    ...overrides,
+  };
+}
+
 function renderAt(path: string, ui: ReactElement) {
   return render(
     <MemoryRouter initialEntries={[path]}>
@@ -173,6 +252,17 @@ function setProgramme(sessionsList: Session[], seriesList: Series[] = [series()]
   });
 }
 
+const teamsSeries = series({ id: 'monday-campbell-cave-teams', name: 'Campbell Cave Teams', format: 'Teams' });
+const teamsSession = session({
+  id: 'monday-campbell-cave-teams-2027-09-20',
+  date: '2027-09-20',
+  seriesId: teamsSeries.id,
+  title: 'Campbell Cave Teams',
+  partnerRequired: false,
+  seriesName: teamsSeries.name,
+  format: 'Teams',
+});
+
 describe('SessionScreen', () => {
   it('shows a plain "No bridge" page for a noBridge session', () => {
     setProgramme([
@@ -186,7 +276,6 @@ describe('SessionScreen', () => {
   it('shows "Nobody has signed up yet" for an empty roster', () => {
     setProgramme([session()]);
     entriesFixture = [];
-    teamsFixture = [];
     renderAt('/session/2027/monday-marion-taylor-pairs-2027-01-11', <SessionScreen />);
     expect(screen.getByText('Nobody has signed up yet.')).toBeTruthy();
   });
@@ -256,39 +345,24 @@ describe('SessionScreen', () => {
   });
 
   it('renders a Teams roster with captain marker', () => {
-    const teamsSeries = series({ id: 'monday-campbell-cave-teams', name: 'Campbell Cave Teams', format: 'Teams' });
-    const teamsSession = session({
-      id: 'monday-campbell-cave-teams-2027-09-20',
-      date: '2027-09-20',
-      seriesId: teamsSeries.id,
-      title: 'Campbell Cave Teams',
-      partnerRequired: false,
-      seriesName: teamsSeries.name,
-      format: 'Teams',
-    });
-    setProgramme([teamsSession], [teamsSeries]);
-    entriesFixture = [];
-    teamsFixture = [
-      {
-        id: 'monday-campbell-cave-teams-member-a',
-        year: 2027,
-        seriesId: teamsSeries.id,
-        name: 'Doe team',
-        captainMemberId: 'member-a',
+    teamsForSeriesFixture = [
+      team({
         members: [
           { ref: { kind: 'member', memberId: 'member-a', displayName: 'Jane Doe' }, joinedAt: '2027-01-01T00:00:00.000Z' },
           { ref: { kind: 'member', memberId: 'member-b', displayName: 'John Smith' }, joinedAt: '2027-01-01T00:00:00.000Z' },
           { ref: { kind: 'visitor', visitorId: 'v1', displayName: 'Bob Visitor' }, joinedAt: '2027-01-01T00:00:00.000Z' },
         ],
         status: 'active',
-        createdAt: '2027-01-01T00:00:00.000Z',
-        updatedAt: '2027-01-01T00:00:00.000Z',
-      },
+      }),
     ];
+    myTeamFixture = null;
+    setProgramme([teamsSession], [teamsSeries]);
+    entriesFixture = [];
     renderAt('/session/2027/monday-campbell-cave-teams-2027-09-20', <SessionScreen />);
     expect(screen.getByText('Doe team')).toBeTruthy();
     expect(screen.getByText(/Captain: Jane Doe/)).toBeTruthy();
     expect(screen.getByText(/Bob Visitor/)).toBeTruthy();
+    teamsForSeriesFixture = [];
   });
 
   it('highlights the signed-in member\'s own entry', () => {
@@ -317,7 +391,7 @@ describe('SessionScreen', () => {
   });
 
   describe('actions', () => {
-    it('offers Invite/LFP/Available when the member has no entry', () => {
+    it('offers Invite/LFP/Available/Play with a visitor when the member has no entry', () => {
       setProgramme([session()]);
       useAuthMemberMock.mockReturnValue(member({ id: 'member-a' }));
       entriesFixture = [];
@@ -325,6 +399,7 @@ describe('SessionScreen', () => {
       expect(screen.getByRole('button', { name: 'Invite a partner' })).toBeTruthy();
       expect(screen.getByRole('button', { name: "I'm looking for a partner" })).toBeTruthy();
       expect(screen.getByRole('button', { name: "I'm available" })).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Play with a visitor' })).toBeTruthy();
       useAuthMemberMock.mockReturnValue(null);
     });
 
@@ -361,27 +436,6 @@ describe('SessionScreen', () => {
       useAuthMemberMock.mockReturnValue(null);
     });
 
-    it('shows the teams placeholder for a Teams-format session', () => {
-      const teamsSeries = series({ id: 'monday-campbell-cave-teams', name: 'Campbell Cave Teams', format: 'Teams' });
-      const teamsSession = session({
-        id: 'monday-campbell-cave-teams-2027-09-20',
-        date: '2027-09-20',
-        seriesId: teamsSeries.id,
-        title: 'Campbell Cave Teams',
-        partnerRequired: false,
-        seriesName: teamsSeries.name,
-        format: 'Teams',
-      });
-      setProgramme([teamsSession], [teamsSeries]);
-      useAuthMemberMock.mockReturnValue(member({ id: 'member-a' }));
-      entriesFixture = [];
-      teamsFixture = [];
-      renderAt('/session/2027/monday-campbell-cave-teams-2027-09-20', <SessionScreen />);
-      expect(screen.getByText('This is a teams event.')).toBeTruthy();
-      expect((screen.getByRole('button', { name: 'Start or join a team' }) as HTMLButtonElement).disabled).toBe(true);
-      useAuthMemberMock.mockReturnValue(null);
-    });
-
     it('shows "Play with X" for a looking_for_partner roster row when the viewer is free', async () => {
       claimLookingForPartnerMock.mockResolvedValueOnce({ entries: [], repeatPartnerWarning: false });
       setProgramme([session()]);
@@ -393,6 +447,256 @@ describe('SessionScreen', () => {
       await user.click(screen.getByRole('button', { name: 'Play with them' }));
       expect(claimLookingForPartnerMock).toHaveBeenCalledWith({ year: 2027, sessionId: session().id, posterMemberId: 'member-b' });
       useAuthMemberMock.mockReturnValue(null);
+    });
+  });
+
+  describe('play with a visitor', () => {
+    it('signs up with a visitor for the single session', async () => {
+      signUpWithVisitorMock.mockResolvedValueOnce({ entries: [] });
+      visitorsFixture = [visitor()];
+      setProgramme([session()]);
+      useAuthMemberMock.mockReturnValue(member({ id: 'member-a' }));
+      entriesFixture = [];
+      const user = userEvent.setup();
+      renderAt('/session/2027/monday-marion-taylor-pairs-2027-01-11', <SessionScreen />);
+      await user.click(screen.getByRole('button', { name: 'Play with a visitor' }));
+      await user.click(screen.getByRole('button', { name: 'Bob Visitor' }));
+      expect(signUpWithVisitorMock).toHaveBeenCalledWith({
+        scope: 'session',
+        year: 2027,
+        visitorId: 'v1',
+        sessionId: session().id,
+      });
+      useAuthMemberMock.mockReturnValue(null);
+      visitorsFixture = [];
+    });
+
+    it('offers the whole-series toggle and signs up for the series when checked', async () => {
+      signUpWithVisitorMock.mockResolvedValueOnce({ entries: [] });
+      visitorsFixture = [visitor()];
+      setProgramme([session()], [series({ sessionIds: ['s1', 's2', 's3'] })]);
+      useAuthMemberMock.mockReturnValue(member({ id: 'member-a' }));
+      entriesFixture = [];
+      const user = userEvent.setup();
+      renderAt('/session/2027/monday-marion-taylor-pairs-2027-01-11', <SessionScreen />);
+      await user.click(screen.getByRole('button', { name: 'Play with a visitor' }));
+      await user.click(screen.getByRole('checkbox', { name: /whole series/i }));
+      await user.click(screen.getByRole('button', { name: 'Bob Visitor' }));
+      expect(signUpWithVisitorMock).toHaveBeenCalledWith({
+        scope: 'series',
+        year: 2027,
+        visitorId: 'v1',
+        seriesId: 'monday-marion-taylor-pairs',
+      });
+      useAuthMemberMock.mockReturnValue(null);
+      visitorsFixture = [];
+    });
+  });
+
+  describe('substitutes', () => {
+    it('arranges a substitute for the partner (coverFor: self)', async () => {
+      setSubstituteMock.mockResolvedValueOnce({ entries: [] });
+      setProgramme([session()], [series({ allowSubstitute: true })]);
+      useAuthMemberMock.mockReturnValue(member({ id: 'member-a' }));
+      entriesFixture = [
+        entry({
+          id: 'e-a',
+          memberId: 'member-a',
+          status: 'confirmed',
+          pairingId: 'p1',
+          partner: { kind: 'member', memberId: 'member-b', displayName: 'John Smith' },
+        }),
+        entry({
+          id: 'e-b',
+          memberId: 'member-b',
+          status: 'confirmed',
+          pairingId: 'p1',
+          partner: { kind: 'member', memberId: 'member-a', displayName: 'Jane Doe' },
+        }),
+      ];
+      const user = userEvent.setup();
+      renderAt('/session/2027/monday-marion-taylor-pairs-2027-01-11', <SessionScreen />);
+      await user.click(screen.getByRole('button', { name: 'Arrange a substitute' }));
+      await user.click(screen.getByRole('button', { name: "I can't come — someone will play with John Smith instead" }));
+      // member-c (Amy Lee) is the only pickable member left (self and partner excluded).
+      await user.click(screen.getByRole('button', { name: /Amy Lee/ }));
+      expect(setSubstituteMock).toHaveBeenCalledWith({
+        entryId: 'e-a',
+        substitute: { kind: 'member', memberId: 'member-c' },
+        coverFor: 'self',
+      });
+      useAuthMemberMock.mockReturnValue(null);
+    });
+
+    it('arranges a substitute for self (coverFor: partner)', async () => {
+      setSubstituteMock.mockResolvedValueOnce({ entries: [] });
+      setProgramme([session()], [series({ allowSubstitute: true })]);
+      useAuthMemberMock.mockReturnValue(member({ id: 'member-a' }));
+      entriesFixture = [
+        entry({
+          id: 'e-a',
+          memberId: 'member-a',
+          status: 'confirmed',
+          pairingId: 'p1',
+          partner: { kind: 'member', memberId: 'member-b', displayName: 'John Smith' },
+        }),
+        entry({
+          id: 'e-b',
+          memberId: 'member-b',
+          status: 'confirmed',
+          pairingId: 'p1',
+          partner: { kind: 'member', memberId: 'member-a', displayName: 'Jane Doe' },
+        }),
+      ];
+      const user = userEvent.setup();
+      renderAt('/session/2027/monday-marion-taylor-pairs-2027-01-11', <SessionScreen />);
+      await user.click(screen.getByRole('button', { name: 'Arrange a substitute' }));
+      await user.click(screen.getByRole('button', { name: 'John Smith can\'t come — someone will play with me instead' }));
+      await user.click(screen.getByRole('button', { name: /Amy Lee/ }));
+      expect(setSubstituteMock).toHaveBeenCalledWith({
+        entryId: 'e-a',
+        substitute: { kind: 'member', memberId: 'member-c' },
+        coverFor: 'partner',
+      });
+      useAuthMemberMock.mockReturnValue(null);
+    });
+
+    it('shows "This series does not allow substitutes" instead of the button', () => {
+      setProgramme([session()], [series({ allowSubstitute: false })]);
+      useAuthMemberMock.mockReturnValue(member({ id: 'member-a' }));
+      entriesFixture = [
+        entry({
+          id: 'e-a',
+          memberId: 'member-a',
+          status: 'confirmed',
+          pairingId: 'p1',
+          partner: { kind: 'member', memberId: 'member-b', displayName: 'John Smith' },
+        }),
+      ];
+      renderAt('/session/2027/monday-marion-taylor-pairs-2027-01-11', <SessionScreen />);
+      expect(screen.getByText('This series does not allow substitutes.')).toBeTruthy();
+      expect(screen.queryByRole('button', { name: 'Arrange a substitute' })).toBeNull();
+      useAuthMemberMock.mockReturnValue(null);
+    });
+
+    it('shows the visitor-pairing hint instead of a substitute button', () => {
+      setProgramme([session()], [series({ allowSubstitute: true })]);
+      useAuthMemberMock.mockReturnValue(member({ id: 'member-a' }));
+      entriesFixture = [
+        entry({
+          id: 'e-a',
+          memberId: 'member-a',
+          status: 'confirmed',
+          pairingId: 'p1',
+          partner: { kind: 'visitor', visitorId: 'v1', displayName: 'Bob Visitor' },
+        }),
+      ];
+      renderAt('/session/2027/monday-marion-taylor-pairs-2027-01-11', <SessionScreen />);
+      expect(screen.getByText('To change a visitor partner, cancel and sign up again.')).toBeTruthy();
+      expect(screen.queryByRole('button', { name: 'Arrange a substitute' })).toBeNull();
+      useAuthMemberMock.mockReturnValue(null);
+    });
+
+    it('shows an already-arranged substitute with a Remove substitute button', async () => {
+      clearSubstituteMock.mockResolvedValueOnce({ entries: [] });
+      setProgramme([session()], [series({ allowSubstitute: true })]);
+      useAuthMemberMock.mockReturnValue(member({ id: 'member-b' }));
+      entriesFixture = [
+        entry({
+          id: 'e-a',
+          memberId: 'member-a',
+          status: 'substituted',
+          pairingId: 'p1',
+          partner: { kind: 'member', memberId: 'member-b', displayName: 'John Smith' },
+          substitute: { kind: 'member', memberId: 'member-c', displayName: 'Amy Lee' },
+        }),
+        entry({
+          id: 'e-b',
+          memberId: 'member-b',
+          status: 'confirmed',
+          pairingId: 'p1',
+          partner: { kind: 'member', memberId: 'member-a', displayName: 'Jane Doe' },
+          partnerSubstitute: { kind: 'member', memberId: 'member-c', displayName: 'Amy Lee' },
+        }),
+      ];
+      const user = userEvent.setup();
+      renderAt('/session/2027/monday-marion-taylor-pairs-2027-01-11', <SessionScreen />);
+      expect(screen.getByText(/Amy Lee is standing in for Jane Doe this week/)).toBeTruthy();
+      await user.click(screen.getByRole('button', { name: 'Remove substitute' }));
+      await user.click(screen.getByRole('dialog').querySelector('button.button-danger')!);
+      expect(clearSubstituteMock).toHaveBeenCalledWith({ entryId: 'e-b' });
+      useAuthMemberMock.mockReturnValue(null);
+    });
+  });
+
+  describe('team panel', () => {
+    it('shows "Start a team" and the noticeboard when not on a team', () => {
+      myTeamFixture = null;
+      teamsForSeriesFixture = [];
+      setProgramme([teamsSession], [teamsSeries]);
+      useAuthMemberMock.mockReturnValue(member({ id: 'member-a' }));
+      entriesFixture = [];
+      renderAt('/session/2027/monday-campbell-cave-teams-2027-09-20', <SessionScreen />);
+      expect(screen.getByRole('button', { name: 'Start a team' })).toBeTruthy();
+      expect(screen.getByRole('button', { name: "I'm looking for a team" })).toBeTruthy();
+      expect(screen.getByRole('button', { name: "I'm available for a team" })).toBeTruthy();
+      useAuthMemberMock.mockReturnValue(null);
+    });
+
+    it('shows Leave team for a plain member', () => {
+      const t = team();
+      myTeamFixture = t;
+      teamsForSeriesFixture = [t];
+      setProgramme([teamsSession], [teamsSeries]);
+      useAuthMemberMock.mockReturnValue(member({ id: 'member-b' }));
+      entriesFixture = [entry({ id: 'e-b', memberId: 'member-b', teamId: t.id, partner: null, sessionId: teamsSession.id })];
+      renderAt('/session/2027/monday-campbell-cave-teams-2027-09-20', <SessionScreen />);
+      expect(screen.getByRole('button', { name: 'Leave team' })).toBeTruthy();
+      expect(screen.queryByRole('button', { name: 'Disband team' })).toBeNull();
+      useAuthMemberMock.mockReturnValue(null);
+      myTeamFixture = null;
+      teamsForSeriesFixture = [];
+    });
+
+    it('shows captain actions, including "Add a substitute for this session" only when someone is absent', () => {
+      const t = team();
+      myTeamFixture = t;
+      teamsForSeriesFixture = [t];
+      setProgramme([teamsSession], [teamsSeries]);
+      useAuthMemberMock.mockReturnValue(member({ id: 'member-a' }));
+      entriesFixture = [
+        entry({ id: 'e-a', memberId: 'member-a', teamId: t.id, partner: null, sessionId: teamsSession.id, date: teamsSession.date }),
+        entry({ id: 'e-b', memberId: 'member-b', teamId: t.id, partner: null, sessionId: teamsSession.id, date: teamsSession.date, status: 'cancelled' }),
+      ];
+      renderAt('/session/2027/monday-campbell-cave-teams-2027-09-20', <SessionScreen />);
+      expect(screen.getByRole('button', { name: 'Invite a member' })).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Add a visitor' })).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Transfer captaincy' })).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Disband team' })).toBeTruthy();
+      const addSubButton = screen.getByRole('button', { name: 'Add a substitute for this session' }) as HTMLButtonElement;
+      expect(addSubButton.disabled).toBe(false);
+      expect(screen.getByText(/Absent: John Smith/)).toBeTruthy();
+      useAuthMemberMock.mockReturnValue(null);
+      myTeamFixture = null;
+      teamsForSeriesFixture = [];
+    });
+
+    it('disables "Add a substitute for this session" when nobody is absent', () => {
+      const t = team();
+      myTeamFixture = t;
+      teamsForSeriesFixture = [t];
+      setProgramme([teamsSession], [teamsSeries]);
+      useAuthMemberMock.mockReturnValue(member({ id: 'member-a' }));
+      entriesFixture = [
+        entry({ id: 'e-a', memberId: 'member-a', teamId: t.id, partner: null, sessionId: teamsSession.id, date: teamsSession.date }),
+        entry({ id: 'e-b', memberId: 'member-b', teamId: t.id, partner: null, sessionId: teamsSession.id, date: teamsSession.date }),
+      ];
+      renderAt('/session/2027/monday-campbell-cave-teams-2027-09-20', <SessionScreen />);
+      const addSubButton = screen.getByRole('button', { name: 'Add a substitute for this session' }) as HTMLButtonElement;
+      expect(addSubButton.disabled).toBe(true);
+      useAuthMemberMock.mockReturnValue(null);
+      myTeamFixture = null;
+      teamsForSeriesFixture = [];
     });
   });
 });

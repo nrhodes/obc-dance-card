@@ -9,12 +9,17 @@ import type { Invite, Session } from '@obc/shared';
 import { useInvites } from '../invites/useInvites';
 import { useMembersDirectory } from '../members/useMembersDirectory';
 import { useProgramme } from '../programme/useProgramme';
+import { useTeams } from '../teams/useTeams';
 import { cancelInvite, respondToInvite } from '../api';
 import { mapActionError } from '../lib/actionErrors';
 import type { AppError } from '../firebase';
 import { formatDateNZ, formatDateTimeNZ } from '../lib/format';
 
 function scopeLabel(invite: Invite): string {
+  if (invite.scope === 'team') {
+    const n = invite.sessionIds.length;
+    return n > 0 ? `whole series: ${n} session${n === 1 ? '' : 's'}` : 'captaincy offer';
+  }
   if (invite.scope === 'series') {
     const n = invite.sessionIds.length;
     return `whole series: ${n} session${n === 1 ? '' : 's'}`;
@@ -30,10 +35,32 @@ function datesLabel(invite: Invite, sessions: Session[]): string {
   return dates.map(formatDateNZ).join(', ');
 }
 
+/** "Team invite from <captain> — <team name> (<series>)" / "<name> wants you to be captain of <team>" (plan §12A.3). */
+function inviteHeadline(
+  invite: Invite,
+  nameOf: (memberId: string) => string,
+  teamName: (teamId: string) => string,
+  seriesName: (seriesId: string | null) => string | null,
+): string {
+  if (invite.scope === 'team') {
+    const team = invite.teamId ? teamName(invite.teamId) : 'a team';
+    if (invite.kind === 'captaincy') {
+      return `${nameOf(invite.fromMemberId)} wants you to be captain of ${team}`;
+    }
+    const sName = seriesName(invite.seriesId);
+    return `Team invite from ${nameOf(invite.fromMemberId)} — ${team}${sName ? ` (${sName})` : ''}`;
+  }
+  return `${nameOf(invite.fromMemberId)} invited you`;
+}
+
 export function InvitesScreen() {
   const { incoming, outgoing, resolved, loading } = useInvites();
   const { nameOf } = useMembersDirectory();
-  const { sessions } = useProgramme();
+  const { sessions, series } = useProgramme();
+  const { teamById } = useTeams();
+
+  const teamName = (teamId: string) => teamById(teamId)?.name ?? 'a team';
+  const seriesName = (seriesId: string | null) => (seriesId ? (series.find((s) => s.id === seriesId)?.name ?? null) : null);
 
   const [busyId, setBusyId] = useState<string | null>(null);
   const [errorById, setErrorById] = useState<Record<string, string>>({});
@@ -110,9 +137,10 @@ export function InvitesScreen() {
           incoming.map((invite) => (
             <div key={invite.id} className="card">
               <p>
-                <strong>{nameOf(invite.fromMemberId)}</strong> invited you &mdash; {scopeLabel(invite)}
+                <strong>{inviteHeadline(invite, nameOf, teamName, seriesName)}</strong>
+                {invite.scope !== 'team' && <> &mdash; {scopeLabel(invite)}</>}
               </p>
-              <p className="muted">{datesLabel(invite, sessions)}</p>
+              {invite.sessionIds.length > 0 && <p className="muted">{datesLabel(invite, sessions)}</p>}
               {invite.message && <p>&ldquo;{invite.message}&rdquo;</p>}
               <p className="muted">Expires {formatDateTimeNZ(invite.expiresAt)}</p>
               {errorById[invite.id] && (

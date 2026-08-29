@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Entry, Session, WeekdayProgramme } from '@obc/shared';
+import type { Entry, Series, Session, Team, WeekdayProgramme } from '@obc/shared';
 import { describeCancelConsequence, deriveSessionActions } from './sessionActions';
 import type { SessionRosterView } from './roster';
 
@@ -32,6 +32,25 @@ function session(overrides: Partial<Session> = {}): Session {
   };
 }
 
+function series(overrides: Partial<Series> = {}): Series {
+  return {
+    id: 'monday-marion-taylor-pairs',
+    weekday: 'monday',
+    name: 'Marion Taylor Pairs',
+    scoring: 'Scr',
+    format: 'Pairs',
+    bestOf: null,
+    allowSubstitute: true,
+    order: 0,
+    sessionIds: [],
+    teamMin: 4,
+    teamMax: 6,
+    createdAt: '',
+    updatedAt: '',
+    ...overrides,
+  };
+}
+
 function entry(overrides: Partial<Entry>): Entry {
   return {
     id: 'e1',
@@ -49,6 +68,24 @@ function entry(overrides: Partial<Entry>): Entry {
     partnerSubstitute: null,
     isSubstituteFor: null,
     createdBy: 'member-a',
+    createdAt: '',
+    updatedAt: '',
+    ...overrides,
+  };
+}
+
+function team(overrides: Partial<Team> = {}): Team {
+  return {
+    id: 'monday-campbell-cave-teams-member-a',
+    year: 2027,
+    seriesId: 'monday-campbell-cave-teams',
+    name: 'Doe team',
+    captainMemberId: 'member-a',
+    members: [
+      { ref: { kind: 'member', memberId: 'member-a', displayName: 'Jane Doe' }, joinedAt: '' },
+      { ref: { kind: 'member', memberId: 'member-b', displayName: 'John Smith' }, joinedAt: '' },
+    ],
+    status: 'forming',
     createdAt: '',
     updatedAt: '',
     ...overrides,
@@ -77,16 +114,113 @@ describe('deriveSessionActions', () => {
     expect(result.state).toEqual({ kind: 'locked' });
   });
 
-  it('teams-format: no own entry yet', () => {
+  it('teams-format: not on a team, no solo listing', () => {
     const result = deriveSessionActions(null, session({ format: 'Teams', partnerRequired: false }), weekday(), emptyRoster, BEFORE_CUTOFF);
-    expect(result.state).toEqual({ kind: 'teamsFormat', hasOwnEntry: false });
+    expect(result.state).toEqual({
+      kind: 'teamsFormat',
+      hasOwnEntry: false,
+      teamId: null,
+      role: { kind: 'notOnTeam', solo: null },
+    });
     expect(result.canActOnRoster).toBe(false);
   });
 
-  it('team: already has a team entry for this session', () => {
+  it('teams-format: not on a team, but posted "looking for a team"', () => {
+    const solo = entry({ status: 'looking_for_partner', partner: null, note: 'call anytime' });
+    const result = deriveSessionActions(solo, session({ format: 'Teams', partnerRequired: false }), weekday(), emptyRoster, BEFORE_CUTOFF);
+    expect(result.state).toEqual({
+      kind: 'teamsFormat',
+      hasOwnEntry: true,
+      teamId: null,
+      role: { kind: 'notOnTeam', solo: { status: 'looking_for_partner', note: 'call anytime' } },
+    });
+  });
+
+  it('teams-format: on a team as a plain member', () => {
     const teamEntry = entry({ status: 'confirmed', teamId: 'team-1', partner: null });
-    const result = deriveSessionActions(teamEntry, session({ format: 'Teams', partnerRequired: false }), weekday(), emptyRoster, BEFORE_CUTOFF);
-    expect(result.state).toEqual({ kind: 'teamsFormat', hasOwnEntry: true });
+    const t = team();
+    const result = deriveSessionActions(
+      teamEntry,
+      session({ format: 'Teams', partnerRequired: false }),
+      weekday(),
+      emptyRoster,
+      BEFORE_CUTOFF,
+      { series: series({ format: 'Teams' }), team: t, actorMemberId: 'member-b' },
+    );
+    expect(result.state).toEqual({ kind: 'teamsFormat', hasOwnEntry: true, teamId: t.id, role: { kind: 'member' } });
+  });
+
+  it('teams-format: on a team as captain, with space and no absence', () => {
+    const teamEntry = entry({ status: 'confirmed', teamId: 'team-1', partner: null });
+    const t = team();
+    const result = deriveSessionActions(
+      teamEntry,
+      session({ format: 'Teams', partnerRequired: false }),
+      weekday(),
+      emptyRoster,
+      BEFORE_CUTOFF,
+      { series: series({ format: 'Teams', teamMax: 6 }), team: t, actorMemberId: 'member-a', hasAbsence: false },
+    );
+    expect(result.state).toEqual({
+      kind: 'teamsFormat',
+      hasOwnEntry: true,
+      teamId: t.id,
+      role: { kind: 'captain', full: false, hasAbsence: false },
+    });
+  });
+
+  it('teams-format: captain with a full team cannot claim/invite noticeboard rows', () => {
+    const teamEntry = entry({ status: 'confirmed', teamId: 'team-1', partner: null });
+    const t = team({ members: Array.from({ length: 6 }, (_, i) => ({ ref: { kind: 'member' as const, memberId: `m${i}`, displayName: `M${i}` }, joinedAt: '' })) });
+    const roster: SessionRosterView = {
+      pairs: [],
+      lookingForPartner: [{ memberId: 'member-x', name: 'Someone' }],
+      available: [{ memberId: 'member-y', name: 'Other' }],
+    };
+    const result = deriveSessionActions(
+      teamEntry,
+      session({ format: 'Teams', partnerRequired: false }),
+      weekday(),
+      roster,
+      BEFORE_CUTOFF,
+      { series: series({ format: 'Teams', teamMax: 6 }), team: t, actorMemberId: 'member-a' },
+    );
+    expect(result.state).toEqual({
+      kind: 'teamsFormat',
+      hasOwnEntry: true,
+      teamId: t.id,
+      role: { kind: 'captain', full: true, hasAbsence: false },
+    });
+    expect(result.canActOnRoster).toBe(false);
+    expect(result.claimableMemberIds).toEqual([]);
+    expect(result.inviteableMemberIds).toEqual([]);
+  });
+
+  it('teams-format: captain with space sees claimable/inviteable noticeboard rows', () => {
+    const teamEntry = entry({ status: 'confirmed', teamId: 'team-1', partner: null });
+    const t = team();
+    const roster: SessionRosterView = {
+      pairs: [],
+      lookingForPartner: [{ memberId: 'member-x', name: 'Someone' }],
+      available: [{ memberId: 'member-y', name: 'Other' }],
+    };
+    const result = deriveSessionActions(
+      teamEntry,
+      session({ format: 'Teams', partnerRequired: false }),
+      weekday(),
+      roster,
+      BEFORE_CUTOFF,
+      { series: series({ format: 'Teams', teamMax: 6 }), team: t, actorMemberId: 'member-a', hasAbsence: true },
+    );
+    expect(result.state).toEqual({
+      kind: 'teamsFormat',
+      hasOwnEntry: true,
+      teamId: t.id,
+      role: { kind: 'captain', full: false, hasAbsence: true },
+    });
+    expect(result.canActOnRoster).toBe(true);
+    expect(result.claimableMemberIds).toEqual(['member-x']);
+    expect(result.inviteableMemberIds).toEqual(['member-y']);
   });
 
   it('no entry/open: free to act, sees claimable/inviteable roster members', () => {
@@ -121,13 +255,55 @@ describe('deriveSessionActions', () => {
     expect(result.state).toEqual({ kind: 'solo', status: 'available', note: undefined });
   });
 
-  it('confirmed: paired with a member', () => {
+  it('confirmed: paired with a member, series allows substitutes -> available', () => {
     const paired = entry({ status: 'confirmed', partner: { kind: 'member', memberId: 'member-b', displayName: 'John Smith' } });
-    const result = deriveSessionActions(paired, session(), weekday(), emptyRoster, BEFORE_CUTOFF);
+    const result = deriveSessionActions(paired, session(), weekday(), emptyRoster, BEFORE_CUTOFF, {
+      series: series({ allowSubstitute: true }),
+    });
     expect(result.state).toEqual({
       kind: 'confirmed',
       partner: { kind: 'member', memberId: 'member-b', displayName: 'John Smith' },
       partnerSubstitute: null,
+      substituteOption: { kind: 'available' },
+    });
+  });
+
+  it('confirmed: series does not allow substitutes -> notAllowed', () => {
+    const paired = entry({ status: 'confirmed', partner: { kind: 'member', memberId: 'member-b', displayName: 'John Smith' } });
+    const result = deriveSessionActions(paired, session(), weekday(), emptyRoster, BEFORE_CUTOFF, {
+      series: series({ allowSubstitute: false }),
+    });
+    expect(result.state).toMatchObject({ substituteOption: { kind: 'notAllowed' } });
+  });
+
+  it('confirmed: no series known -> notAllowed (safe default)', () => {
+    const paired = entry({ status: 'confirmed', partner: { kind: 'member', memberId: 'member-b', displayName: 'John Smith' } });
+    const result = deriveSessionActions(paired, session(), weekday(), emptyRoster, BEFORE_CUTOFF);
+    expect(result.state).toMatchObject({ substituteOption: { kind: 'notAllowed' } });
+  });
+
+  it('confirmed: visitor partner -> visitorPairing, regardless of allowSubstitute', () => {
+    const paired = entry({ status: 'confirmed', partner: { kind: 'visitor', visitorId: 'v1', displayName: 'Bob Visitor' } });
+    const result = deriveSessionActions(paired, session(), weekday(), emptyRoster, BEFORE_CUTOFF, {
+      series: series({ allowSubstitute: true }),
+    });
+    expect(result.state).toMatchObject({ substituteOption: { kind: 'visitorPairing' } });
+  });
+
+  it('confirmed: a substitute is already arranged for the partner -> arranged', () => {
+    const paired = entry({
+      status: 'confirmed',
+      partner: { kind: 'member', memberId: 'member-b', displayName: 'John Smith' },
+      partnerSubstitute: { kind: 'member', memberId: 'member-c', displayName: 'Amy Lee' },
+    });
+    const result = deriveSessionActions(paired, session(), weekday(), emptyRoster, BEFORE_CUTOFF, {
+      series: series({ allowSubstitute: true }),
+    });
+    expect(result.state).toEqual({
+      kind: 'confirmed',
+      partner: { kind: 'member', memberId: 'member-b', displayName: 'John Smith' },
+      partnerSubstitute: { kind: 'member', memberId: 'member-c', displayName: 'Amy Lee' },
+      substituteOption: { kind: 'arranged', substitute: { kind: 'member', memberId: 'member-c', displayName: 'Amy Lee' } },
     });
   });
 

@@ -218,13 +218,97 @@ starting the emulators + seed + dev server first).
       **Invites** and clicks **Decline**. Member A is notified
       ("Your invite was declined").
 
-## 5. Substitute (Phase 4)
+## 5. Substitute (Phase 4c)
 
-- [ ] For a confirmed pair in a substitute-allowed series, the remaining player
-      records Member D as a one-week substitute.
-- [ ] Both halves of the pair show D for that week only; the following week
-      reverts to the original partner.
-- [ ] The same on a "no substitute" series is refused.
+- [ ] Member A and Member B are a confirmed pair on a session in a series
+      with substitutes allowed (e.g. "Marion Taylor Pairs"). Member B (the
+      remaining player) opens the session and, under **Actions**, clicks
+      **Arrange a substitute**.
+- [ ] The dialog asks in plain words which side is covered — click
+      **"`<Member A>` can't come — someone will play with me instead"**
+      (`coverFor: 'partner'`).
+- [ ] Search for and click **Member D** in the picker (self, the partner,
+      and anyone already confirmed on this session do not appear in the
+      list).
+- [ ] Both Member A's and Member B's My Card lines for that session now read
+      "with `<other>` — sub: Member D for `<covered>`" / "you're covered by
+      Member D"; the roster row shows "`A` & `B` (sub: D for A)". Member D's
+      own card shows a line for the same session with **Cancel this
+      stand-in** as its only action.
+- [ ] Member A (the covered player) opens the session; under **Actions**
+      they see "Member D is standing in for you this week" and a **Remove
+      substitute** button. Click it, confirm — the pairing reverts to A & B
+      for that session and Member D's entry is cancelled.
+- [ ] Re-arrange the same substitute, this time with Member A (the covered
+      player) opening the dialog and choosing
+      **"I can't come — someone will play with `<Member B>` instead"**
+      (`coverFor: 'self'`) — same result.
+- [ ] On a series with substitutes **not** allowed (e.g. one imported with
+      `allowSubstitute=no`), a confirmed pair's Actions panel shows
+      "This series does not allow substitutes." instead of the button.
+- [ ] A pair where one side is a **visitor** shows no substitute option at
+      all — instead, a line reads "To change a visitor partner, cancel and
+      sign up again."
+
+## 5b. Visitors (Phase 4c)
+
+- [ ] Member A opens **Profile** → **Manage my visitors** (`/visitors`) →
+      **Add a visitor**, enters a name only, and clicks **Add visitor**. The
+      visitor appears in the list with no "now a member" badge.
+- [ ] Add a second visitor whose name matches an existing active member's
+      full name — a non-blocking warning banner appears ("An active member
+      is also named... double check you meant to add a visitor").
+- [ ] Edit a visitor (add an email and tick **Send them a confirmation
+      email** — the checkbox is disabled until an email is entered), save.
+- [ ] Open a Pairs or Individual session where Member A is free. Under
+      **Actions**, click **Play with a visitor** → pick the visitor (or
+      **Add a new visitor** inline) → for a series session, tick **For the
+      whole series** to sign up every remaining date at once. The roster
+      shows "`<Member A>` & `<visitor name>` (visitor)"; Member A's My Card
+      line reads "with `<visitor name>` (visitor)".
+- [ ] Try to delete a visitor with an upcoming, non-cancelled entry — the
+      server's message ("This visitor has upcoming, non-cancelled entries —
+      cancel those first.") is shown verbatim in the confirm dialog; deleting
+      a visitor with no future entries succeeds.
+
+## 5c. Teams (Phase 4c)
+
+- [ ] Member A opens the seeded **Campbell Cave Teams** session (Monday,
+      first date 2027-09-20) and clicks **Start a team**, leaving the name
+      blank. The Team panel shows "`<A's surname>` team", "Forming (1 of
+      4–6)", and Member A listed as captain.
+- [ ] Captain clicks **Invite a member**, searches for and selects Member B,
+      and sends the invite. Member B's **Invites** badge shows the new
+      count; opening **Invites** shows "Team invite from `<A>` — `<team
+      name>` (Campbell Cave Teams)" with Accept/Decline.
+- [ ] Member B clicks **Accept**. Both A and B now see the team with 2
+      members on the session page; once a fourth member joins, the status
+      flips to "Active (4 of 4–6)".
+- [ ] Captain clicks **Add a visitor**, picks (or adds) a visitor — it
+      appears in the roster marked "(visitor)", with no card entry of its
+      own.
+- [ ] Member B cancels their own entry for one session only (as in §4) — the
+      Team panel's "This session" area now lists them under **Absent**, and
+      the captain sees **Add a substitute for this session** become
+      enabled; adding one (a member or a visitor) shows "Standing in:
+      `<name>`" for that session only, with a **Remove** link for the
+      captain.
+- [ ] Captain clicks **Transfer captaincy**, picks Member B, sends the
+      offer. Member B sees "`<A>` wants you to be captain of `<team
+      name>`" in Invites and accepts — the team panel now shows B as
+      captain.
+- [ ] (New) Captain clicks **Leave team** — the panel instead explains
+      "Transfer the captaincy or disband first." A plain member's **Leave
+      team** works immediately (confirm dialog), cancelling their future
+      entries in the series.
+- [ ] On the same Teams session, a member not on any team clicks **I'm
+      looking for a team**; a captain with space sees **Add `<name>` to my
+      team** on that noticeboard row and claims them straight onto the
+      roster. A member who clicks **I'm available for a team** instead is
+      sent a team invite via **Invite `<name>`**.
+- [ ] Captain clicks **Disband team** and confirms — every member's future
+      entries in the series are cancelled and all members are notified
+      ("Your team has been disbanded").
 
 ## 6. Admin on-behalf (Phase 6)
 

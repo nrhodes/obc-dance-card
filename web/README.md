@@ -2,25 +2,38 @@
 
 React 18 + Vite + TypeScript PWA (plan §14.1). Serves the member and admin
 screens for Phase 1b (sign in, profile, admin members import), Phase 2b
-(programme browser, session page — read-only), and Phase 3b (My Dance Card,
-invites inbox, live session actions, notifications feed).
+(programme browser, session page — read-only), Phase 3b (My Dance Card,
+invites inbox, live session actions, notifications feed), and Phase 4c
+(visitors, substitutes, teams).
 
 ## Routes
 
 - `/signin` — sign in (code or password)
 - `/` — **My Dance Card**: upcoming entries grouped by weekday → series, a
-  collapsed "Past" (last 10), empty state, and the source of the nav's
-  invites/notifications badges
-- `/profile` — contact, prefs, password, sign out
+  collapsed "Past" (last 10), empty state, a "Team" badge on team entries,
+  and the source of the nav's invites/notifications badges
+- `/profile` — contact, prefs, password, a link to **My visitors**, sign out
+- `/visitors` — **My visitors**: list, add, edit, delete (with a non-blocking
+  name-collision warning on add, and the server's verbatim refusal when a
+  delete would remove a visitor with upcoming entries)
 - `/programme` — the published programme, by weekday
 - `/session/:year/:sessionId` — one session's roster **and actions**: invite a
   partner (single session or whole series), "I'm looking for a partner" /
   "I'm available", claim a "looking for a partner" roster row, invite an
-  "available" row, and cancel your own entry (with a plain-English
-  consequence before you confirm). Visitor sign-up, arranging a substitute,
-  and teams are disabled placeholders (Phase 4 / 4b)
+  "available" row, cancel your own entry (with a plain-English consequence
+  before you confirm), **play with a visitor** (single session or whole
+  series), and **arrange/remove a substitute** on a confirmed member–member
+  pairing (blocked with an explanation on a series that disallows it, or a
+  visitor pairing). A Teams-format session instead shows the **Team panel**:
+  start a team, invite a member, add a visitor, remove a member/visitor,
+  transfer captaincy, disband, manage this session's absences/substitutes
+  (captain), leave the team (member), or — when not on a team — the
+  noticeboard ("Looking for a team" / "Available for a team") and a
+  read-only list of the series' other teams
 - `/invites` — incoming (Accept/Decline), outgoing (Withdraw), and the last
-  10 recently resolved invites
+  10 recently resolved invites; team-scope invites are labelled "Team invite
+  from `<captain>` — `<team name>` (`<series>`)" and captaincy offers "`<name>`
+  wants you to be captain of `<team>`"
 - `/notifications` — the last 50 notifications; tap to mark read and follow
   its deep link; "Mark all read"
 - `/admin/members` — admin: members CSV import
@@ -97,18 +110,31 @@ browser contexts — the seeded admin and a seeded ordinary member
 lists themselves "Looking for a partner" on a future Monday session, the
 second member claims it ("Play with Admin User"), both My Dance Cards show
 the pairing, the admin then cancels, and the second member's card flips back
-to "Looking for a partner" with a "Your partner cancelled" notification. All
-three specs assume the emulators + seed + dev server are already running
-(see above) — they do not start them themselves.
+to "Looking for a partner" with a "Your partner cancelled" notification.
+`web/e2e/teams.spec.ts` drives two contexts — `mary.brown@example.org`
+(captain) and `alex.taylor@example.org` — through starting a team on the
+seeded **Campbell Cave Teams** session (2027-09-20), inviting the second
+member, and that member accepting from Invites; both then see the team with
+2 members and status Forming. `web/e2e/visitors.spec.ts` signs in as
+`peter.wilson@example.org`, adds a visitor from Profile → **My visitors**,
+opens the seeded **Campbell Cave Pairs** session (2027-02-08), and plays
+with the visitor — the roster shows "`<name>` (visitor)". All five specs
+assume the emulators + seed + dev server are already running (see above) —
+they do not start them themselves.
 
 Because these specs sign in with an emailed code, running the full suite
 more than 2-3 times inside a 15-minute window can trip the
 `requestLoginCode` rate limit (plan §8.1: 3 requests / email / 15 min) — the
 request still returns `{ ok: true }` (uniform response) but no email
-arrives, and `waitForLoginCode` will time out. `dancecard.spec.ts` uses a
-second seeded email precisely so it doesn't share a rate-limit budget with
-the other two specs' admin sign-ins. Re-seed (which resets `rateLimits`) or
-wait out the window if that happens.
+arrives, and `waitForLoginCode` will time out. `dancecard.spec.ts`,
+`teams.spec.ts`, and `visitors.spec.ts` each sign in different seeded
+members (`john.smith@example.org`; `mary.brown@example.org` +
+`alex.taylor@example.org`; `peter.wilson@example.org`) precisely so none of
+them shares a rate-limit budget with `signin.spec.ts` / `programme.spec.ts`'s
+repeated `admin@example.org` sign-ins, or with each other — starting a team,
+accepting a team invite, and adding/using a visitor are all plain-member
+actions, so the admin role isn't needed for either new spec. Re-seed (which
+resets `rateLimits`) or wait out the window if that happens.
 
 ```sh
 npx playwright install chromium   # once
@@ -168,9 +194,17 @@ src/
     AppShell.tsx             header, nav (+ invites/notifications badges), skip link, <main id="content">
     RouteGuards.tsx           signed-out / not-active / admin route guards
     Dialog.tsx                accessible modal primitive (role=dialog, focus trap, Escape)
-    ConfirmDialog.tsx         generic confirm/cancel dialog (claim, cancel entry)
-    SoloStatusDialog.tsx      "I'm looking for a partner" / "I'm available" + optional note
+    ConfirmDialog.tsx         generic confirm/cancel dialog (claim, cancel entry, ...)
+    SoloStatusDialog.tsx      "I'm looking for a partner/team" / "I'm available[for a team]" + note
     InvitePartnerDialog.tsx   member picker + message + whole-series toggle
+    VisitorForm.tsx           add/edit visitor fields (name/email/phone/notes/courtesy email)
+    VisitorPickerDialog.tsx   pick or add-inline a visitor, optional whole-series toggle
+    PartnerPickerDialog.tsx   pick a member or one of my visitors (substitutes, team session subs)
+    SubstituteDialog.tsx      coverFor choice, then PartnerPickerDialog
+    InviteToTeamDialog.tsx    member picker + message, for a team captain's invite
+    TransferCaptaincyDialog.tsx  pick a team member, then confirm the offer
+    StartTeamDialog.tsx       optional team name
+    TeamPanel.tsx             the Team panel (captain/member/not-on-team views + every team action)
   programme/
     ProgrammeProvider.tsx     the shared "current published programme" subscription
     useProgramme.ts           read hook for weekdays/series/sessions
@@ -182,19 +216,26 @@ src/
   notifications/
     NotificationsProvider.tsx newest-50 notifications subscription; unread count
     useNotifications.ts
+  visitors/
+    VisitorsProvider.tsx      subscribes to the signed-in member's own visitors
+    useVisitors.ts
+  teams/
+    TeamsProvider.tsx         subscribes to every forming/active team (club-scale)
+    useTeams.ts                teamsForSeries(seriesId) / myTeamForSeries(seriesId) / teamById(id)
   lib/
     format.ts                 formatDateNZ/formatTimeOfDay/formatDateTimeNZ/shortWeekdayLabel
     roster.ts                 pure session-roster grouping (pairs/LFP/available/own entry)
     programmeView.ts          pure weekday-timeline grouping + default-tab logic
-    card.ts                   pure My Dance Card grouping + per-status line text
-    sessionActions.ts         pure session-page action state machine + cancel-consequence copy
+    card.ts                   pure My Dance Card grouping + per-status line text (+ Team badge)
+    sessionActions.ts         pure session-page action state machine (incl. substitute/Teams branches)
+    team.ts                   pure team-panel helpers: status label, fullness, per-session absences/subs
     actionErrors.ts           shared callable-error -> display copy mapping
     memberPicker.ts           pure member-search filter (excludes self + already-confirmed)
   screens/
-    SignInScreen.tsx, HomeScreen.tsx (My Dance Card), ProfileScreen.tsx, NotActiveScreen.tsx,
-    NotificationPrefsForm.tsx, PasswordSection.tsx,
-    ProgrammeScreen.tsx, SessionScreen.tsx (roster + actions),
-    InvitesScreen.tsx, NotificationsScreen.tsx,
+    SignInScreen.tsx, HomeScreen.tsx (My Dance Card), ProfileScreen.tsx, VisitorsScreen.tsx,
+    NotActiveScreen.tsx, NotificationPrefsForm.tsx, PasswordSection.tsx,
+    ProgrammeScreen.tsx, SessionScreen.tsx (roster + actions + substitutes/visitors/Team panel),
+    InvitesScreen.tsx (incl. team invite/captaincy labels), NotificationsScreen.tsx,
     admin/MembersImportScreen.tsx, admin/ProgrammeImportScreen.tsx,
     admin/AdminProgrammeList.tsx
 ```

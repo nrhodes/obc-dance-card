@@ -156,6 +156,7 @@ function CardRowLink({ row }: { row: CardRow }) {
       <Link to={`/session/${entryYear(row.entry)}/${row.entry.sessionId}`}>
         {formatDateNZ(row.date)} &mdash; {row.statusText}
       </Link>
+      {row.isTeam && <span className="badge">Team</span>}
     </li>
   );
 }

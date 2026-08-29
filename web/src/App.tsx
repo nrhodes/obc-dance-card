@@ -4,11 +4,14 @@ import { MembersDirectoryProvider } from './members/MembersDirectoryProvider';
 import { ProgrammeProvider } from './programme/ProgrammeProvider';
 import { InvitesProvider } from './invites/InvitesProvider';
 import { NotificationsProvider } from './notifications/NotificationsProvider';
+import { VisitorsProvider } from './visitors/VisitorsProvider';
+import { TeamsProvider } from './teams/TeamsProvider';
 import { AppShell } from './components/AppShell';
 import { RedirectIfSignedIn, RequireAdmin, RequireMember } from './components/RouteGuards';
 import { SignInScreen } from './screens/SignInScreen';
 import { HomeScreen } from './screens/HomeScreen';
 import { ProfileScreen } from './screens/ProfileScreen';
+import { VisitorsScreen } from './screens/VisitorsScreen';
 import { ProgrammeScreen } from './screens/ProgrammeScreen';
 import { SessionScreen } from './screens/SessionScreen';
 import { InvitesScreen } from './screens/InvitesScreen';
@@ -35,7 +38,11 @@ export function App() {
                 <ProgrammeProvider>
                   <InvitesProvider>
                     <NotificationsProvider>
-                      <AppShell />
+                      <VisitorsProvider>
+                        <TeamsProvider>
+                          <AppShell />
+                        </TeamsProvider>
+                      </VisitorsProvider>
                     </NotificationsProvider>
                   </InvitesProvider>
                 </ProgrammeProvider>
@@ -45,6 +52,7 @@ export function App() {
         >
           <Route path="/" element={<HomeScreen />} />
           <Route path="/profile" element={<ProfileScreen />} />
+          <Route path="/visitors" element={<VisitorsScreen />} />
           <Route path="/programme" element={<ProgrammeScreen />} />
           <Route path="/session/:year/:sessionId" element={<SessionScreen />} />
           <Route path="/invites" element={<InvitesScreen />} />
