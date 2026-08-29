@@ -16,7 +16,8 @@
     "test:rules": "firebase --project demo-obc emulators:exec --only firestore \"vitest run --config vitest.rules.config.ts\"",
     "test:emu": "firebase --project demo-obc emulators:exec --only firestore,auth \"vitest run --config vitest.emu.config.ts\"",
     "seed": "FIRESTORE_EMULATOR_HOST=${FIRESTORE_EMULATOR_HOST:-127.0.0.1:8080} FIREBASE_AUTH_EMULATOR_HOST=${FIREBASE_AUTH_EMULATOR_HOST:-127.0.0.1:9099} GCLOUD_PROJECT=${GCLOUD_PROJECT:-demo-obc} tsx ../seed/seed.ts",
-    "lint": "eslint src"
+    "lint": "eslint src",
+    "bundle": "npm run build && node scripts/bundle.mjs"
   },
   "dependencies": {
     "@obc/shared": "*",
@@ -30,6 +31,7 @@
     "@types/node": "^20.17.10",
     "@types/nodemailer": "^8.0.1",
     "@types/papaparse": "^5.3.15",
+    "esbuild": "^0.21.5",
     "firebase": "^11.1.0",
     "firebase-functions-test": "^3.4.0",
     "tsx": "^4.19.2",

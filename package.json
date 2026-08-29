@@ -18,7 +18,7 @@
     "lint": "eslint .",
     "test": "npm run build -w @obc/shared && npm run test --workspaces --if-present",
     "typecheck": "npm run build -w @obc/shared && npm run typecheck --workspaces --if-present",
-    "emulators": "firebase --project demo-obc --config firebase/firebase.json emulators:start",
+    "emulators": "npm run bundle -w @obc/functions && firebase --config firebase/firebase.json --project demo-obc emulators:start",
     "seed": "npm run seed -w @obc/functions",
     "format": "prettier --write \"**/*.{ts,tsx,js,json,md}\"",
     "deploy:rules": "firebase --config firebase/firebase.json --project \"${FIREBASE_PROJECT:-default}\" deploy --only firestore:rules,firestore:indexes",

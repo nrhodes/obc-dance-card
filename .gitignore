@@ -74,3 +74,6 @@ ios/**/DerivedData/
 
 # Hosting staging copy of web/dist (built by the hosting predeploy hook)
 firebase/web-dist/
+
+# Bundled functions deploy directory (built by functions/scripts/bundle.mjs)
+firebase/functions-deploy/
