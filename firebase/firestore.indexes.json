@@ -61,16 +61,6 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
-          "fieldPath": "pairingId",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "entries",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
           "fieldPath": "memberId",
           "order": "ASCENDING"
         },
@@ -105,16 +95,6 @@
         {
           "fieldPath": "date",
           "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "auditLog",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "at",
-          "order": "DESCENDING"
         }
       ]
     },
@@ -170,16 +150,6 @@
         },
         {
           "fieldPath": "status",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "teams",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "captainMemberId",
           "order": "ASCENDING"
         }
       ]
@@ -348,16 +318,6 @@
           "fieldPath": "seriesId",
           "order": "ASCENDING"
         },
-        {
-          "fieldPath": "date",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "sessions",
-      "queryScope": "COLLECTION",
-      "fields": [
         {
           "fieldPath": "date",
           "order": "ASCENDING"
