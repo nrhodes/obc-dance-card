@@ -6,6 +6,11 @@ describe('mapCodeFlowError', () => {
     expect(mapCodeFlowError({ code: 'resource-exhausted', message: 'x' })).toMatch(/Too many attempts/);
   });
 
+  it('maps a Cloud Run 429 (unavailable) / timeout to a "busy" message, not the generic one', () => {
+    expect(mapCodeFlowError({ code: 'unavailable', message: 'x' })).toMatch(/busy/i);
+    expect(mapCodeFlowError({ code: 'deadline-exceeded', message: 'x' })).toMatch(/busy/i);
+  });
+
   it('maps invalid-argument to an invalid-code message', () => {
     expect(mapCodeFlowError({ code: 'invalid-argument', message: 'x' })).toMatch(/not valid/);
   });

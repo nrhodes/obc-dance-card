@@ -6,6 +6,7 @@
 import type { AppError } from '../firebase';
 
 const TOO_MANY_ATTEMPTS = 'Too many attempts. Please wait a few minutes and try again.';
+const SERVICE_BUSY = 'The service is busy right now. Please wait a moment and try again.';
 const INVALID_CODE = 'That code is not valid. Request a new one.';
 const GENERIC = 'Something went wrong. Please try again.';
 /** Deliberately identical for "unknown email" and "wrong password" (plan §8.1 enumeration). */
@@ -19,6 +20,12 @@ export function mapCodeFlowError(err: AppError): string {
       return TOO_MANY_ATTEMPTS;
     case 'invalid-argument':
       return INVALID_CODE;
+    // A Cloud Run 429 (no free instance) surfaces as `unavailable`, and a
+    // deadline as `deadline-exceeded` — both are "try again shortly", not a
+    // bug the member did anything wrong to cause.
+    case 'unavailable':
+    case 'deadline-exceeded':
+      return SERVICE_BUSY;
     default:
       return GENERIC;
   }
