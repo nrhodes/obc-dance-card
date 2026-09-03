@@ -339,14 +339,20 @@ td {
 }
 
 .badge {
+  /* A static label, not an interactive control: no pill outline, no button
+     fill — a small muted tag so "Scr"/"Pairs" don't read as tappable. */
   display: inline-block;
-  background: var(--color-secondary-bg);
-  color: var(--color-secondary-text);
-  border: 1px solid var(--color-border);
-  border-radius: 999px;
-  padding: 2px var(--space-1);
-  font-size: 0.85rem;
+  background: transparent;
+  color: var(--color-muted);
+  border: none;
+  border-radius: 4px;
+  padding: 0;
+  margin-right: var(--space-2);
+  font-size: 0.8rem;
   font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: default;
 }
 
 .session-date-list {

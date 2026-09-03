@@ -1,0 +1,55 @@
+weekday,name,scoring,format,bestOfN,bestOfM,allowSubstitute,eligibilityNote,note,dates
+monday,Marion Taylor Pairs,Scr,Pairs,,,yes,,,2026-01-12;2026-01-19;2026-01-26;2026-02-02
+monday,Campbell Cave Pairs,Scr,Pairs,,,yes,,,2026-02-09;2026-02-16;2026-02-23;2026-03-02
+monday,Milton Pairs,Hcp,Pairs,,,yes,,,2026-03-09;2026-03-16;2026-03-23;2026-03-30
+monday,Martin Gillam Memorial Mon Champ Pairs,Scr,Pairs,5,6,no,,,2026-04-13;2026-04-20;2026-04-27;2026-05-04;2026-05-11;2026-05-18
+monday,Winsome Bach Pairs,Hcp,Pairs,,,yes,,note Jun 1 is Holiday Bridge,2026-05-25;2026-06-08;2026-06-15;2026-06-22
+monday,George Spill Memorial Trophy Pairs,Scr,Pairs,,,yes,,,2026-06-29;2026-07-06;2026-07-13;2026-07-20
+monday,Dobson Pairs,Hcp,Pairs,,,yes,,,2026-07-27;2026-08-03;2026-08-10
+monday,Summerset Mon Individual,Scr,Individual,4,5,yes,,,2026-08-17;2026-08-24;2026-08-31;2026-09-07;2026-09-14
+monday,Campbell Cave Teams,Scr,Teams,,,yes,"Max 1 open player, min 1 junior player",,2026-09-21;2026-09-28;2026-10-05
+monday,June Stuckey Trophy Pairs,Scr,Pairs,,,yes,,,2026-10-12;2026-10-19;2026-11-02
+monday,Rodney Pairs,Scr,Pairs,,,yes,,,2026-11-09;2026-11-16;2026-11-23;2026-11-30
+tuesday,February Pairs,Scr,Pairs,,,yes,,,2026-02-03;2026-02-10;2026-02-17;2026-02-24
+tuesday,March Pairs,Scr,Pairs,,,yes,,,2026-03-03;2026-03-10;2026-03-17;2026-03-24;2026-03-31
+tuesday,April Pairs,Scr,Pairs,,,yes,,,2026-04-07;2026-04-14;2026-04-21;2026-04-28
+tuesday,May Pairs,Scr,Pairs,,,yes,,,2026-05-05;2026-05-12;2026-05-19;2026-05-26
+tuesday,June Pairs,Scr,Pairs,,,yes,,,2026-06-02;2026-06-09;2026-06-16;2026-06-23;2026-06-30
+tuesday,July Individual,Scr,Individual,,,yes,,,2026-07-07;2026-07-14;2026-07-21;2026-07-28
+tuesday,August Pairs,Scr,Pairs,,,yes,,,2026-08-04;2026-08-11;2026-08-18;2026-08-25
+tuesday,September Pairs,Scr,Pairs,,,yes,,,2026-09-01;2026-09-08;2026-09-15;2026-09-22;2026-09-29
+tuesday,October Individual,Scr,Individual,,,yes,,,2026-10-06;2026-10-13;2026-10-20;2026-10-27
+tuesday,November Pairs,Scr,Pairs,,,yes,,,2026-11-03;2026-11-10;2026-11-17;2026-11-24
+wednesday,GDR Builders Pairs,Hcp,Pairs,,,yes,,,2026-01-14;2026-01-21;2026-01-28;2026-02-04
+wednesday,Sybil Alderton Memorial,Scr,Pairs,,,yes,,,2026-02-11;2026-02-18;2026-02-25;2026-03-04
+wednesday,Summerset Wed Individual,Scr,Individual,4,5,yes,,,2026-03-11;2026-03-18;2026-03-25;2026-04-01;2026-04-08
+wednesday,Simson Junior Trophy Pairs,Hcp,Pairs,,,yes,,,2026-04-15;2026-04-22;2026-04-29;2026-05-06
+wednesday,Carol Harnish Pairs,Scr,Pairs,,,yes,,,2026-05-13;2026-05-20;2026-05-27;2026-06-03
+wednesday,Martin Gillam Memorial Wed Champ Pairs,Scr,Pairs,5,6,no,,,2026-06-10;2026-06-17;2026-06-24;2026-07-01;2026-07-08;2026-07-15
+wednesday,Orewa Beach Pairs,Scr,Pairs,,,yes,,,2026-07-22;2026-07-29;2026-08-05;2026-08-12
+wednesday,Victor Eaves Pairs,Hcp,Pairs,,,yes,,,2026-08-19;2026-08-26;2026-09-02;2026-09-09
+wednesday,Thomson Pairs,Scr,Pairs,,,yes,,,2026-09-16;2026-09-23;2026-09-30;2026-10-07
+wednesday,McClean Pairs,Scr,Pairs,,,yes,,,2026-10-14;2026-10-21;2026-10-28;2026-11-04
+wednesday,West Hoe Pairs,Hcp,Pairs,,,yes,,,2026-11-11;2026-11-18;2026-11-25;2026-12-02
+thursday,Amandas Nutrimetics Pairs,Hcp,Pairs,,,yes,,,2026-01-15;2026-01-22;2026-01-29;2026-02-05
+thursday,Marion Sillick Pairs,Scr,Pairs,,,yes,,,2026-02-12;2026-02-19;2026-02-26;2026-03-05
+thursday,Thu Champ Pairs,Scr,Pairs,5,6,no,,,2026-03-12;2026-03-19;2026-03-26;2026-04-02;2026-04-09;2026-04-16
+thursday,Summerset Thu Individual,Scr,Individual,4,5,yes,,,2026-04-23;2026-04-30;2026-05-07;2026-05-14;2026-05-21
+thursday,Moana Pairs,Scr,Pairs,,,yes,,,2026-05-28;2026-06-04;2026-06-11;2026-06-18
+thursday,Matariki Pairs,Hcp,Pairs,,,yes,,,2026-06-25;2026-07-02;2026-07-09;2026-07-16
+thursday,Audika Pairs,Hcp,Pairs,,,yes,,,2026-07-23;2026-07-30;2026-08-06;2026-08-13
+thursday,Winkalotts Trophy Pairs,Scr,Pairs,,,yes,,,2026-08-20;2026-08-27;2026-09-03;2026-09-10
+thursday,Ship & Anchor Pairs,Hcp,Pairs,,,yes,,,2026-09-17;2026-09-24;2026-10-01;2026-10-08
+thursday,Eileen Sanger Pairs,Scr,Pairs,,,yes,,,2026-10-15;2026-10-22;2026-10-29;2026-11-05
+thursday,End of Year Pairs,Scr,Pairs,,,yes,,,2026-11-12;2026-11-19;2026-11-26;2026-12-03
+friday,New Year Pairs,Scr,Pairs,,,yes,,,2026-01-16;2026-01-23;2026-01-30
+friday,Hillary Square Pairs,Hcp,Pairs,,,yes,,,2026-02-13;2026-02-20;2026-02-27;2026-03-06
+friday,North Harbour Painters Pairs,Scr,Pairs,4,5,yes,,,2026-03-13;2026-03-20;2026-03-27;2026-04-10;2026-04-17
+friday,Forrest Funerals Pairs,Scr,Pairs,,,yes,,,2026-04-24;2026-05-01;2026-05-08;2026-05-15
+friday,Campbell Cave Teams,Scr,Teams,,,yes,"Max 1 open player, min 1 junior player",,2026-05-22;2026-05-29;2026-06-05
+friday,Faye Holehan Pairs,Hcp,Pairs,,,yes,,,2026-06-12;2026-06-19;2026-06-26;2026-07-03
+friday,Summerset Fri Individual,Hcp,Individual,4,5,yes,,,2026-07-17;2026-07-24;2026-07-31;2026-08-07;2026-08-14
+friday,Presidents Trophy,Scr,Pairs,,,yes,,,2026-08-21;2026-08-28;2026-09-04;2026-09-11
+friday,Dickson Pairs,Scr,Pairs,,,yes,,,2026-09-18;2026-09-25;2026-10-02
+friday,Friday Championship Pairs,Scr,Pairs,5,6,no,,,2026-10-16;2026-10-23;2026-10-30;2026-11-06;2026-11-13
+friday,Connoisseur Kitchens Pairs,Scr,Pairs,,,yes,,,2026-11-20;2026-11-27;2026-12-04
