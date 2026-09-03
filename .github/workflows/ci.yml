@@ -86,6 +86,131 @@ jobs:
       - name: Functions emulator tests
         run: npm run test:emu -w @obc/functions
 
+  ios-build-test:
+    # Builds and unit-tests the SwiftUI member client. Needs a macOS runner
+    # (Xcode), so it is the one job here that can't share the ubuntu setup.
+    # Requires Xcode 16+: the project uses the objectVersion 77 format with
+    # synchronized folder groups, which older Xcode cannot open.
+    #
+    # Runs on every PR, not just iOS-path ones, on purpose: `ios/` mirrors
+    # `shared/src/{models,enums}.ts` by hand, and `ModelDecodingTests` exists
+    # to fail when the two drift. A `shared/` change that renames a field must
+    # re-run these tests, or the drift ships silently.
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Xcode version
+        run: xcodebuild -version
+
+      # Pin the package checkout somewhere stable so it can be cached —
+      # by default SwiftPM clones inside DerivedData, which is not.
+      - name: Cache SwiftPM checkouts
+        uses: actions/cache@v4
+        with:
+          path: ios/.spm
+          key: spm-${{ runner.os }}-${{ hashFiles('ios/OBCDanceCard.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+          restore-keys: |
+            spm-${{ runner.os }}-
+
+      - name: Resolve Swift packages
+        working-directory: ios
+        run: |
+          xcodebuild -resolvePackageDependencies \
+            -project OBCDanceCard.xcodeproj \
+            -scheme OBCDanceCard \
+            -clonedSourcePackagesDirPath .spm
+
+      # Simulator names and OS versions move with the runner image, so pick a
+      # concrete available device by id rather than hard-coding "iPhone 17".
+      - name: Pick a simulator
+        run: |
+          UDID=$(xcrun simctl list devices available -j \
+            | jq -r '[.devices[][] | select(.name | startswith("iPhone"))] | last | .udid')
+          if [ -z "$UDID" ] || [ "$UDID" = "null" ]; then
+            echo "No iPhone simulator available on this runner" >&2
+            xcrun simctl list devices available >&2
+            exit 1
+          fi
+          echo "SIMULATOR_UDID=$UDID" >> "$GITHUB_ENV"
+          xcrun simctl list devices available | grep "$UDID"
+
+      # The emulator-backed tests (EmulatorSignInTests) skip themselves when
+      # nothing is listening, so the steps below are the *only* difference
+      # between a normal PR run and an on-demand one. Same posture as
+      # `e2e-test`: deterministic checks always, full-stack on request.
+      - uses: actions/setup-node@v4
+        if: github.event_name == 'workflow_dispatch'
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Set up Java (Firestore emulator)
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Install and build backend
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          npm ci
+          npm run build
+
+      - name: Write local-dev secrets for the emulator
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          echo "LOGIN_CODE_PEPPER=ci-dev-pepper" > firebase/functions/.secret.local
+          echo "SMTP_PASS=ci-dev-smtp-pass" >> firebase/functions/.secret.local
+
+      - name: Start emulators
+        if: github.event_name == 'workflow_dispatch'
+        run: nohup npm run emulators > firebase-emulators.out 2>&1 &
+
+      - name: Wait for emulators
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          for i in $(seq 1 90); do
+            if grep -q "All emulators ready" firebase-emulators.out 2>/dev/null; then exit 0; fi
+            sleep 1
+          done
+          echo "Emulators did not start in time" >&2
+          cat firebase-emulators.out || true
+          exit 1
+
+      - name: Seed emulator data
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          FIRESTORE_EMULATOR_HOST: localhost:8080
+          FIREBASE_AUTH_EMULATOR_HOST: localhost:9099
+          GCLOUD_PROJECT: demo-obc
+        run: npm run seed
+
+      # Deliberately unpiped: filtering xcodebuild's output through `grep -v`
+      # makes a *passing* build fail whenever every line happens to be
+      # filtered, because grep exits 1 when it prints nothing. The log is
+      # verbose; the result bundle uploaded below is the thing to read.
+      - name: Build and test
+        working-directory: ios
+        run: |
+          xcodebuild test \
+            -project OBCDanceCard.xcodeproj \
+            -scheme OBCDanceCard \
+            -destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
+            -clonedSourcePackagesDirPath .spm \
+            -resultBundlePath OBCDanceCard.xcresult
+
+      - name: Upload debug artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-debug
+          path: |
+            ios/OBCDanceCard.xcresult
+            firebase-emulators.out
+          retention-days: 7
+
   e2e-test:
     # Full-stack browser E2E (emulators + seed + Playwright) is flaky in CI
     # (login-code rate limits, browser download, emulator timing) and is run
