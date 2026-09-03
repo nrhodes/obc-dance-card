@@ -32,6 +32,13 @@ export type PartnerKind = (typeof PARTNER_KINDS)[number];
  * - `confirmed`            paired (member or visitor), or a member of a team
  * - `looking_for_partner`  public, first-claim-wins
  * - `available`            public, a claim sends an invite
+ * - `unavailable`          solo, like `available`/`looking_for_partner` (I6) but
+ *                          never shown on the noticeboard and never alerted on
+ *                          (plan §21 B2) — "don't offer me this session". It
+ *                          still occupies the member's slot: every "is this
+ *                          member free" precondition (`isFree`, §7) treats it
+ *                          exactly like `confirmed`/`substituted` — only
+ *                          `cancelled`/absent frees a slot.
  * - `substituted`          paired, but covered this session by a substitute
  * - `cancelled`            withdrawn; kept for history, treated as absent
  */
@@ -39,12 +46,28 @@ export const ENTRY_STATUSES = [
   'confirmed',
   'looking_for_partner',
   'available',
+  'unavailable',
   'substituted',
   'cancelled',
 ] as const;
 export type EntryStatus = (typeof ENTRY_STATUSES)[number];
 
-/** Statuses that occupy a member for a session (block a second active entry). */
+/** The three solo (unpaired, I6) statuses — `partner`/`pairingId`/substitution fields are always null. */
+export const SOLO_ENTRY_STATUSES = [
+  'looking_for_partner',
+  'available',
+  'unavailable',
+] as const satisfies readonly EntryStatus[];
+
+/**
+ * Statuses that occupy a place on a member's *card display* (web `My Card`,
+ * `lib/card.ts#isActiveCardEntry`) — deliberately **excludes** `unavailable`,
+ * which is a "don't ask me" marker, not a booking, and must not show as a row
+ * there (plan §21 B2). This is a display concern only: server-side "is this
+ * member free for session S" preconditions never consult this constant —
+ * they use `entries/lib.ts#isFree` (any non-cancelled entry, including
+ * `unavailable`, blocks), which is intentionally the wider set.
+ */
 export const ACTIVE_ENTRY_STATUSES = [
   'confirmed',
   'looking_for_partner',
@@ -52,7 +75,7 @@ export const ACTIVE_ENTRY_STATUSES = [
   'substituted',
 ] as const satisfies readonly EntryStatus[];
 
-/** Statuses visible on the public noticeboard. */
+/** Statuses visible on the public noticeboard. Deliberately excludes `unavailable`. */
 export const NOTICEBOARD_STATUSES = [
   'looking_for_partner',
   'available',
@@ -149,6 +172,7 @@ export const AUDIT_ACTIONS = [
   'respond_to_invite_on_behalf',
   'cancel_invite_on_behalf',
   'set_solo_status_on_behalf',
+  'set_bulk_solo_status_on_behalf',
   'claim_looking_for_partner_on_behalf',
   'create_visitor_on_behalf',
   'sign_up_with_visitor_on_behalf',

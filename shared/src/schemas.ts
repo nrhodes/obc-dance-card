@@ -212,7 +212,7 @@ export type CancelInviteInput = z.infer<typeof CancelInviteInputSchema>;
 export const SetSoloStatusInputSchema = z.object({
   year,
   sessionId: id,
-  status: z.enum(['looking_for_partner', 'available']),
+  status: z.enum(['looking_for_partner', 'available', 'unavailable']),
   note: z.string().trim().max(200).optional(),
   onBehalfOfMemberId,
   force,
@@ -241,6 +241,35 @@ export const ClaimLookingForPartnerInputSchema = z.object({
   force,
 });
 export type ClaimLookingForPartnerInput = z.infer<typeof ClaimLookingForPartnerInputSchema>;
+
+/**
+ * `setBulkSoloStatus` (plan §21 B2): a weekday/date filter, expanded
+ * server-side to the concrete matching sessions. Deliberately no raw
+ * `sessionIds[]` variant — the weekday/date filter *is* the whole feature.
+ */
+export const BulkSoloStatusFilterSchema = z
+  .object({
+    weekdays: z.array(weekday).min(1, 'select at least one weekday'),
+    /** Defaults to `todayNZ()` server-side when absent. */
+    fromDate: isoDate.optional(),
+    /** No upper bound when absent. */
+    toDate: isoDate.optional(),
+  })
+  .strict()
+  .refine((v) => !v.fromDate || !v.toDate || v.fromDate <= v.toDate, {
+    message: 'fromDate must be on or before toDate',
+    path: ['toDate'],
+  });
+export type BulkSoloStatusFilter = z.infer<typeof BulkSoloStatusFilterSchema>;
+
+export const SetBulkSoloStatusInputSchema = z
+  .object({
+    status: z.enum(['available', 'unavailable', 'clear']),
+    filter: BulkSoloStatusFilterSchema,
+    onBehalfOfMemberId,
+  })
+  .strict();
+export type SetBulkSoloStatusInput = z.infer<typeof SetBulkSoloStatusInputSchema>;
 
 export const SignUpWithVisitorInputSchema = z
   .object({

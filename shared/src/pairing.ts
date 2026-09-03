@@ -4,6 +4,7 @@
  * the nightly sweep (`verifyPairingConsistency`) runs them over everything.
  */
 
+import { SOLO_ENTRY_STATUSES } from './enums.js';
 import type { Entry, PartnerRef, Series, Team } from './models.js';
 import type { Id } from './primitives.js';
 
@@ -36,7 +37,7 @@ export function validatePairingGroup(entries: Entry[]): string[] {
 
   // I5/I6, checked per-entry regardless of grouping.
   for (const e of entries) {
-    if (e.status === 'looking_for_partner' || e.status === 'available') {
+    if ((SOLO_ENTRY_STATUSES as readonly string[]).includes(e.status)) {
       if (e.partner !== null) {
         issues.push(`${e.id}: solo status '${e.status}' must not have a partner`);
       }

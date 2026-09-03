@@ -190,7 +190,7 @@ per session, by construction. Re-signing-up after a cancel updates the same doc.
 
 ```
 id, sessionId, date, weekday, seriesId|null, memberId,
-status: 'confirmed' | 'looking_for_partner' | 'available' | 'substituted' | 'cancelled',
+status: 'confirmed' | 'looking_for_partner' | 'available' | 'unavailable' | 'substituted' | 'cancelled',
 partner: PartnerRef | null,
 pairingId: string | null,            // shared by all entries of one pairing (null for team entries)
 teamId: string | null,               // set for every entry that belongs to a team (Teams series)
@@ -205,6 +205,10 @@ Status meanings:
 - `confirmed` — paired (with a member or a visitor), or a member of a team (`teamId` set, `partner = null`).
 - `looking_for_partner` — public, first-claim-wins.
 - `available` — public, claim sends an invite.
+- `unavailable` — solo, like `looking_for_partner`/`available` (I6); never shown on the
+  noticeboard, never alerted on. "Don't offer me / don't ask me for this session" — not
+  a booking, but it still occupies the member's slot for every "is this member free"
+  precondition (§21 B2).
 - `substituted` — this member is paired but is being covered this session.
 - `cancelled` — withdrawn. Kept for history; treated as absent.
 
@@ -420,7 +424,8 @@ export const sendInvite = onCall(opts, async (req) => {
 | `sendInvite` | member | `{scope, sessionId? \| seriesId?, toMemberId, message?, onBehalfOfMemberId?}` | to ≠ from; to active; sessions bookable & unlocked; neither has active entry on any target session; no duplicate pending invite; rate 30/day | creates invite | if on-behalf | to: `invite_received` |
 | `respondToInvite` | member (the invitee) | `{inviteId, accept, onBehalfOfMemberId?}` | pending, unexpired; on accept: all sessions still free for both | accept: pairings for every session (I2); decline: status | if on-behalf | from: `invite_accepted`/`declined` |
 | `cancelInvite` | member (the sender) | `{inviteId}` | pending | status=cancelled | if on-behalf | to: `invite_cancelled` |
-| `setSoloStatus` | member | `{sessionId, status: lfp\|available, note?}` | bookable, unlocked, no active entry | upsert entry (I6) | if on-behalf | matchmaking alert (opt-in members) for `lfp` |
+| `setSoloStatus` | member | `{sessionId, status: lfp\|available\|unavailable, note?}` | bookable, unlocked, no *booked* entry (an existing solo status upserts freely) | upsert entry (I6) | if on-behalf | matchmaking alert (opt-in members) for `lfp` |
+| `setBulkSoloStatus` (§21 B2) | member | `{status: available\|unavailable\|clear, filter: {weekdays[], fromDate?, toDate?}, onBehalfOfMemberId?}` | expands to ≤200 bookable, unlocked, non-`noBridge` sessions across every published year | booked entries skipped (reported); solo/cancelled/absent entries upserted (`clear`→`cancelled`) | if on-behalf | — (self); on-behalf: target notified |
 | `claimLookingForPartner` | member | `{sessionId, posterMemberId}` | poster's entry is `lfp`; claimer free | pairing (I2), poster's note cleared | if on-behalf | poster: `claimed` |
 | `signUpWithVisitor` | member | `{scope, sessionId?\|seriesId?, visitorId}` | visitor owned by actor; sessions free & unlocked | one entry per session, `partner={visitor}` (I3) | if on-behalf | visitor courtesy email if opted in |
 | `createVisitor` / `updateVisitor` / `deleteVisitor` | member | `{displayName, email?, phone?, courtesyEmails?}` | ≤20 visitors/member/season; delete only if no future entries | visitor doc | — | — |
@@ -833,6 +838,27 @@ fill) appear alongside the rest of their life. Read-only, auto-refreshing.
 
 ### B2. Bulk day/weekday availability ("I never play Mondays")
 
+> **Status: backend implemented 2026-09-04.** The sketch below is superseded
+> by the settled semantics actually built: `unavailable` blocks exactly like
+> `confirmed`/`substituted` for every "is this member free" precondition
+> (`entries/lib.ts#isFree` — any non-cancelled entry blocks; no change needed
+> there) — it is *not* excluded from blocking the way it is excluded from the
+> noticeboard and card display. `sendSessionReminders` skips it. The new
+> callable is `setBulkSoloStatus({ status: 'available'|'unavailable'|'clear',
+> filter: { weekdays[], fromDate?, toDate? }, onBehalfOfMemberId? })` —
+> deliberately no raw `sessionIds[]`/`year` variant, since the weekday/date
+> filter is the whole feature. It expands the filter across every *published*
+> programme year (there is no cross-year index, so this iterates years),
+> capped at 200 matching sessions (`failed-precondition` above that — narrow
+> the range). A booked entry (`confirmed`/`substituted`, including a Teams
+> member's roster entry) is skipped and reported, never overwritten; a solo
+> entry (`looking_for_partner`/`available`/`unavailable`), `cancelled`, or
+> absent entry is freely upserted (`clear` → `cancelled`; entries are never
+> deleted). This is a **one-time bulk action** the member re-runs as needed —
+> no standing "never Mondays" rule that auto-applies to a newly published
+> year (Neil's call, §21 "Open" below). Web UI is not built yet (later
+> stage). See `firebase/functions/src/entries/bulkSoloStatus.ts`.
+
 **Intent.** Select many sessions at once and set a solo status across all of them —
 e.g. mark every Monday as unavailable for the season, or mark a run of dates
 available in one action.
@@ -853,10 +879,10 @@ available in one action.
   filters, a preview of how many sessions will change and which are skipped, then
   confirm. Must be reversible (clear back to no-entry).
 
-**Open.** Should `unavailable` suppress reminders too? Does a standing "never Mondays"
-rule need to auto-apply to *next year's* programme on publish, or is it a one-time
-bulk action the member re-runs each year? (Leaning one-time to start; a standing rule
-is a bigger feature.)
+**Resolved 2026-09-04.** `unavailable` suppresses reminders (yes). No standing
+"never Mondays" rule — this is a one-time bulk action the member re-runs each
+year, as leaned above. A standing rule remains a bigger, unscheduled feature if
+wanted later.
 
 ### B3. Hide past events by default + two-year (this year + next year) horizon
 

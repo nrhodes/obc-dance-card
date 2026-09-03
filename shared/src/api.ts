@@ -17,6 +17,7 @@ export type {
   AddTeamSessionSubstituteInput,
   AddVisitorToTeamInput,
   BroadcastInput,
+  BulkSoloStatusFilter,
   CancelEntryInput,
   CancelInviteInput,
   ClaimLookingForPartnerInput,
@@ -48,6 +49,7 @@ export type {
   RespondToInviteInput,
   RunPairingSweepInput,
   SendInviteInput,
+  SetBulkSoloStatusInput,
   SetMemberRoleInput,
   SetSoloStatusInput,
   SetSubstituteInput,
@@ -104,6 +106,19 @@ export interface SetSoloStatusResult {
 
 export interface ClearSoloStatusResult {
   entry: Entry;
+}
+
+export interface BulkSoloStatusSkip {
+  sessionId: Id;
+  date: IsoDate;
+  /** Why this session was left untouched. Only `'booked'` today — a real pairing/team commitment is never overwritten. */
+  reason: 'booked';
+}
+
+export interface SetBulkSoloStatusResult {
+  /** Entries created/changed (upserted to `available`/`unavailable`, or flipped to `cancelled` by `'clear'`). */
+  updated: number;
+  skipped: BulkSoloStatusSkip[];
 }
 
 export interface ClaimLookingForPartnerResult {

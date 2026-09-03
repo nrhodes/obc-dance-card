@@ -9,8 +9,10 @@ import {
   type MemberPrivate,
   type NotificationPrefs,
   type SendInviteInput,
+  type SetSoloStatusInput,
 } from '@obc/shared';
 import { db } from '../../lib/admin.js';
+import { setSoloStatusHandler } from '../../entries/entries.js';
 import { sendInviteHandler } from '../../entries/invites.js';
 import { fakeCallableRequest, makeMember, makeProgramme, notificationsFor } from '../../testing/fixtures.js';
 import { createNotification } from '../create.js';
@@ -74,6 +76,26 @@ describe('runSendSessionReminders', () => {
 
     await runSendSessionReminders(now);
     expect(await notificationsFor(m, 'session_reminder')).toHaveLength(1);
+  });
+
+  // plan §21 B2: `unavailable` is "don't ask me for this session" — no
+  // reminder either, exactly like a cancelled entry.
+  it('does not remind a member whose entry for that session is unavailable', async () => {
+    const m = await makeMember('reminder-unavailable@example.org');
+    const now = new Date();
+    const nearDate = addDaysNZ(todayNZ(now), 2);
+    const prog = await makeProgramme({ dates: [nearDate], weekday: 'monday' });
+
+    await setSoloStatusHandler(
+      fakeCallableRequest<SetSoloStatusInput>(
+        { year: prog.year, sessionId: prog.sessionIds[0]!, status: 'unavailable' },
+        { uid: m },
+      ),
+    );
+
+    const report = await runSendSessionReminders(now);
+    expect(report.sent).toBe(0);
+    expect(await notificationsFor(m, 'session_reminder')).toHaveLength(0);
   });
 
   it('does not remind a member with reminders turned off', async () => {

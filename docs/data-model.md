@@ -65,8 +65,12 @@ non-admins):
 
 One member's dance-card entry for one session. The document id is
 **deterministic** — one entry per member per session, by construction.
-Statuses: `confirmed`, `looking_for_partner`, `available`, `substituted`,
-`cancelled`.
+Statuses: `confirmed`, `looking_for_partner`, `available`, `unavailable`,
+`substituted`, `cancelled`. `unavailable` (plan §21 B2) is a third solo
+status — "don't offer me / don't ask me for this session" — never shown on
+the noticeboard or a member's card display, but it still occupies the
+member's slot for every "is this member free" precondition, exactly like a
+booking; `sendSessionReminders` skips it.
 
 Partners (member or visitor) are represented by a denormalised `PartnerRef`
 (`{kind, memberId|visitorId, displayName}`) so rosters render without a

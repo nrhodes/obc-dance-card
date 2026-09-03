@@ -136,6 +136,38 @@ describe('validatePairingGroup', () => {
     const a2 = entry({ id: 'e-a2', memberId: 'alice', status: 'available' });
     expect(validatePairingGroup([a, a2])).not.toEqual([]);
   });
+
+  // plan §21 B2: `unavailable` is a third solo status — I6 must cover it
+  // exactly like `looking_for_partner`/`available`.
+  it('accepts a solo unavailable entry', () => {
+    const a = entry({ id: 'e-a', memberId: 'alice', status: 'unavailable' });
+    expect(validatePairingGroup([a])).toEqual([]);
+  });
+
+  it('rejects an unavailable entry with a partner set', () => {
+    const a = entry({
+      id: 'e-a',
+      memberId: 'alice',
+      status: 'unavailable',
+      partner: memberRef('bob'),
+    });
+    expect(validatePairingGroup([a])).not.toEqual([]);
+  });
+
+  it('rejects an unavailable entry with a pairingId set', () => {
+    const a = entry({ id: 'e-a', memberId: 'alice', status: 'unavailable', pairingId: 'p1' });
+    expect(validatePairingGroup([a])).not.toEqual([]);
+  });
+
+  it('rejects an unavailable entry with substitution fields set', () => {
+    const a = entry({
+      id: 'e-a',
+      memberId: 'alice',
+      status: 'unavailable',
+      substitute: memberRef('bob'),
+    });
+    expect(validatePairingGroup([a])).not.toEqual([]);
+  });
 });
 
 describe('validateTeamGroup', () => {

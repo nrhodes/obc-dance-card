@@ -13,6 +13,7 @@ import {
   sessionCutoff,
   validatePairingGroup,
   type Entry,
+  type EntryStatus,
   type Member,
   type NotificationType,
   type PartnerRef,
@@ -33,6 +34,18 @@ export function entryId(sessionId: string, memberId: string): string {
 /** True while `entry` occupies no slot — never existed, or was cancelled. */
 export function isFree(entry: Entry | null | undefined): boolean {
   return !entry || entry.status === 'cancelled';
+}
+
+/** True while `entry` is a genuine booking — `confirmed` or `substituted`. Never overwritten by a solo-status upsert (`setSoloStatus`/`setBulkSoloStatus`). */
+export function isBooked(entry: Entry | null | undefined): boolean {
+  return !!entry && (entry.status === 'confirmed' || entry.status === 'substituted');
+}
+
+/** User-facing label for a solo status, shared by `setSoloStatus`'s and `setBulkSoloStatus`'s on-behalf notification copy. */
+export function soloStatusLabel(status: Extract<EntryStatus, 'looking_for_partner' | 'available' | 'unavailable'>): string {
+  if (status === 'looking_for_partner') return 'looking for a partner';
+  if (status === 'available') return 'available';
+  return 'unavailable';
 }
 
 /** The `PartnerRef` a member presents to their partner's entry. */

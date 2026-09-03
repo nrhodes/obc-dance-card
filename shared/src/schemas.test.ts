@@ -9,6 +9,7 @@ import {
   RequestLoginCodeInputSchema,
   SendInviteInputSchema,
   SeriesCsvRowSchema,
+  SetBulkSoloStatusInputSchema,
   SetSoloStatusInputSchema,
   SetSubstituteInputSchema,
   VerifyLoginCodeInputSchema,
@@ -77,12 +78,15 @@ describe('SendInviteInputSchema', () => {
 });
 
 describe('SetSoloStatusInputSchema', () => {
-  it('accepts looking_for_partner and available', () => {
+  it('accepts looking_for_partner, available, and unavailable', () => {
     expect(() =>
       SetSoloStatusInputSchema.parse({ year: 2027, sessionId: 's1', status: 'looking_for_partner' }),
     ).not.toThrow();
     expect(() =>
       SetSoloStatusInputSchema.parse({ year: 2027, sessionId: 's1', status: 'available' }),
+    ).not.toThrow();
+    expect(() =>
+      SetSoloStatusInputSchema.parse({ year: 2027, sessionId: 's1', status: 'unavailable' }),
     ).not.toThrow();
   });
   it('rejects other statuses', () => {
@@ -92,6 +96,61 @@ describe('SetSoloStatusInputSchema', () => {
   });
   it('rejects a missing year', () => {
     expect(() => SetSoloStatusInputSchema.parse({ sessionId: 's1', status: 'available' })).toThrow();
+  });
+});
+
+describe('SetBulkSoloStatusInputSchema', () => {
+  it('accepts a minimal filter with just weekdays', () => {
+    expect(() =>
+      SetBulkSoloStatusInputSchema.parse({ status: 'unavailable', filter: { weekdays: ['monday'] } }),
+    ).not.toThrow();
+  });
+  it('accepts available, unavailable, and clear', () => {
+    for (const status of ['available', 'unavailable', 'clear']) {
+      expect(() =>
+        SetBulkSoloStatusInputSchema.parse({ status, filter: { weekdays: ['monday'] } }),
+      ).not.toThrow();
+    }
+  });
+  it('accepts fromDate/toDate and onBehalfOfMemberId', () => {
+    expect(() =>
+      SetBulkSoloStatusInputSchema.parse({
+        status: 'unavailable',
+        filter: { weekdays: ['monday', 'wednesday'], fromDate: '2027-01-01', toDate: '2027-12-31' },
+        onBehalfOfMemberId: 'admin1',
+      }),
+    ).not.toThrow();
+  });
+  it('rejects an empty weekdays array', () => {
+    expect(() =>
+      SetBulkSoloStatusInputSchema.parse({ status: 'unavailable', filter: { weekdays: [] } }),
+    ).toThrow();
+  });
+  it('rejects an unknown status', () => {
+    expect(() =>
+      SetBulkSoloStatusInputSchema.parse({ status: 'looking_for_partner', filter: { weekdays: ['monday'] } }),
+    ).toThrow();
+  });
+  it('rejects a malformed date', () => {
+    expect(() =>
+      SetBulkSoloStatusInputSchema.parse({
+        status: 'available',
+        filter: { weekdays: ['monday'], fromDate: '01/01/2027' },
+      }),
+    ).toThrow();
+  });
+  it('rejects fromDate after toDate', () => {
+    expect(() =>
+      SetBulkSoloStatusInputSchema.parse({
+        status: 'available',
+        filter: { weekdays: ['monday'], fromDate: '2027-06-01', toDate: '2027-01-01' },
+      }),
+    ).toThrow();
+  });
+  it('rejects an unknown weekday', () => {
+    expect(() =>
+      SetBulkSoloStatusInputSchema.parse({ status: 'available', filter: { weekdays: ['sunday'] } }),
+    ).toThrow();
   });
 });
 

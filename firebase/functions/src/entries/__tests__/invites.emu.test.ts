@@ -113,6 +113,33 @@ describe('sendInvite', () => {
     ).rejects.toMatchObject({ code: 'failed-precondition' });
   });
 
+  // plan §21 B2: `unavailable` blocks exactly like `looking_for_partner`/
+  // `available` for every "is this member free" precondition (`isFree`).
+  it('rejects inviting a member who has marked themselves unavailable for that session', async () => {
+    const a = await makeMember('invite-unavail-a@example.org');
+    const b = await makeMember('invite-unavail-b@example.org');
+    const prog = await makeProgramme({ dates: [sessionInFuture('monday')] });
+
+    await setSoloStatusHandler(
+      fakeCallableRequest<SetSoloStatusInput>(
+        { year: prog.year, sessionId: prog.sessionIds[0]!, status: 'unavailable' },
+        { uid: b },
+      ),
+    );
+
+    await expect(
+      sendInviteHandler(
+        fakeCallableRequest<SendInviteInput>(
+          { scope: 'session', year: prog.year, sessionId: prog.sessionIds[0], toMemberId: b },
+          { uid: a },
+        ),
+      ),
+    ).rejects.toMatchObject({ code: 'failed-precondition' });
+
+    const invites = await db.collection(paths.invites()).where('fromMemberId', '==', a).get();
+    expect(invites.empty).toBe(true);
+  });
+
   it('series scope invites every unlocked session and silently excludes a locked one', async () => {
     const a = await makeMember('invite-series-a@example.org');
     const b = await makeMember('invite-series-b@example.org');
@@ -282,6 +309,35 @@ describe('respondToInvite', () => {
     const snap = await db.doc(paths.invite(invite.id)).get();
     expect((snap.data() as Invite).status).toBe('pending');
 
+    await assertSessionPairingValid(prog.sessionIds[0]!);
+  });
+
+  it('rejects accept when the invitee has since marked themselves unavailable for that session', async () => {
+    const a = await makeMember('respond-unavail-a@example.org');
+    const b = await makeMember('respond-unavail-b@example.org');
+    const prog = await makeProgramme({ dates: [sessionInFuture('monday')] });
+
+    const { invite } = await sendInviteHandler(
+      fakeCallableRequest<SendInviteInput>(
+        { scope: 'session', year: prog.year, sessionId: prog.sessionIds[0], toMemberId: b },
+        { uid: a },
+      ),
+    );
+
+    // b marks themselves unavailable on this session in the meantime.
+    await setSoloStatusHandler(
+      fakeCallableRequest<SetSoloStatusInput>(
+        { year: prog.year, sessionId: prog.sessionIds[0]!, status: 'unavailable' },
+        { uid: b },
+      ),
+    );
+
+    await expect(
+      respondToInviteHandler(fakeCallableRequest<RespondToInviteInput>({ inviteId: invite.id, accept: true }, { uid: b })),
+    ).rejects.toMatchObject({ code: 'failed-precondition' });
+
+    const snap = await db.doc(paths.invite(invite.id)).get();
+    expect((snap.data() as Invite).status).toBe('pending');
     await assertSessionPairingValid(prog.sessionIds[0]!);
   });
 

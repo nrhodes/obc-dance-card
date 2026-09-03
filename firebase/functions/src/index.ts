@@ -33,6 +33,9 @@ export { sendInvite, respondToInvite, cancelInvite } from './entries/invites.js'
 export { setSoloStatus, clearSoloStatus, claimLookingForPartner, cancelEntry } from './entries/entries.js';
 export { markNotificationsRead } from './notifications/read.js';
 
+// Backlog §21 B2 — bulk day/weekday availability.
+export { setBulkSoloStatus } from './entries/bulkSoloStatus.js';
+
 // Phase 4a — visitors + substitutes
 export { createVisitor, updateVisitor, deleteVisitor } from './visitors/visitors.js';
 export { signUpWithVisitor } from './visitors/signUp.js';

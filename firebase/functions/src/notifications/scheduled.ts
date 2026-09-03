@@ -99,7 +99,9 @@ export async function runSendSessionReminders(now: Date = new Date()): Promise<R
 
     for (const entryDoc of entriesSnap.docs) {
       const entry = entryDoc.data() as Entry;
-      if (entry.status === 'cancelled') continue;
+      // `unavailable` (plan §21 B2) is "don't ask me for this session" — not a
+      // booking, so it gets no reminder either, exactly like `cancelled`.
+      if (entry.status === 'cancelled' || entry.status === 'unavailable') continue;
       if (alreadyReminded.has(entry.id)) continue;
 
       const { title, body } = await reminderContent(entry);

@@ -9,6 +9,7 @@ import {
   CancelEntryInputSchema,
   ClaimLookingForPartnerInputSchema,
   ClearSoloStatusInputSchema,
+  SOLO_ENTRY_STATUSES,
   SetSoloStatusInputSchema,
   paths,
   type CancelEntryInput,
@@ -37,11 +38,13 @@ import {
   assertSessionOpen,
   cancelEntryInTx,
   entryId,
+  isBooked,
   isFree,
   loadSession,
   memberRef,
   readEntry,
   repeatPartnerWarning,
+  soloStatusLabel,
   writePair,
   type CancelEntryTxResult,
 } from './lib.js';
@@ -72,8 +75,13 @@ export async function setSoloStatusHandler(req: CallableRequest<SetSoloStatusInp
     // listing, so the "this is a teams event" rejection must not apply here.
     assertSessionOpen(loaded.session, loaded.weekday, loaded.programme, { force: input.force, allowTeamsSession: true });
 
+    // A genuine booking (confirmed/substituted, including a Teams member's
+    // `teamId`-bearing `confirmed` entry) is never overwritten. An existing
+    // *solo* entry (looking_for_partner/available/unavailable) — or none at
+    // all — is freely upserted to the new solo status; plan §21 B2's bulk
+    // sibling relies on this same "solo statuses upsert freely" rule.
     const existing = await readEntry(tx, input.sessionId, actor.memberId);
-    if (!isFree(existing)) {
+    if (isBooked(existing)) {
       throw new HttpsError('failed-precondition', 'You already have an entry for this session.');
     }
 
@@ -128,7 +136,7 @@ export async function setSoloStatusHandler(req: CallableRequest<SetSoloStatusInp
       actor.memberId,
       'on_behalf_action',
       'An admin updated your noticeboard listing',
-      `An admin listed you as "${input.status === 'looking_for_partner' ? 'looking for a partner' : 'available'}" for a session.`,
+      `An admin listed you as "${soloStatusLabel(input.status)}" for a session.`,
       { entryId: entry.id },
     );
   }
@@ -152,7 +160,7 @@ export async function clearSoloStatusHandler(
     assertSessionOpen(loaded.session, loaded.weekday, loaded.programme, { force: input.force, allowTeamsSession: true });
 
     const existing = await readEntry(tx, input.sessionId, caller.uid);
-    if (!existing || (existing.status !== 'looking_for_partner' && existing.status !== 'available')) {
+    if (!existing || !(SOLO_ENTRY_STATUSES as readonly string[]).includes(existing.status)) {
       throw new HttpsError('failed-precondition', 'You do not have a noticeboard listing for this session.');
     }
 
