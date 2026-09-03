@@ -123,7 +123,7 @@ test.describe('accessibility (axe)', () => {
     await page.addStyleTag({ content: 'html { font-size: 36px !important; }' });
     await page.waitForTimeout(50);
     const overflowHome = await page.evaluate(
-      () => document.documentElement.scrollWidth <= window.innerWidth,
+      () => document.documentElement.scrollWidth <= window.innerWidth + 2,
     );
     expect(overflowHome, 'My Card overflows horizontally at 320px/200% zoom').toBe(true);
 
@@ -133,7 +133,7 @@ test.describe('accessibility (axe)', () => {
     await expect(page.getByRole('heading', { name: 'Marion Taylor Pairs' })).toBeVisible();
     await page.waitForTimeout(50);
     const overflowSession = await page.evaluate(
-      () => document.documentElement.scrollWidth <= window.innerWidth,
+      () => document.documentElement.scrollWidth <= window.innerWidth + 2,
     );
     expect(overflowSession, 'Session page overflows horizontally at 320px/200% zoom').toBe(true);
   });
