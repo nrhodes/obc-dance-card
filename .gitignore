@@ -71,6 +71,8 @@ ios/**/*.xcuserstate
 ios/**/xcuserdata/
 ios/**/GoogleService-Info.plist
 ios/**/DerivedData/
+# SwiftPM checkouts, pinned out of DerivedData so CI can cache them.
+ios/.spm/
 
 # Hosting staging copy of web/dist (built by the hosting predeploy hook)
 firebase/web-dist/
