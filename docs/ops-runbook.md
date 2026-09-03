@@ -77,6 +77,14 @@ project ids. Copy `firebase/functions/.env.example` to `.env` for local runs.
   blocking function (Cloud Run console → service → Security → "Allow
   unauthenticated", or the Cloud Run API). Triggers and scheduled jobs stay
   private.
+- **Custom-token sign-in needs two extra grants** that no deploy step applies:
+  enable the **IAM Service Account Credentials API** (`iamcredentials.googleapis.com`),
+  and grant `roles/iam.serviceAccountTokenCreator` to the functions' runtime
+  service account (`<project-number>-compute@developer.gserviceaccount.com`)
+  **on itself** (a service-account-level binding, not project-level). Without
+  them `verifyLoginCode` fails at `createCustomToken` with
+  "Permission 'iam.serviceAccounts.signBlob' denied" and members see
+  "Something went wrong" after entering a correct code.
 - **Hosting `public` must live inside `firebase/`**: the predeploy copies
   `web/dist` to `firebase/web-dist/` (gitignored).
 
