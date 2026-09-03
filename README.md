@@ -1,5 +1,7 @@
 # OBC Dance Card
 
+[![CI](https://github.com/nrhodes/obc-dance-card/actions/workflows/ci.yml/badge.svg)](https://github.com/nrhodes/obc-dance-card/actions/workflows/ci.yml)
+
 An electronic version of the Orewa Bridge Club (OBC) annual programme and personal
 "dance card": members see the season's sessions, invite each other to play, see who
 is already playing on a date, advertise as *Available* / *Looking for Partner*, and
