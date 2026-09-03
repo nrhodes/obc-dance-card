@@ -29,27 +29,44 @@ import { readFileSync } from 'node:fs';
 import { cert, getApps, initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
+import { DEFAULT_NOTIFICATION_PREFS, type Member, type MemberPrivate } from '@obc/shared';
 import { checkRealProject } from '../functions/src/lib/scriptGuard.js';
 
 interface Args {
   email: string;
   allowDemo: boolean;
   project?: string;
+  /** Bootstrap: provision the member first if they do not exist (requires firstName/lastName). */
+  create: boolean;
+  firstName?: string;
+  lastName?: string;
+  phone?: string;
 }
 
 function parseArgs(argv: string[]): Args {
   let email: string | undefined;
   let allowDemo = false;
   let project: string | undefined;
+  let create = false;
+  let firstName: string | undefined;
+  let lastName: string | undefined;
+  let phone: string | undefined;
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--email') email = argv[++i];
     else if (argv[i] === '--allow-demo') allowDemo = true;
     else if (argv[i] === '--project') project = argv[++i];
+    else if (argv[i] === '--create') create = true;
+    else if (argv[i] === '--first-name') firstName = argv[++i];
+    else if (argv[i] === '--last-name') lastName = argv[++i];
+    else if (argv[i] === '--phone') phone = argv[++i];
   }
   if (!email) {
-    throw new Error('Usage: make-admin.ts --email <address> [--project <id>] [--allow-demo]');
+    throw new Error(
+      'Usage: make-admin.ts --email <address> [--project <id>] [--allow-demo] ' +
+        '[--create --first-name <name> --last-name <name> [--phone <phone>]]',
+    );
   }
-  return { email, allowDemo, project };
+  return { email, allowDemo, project, create, firstName, lastName, phone };
 }
 
 interface ServiceAccountInfo {
@@ -90,10 +107,63 @@ async function main(): Promise<void> {
 
   const emailLower = args.email.trim().toLowerCase();
   const privateSnap = await db.collection('memberPrivate').where('emailLower', '==', emailLower).limit(1).get();
+  let uid: string;
   if (privateSnap.empty) {
-    throw new Error(`No member found with that email. Run importMembers first, then re-run this script.`);
+    if (!args.create) {
+      throw new Error(
+        'No member found with that email. For the very first admin (before any importMembers has ' +
+          'run — importMembers itself requires an admin), re-run with ' +
+          '--create --first-name <name> --last-name <name> [--phone <phone>].',
+      );
+    }
+    if (!args.firstName || !args.lastName) {
+      throw new Error('--create requires --first-name and --last-name.');
+    }
+    // Mirror provisionMember's document shapes (firebase/functions/src/admin/provisionMember.ts).
+    let createdUid: string;
+    try {
+      createdUid = (await auth.getUserByEmail(emailLower)).uid;
+    } catch {
+      createdUid = (await auth.createUser({ email: emailLower, emailVerified: true, disabled: false })).uid;
+    }
+    const createdAt = new Date().toISOString();
+    const newMember: Member = {
+      id: createdUid,
+      firstName: args.firstName,
+      lastName: args.lastName,
+      phone: args.phone ?? '',
+      grade: 'Unknown',
+      role: 'member',
+      active: true,
+      createdAt,
+      updatedAt: createdAt,
+    };
+    const newPrivate: MemberPrivate = {
+      id: createdUid,
+      emailLower,
+      notificationPrefs: DEFAULT_NOTIFICATION_PREFS,
+      devices: [],
+      hasPassword: false,
+      createdAt,
+      updatedAt: createdAt,
+    };
+    await db.collection('members').doc(createdUid).set(newMember);
+    await db.collection('memberPrivate').doc(createdUid).set(newPrivate);
+    const createAudit = db.collection('auditLog').doc();
+    await createAudit.set({
+      id: createAudit.id,
+      at: createdAt,
+      actorMemberId: 'bootstrap-script',
+      action: 'member_import',
+      targetMemberId: createdUid,
+      entityRef: `members/${createdUid}`,
+      detail: { source: 'make-admin --create', added: 1 },
+    });
+    console.log(`Created member ${createdUid} (${args.firstName} ${args.lastName}).`);
+    uid = createdUid;
+  } else {
+    uid = privateSnap.docs[0]!.id;
   }
-  const uid = privateSnap.docs[0]!.id;
 
   const memberRef = db.collection('members').doc(uid);
   const memberSnap = await memberRef.get();
