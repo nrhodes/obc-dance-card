@@ -21,7 +21,8 @@
  * re-seeding will find the session already paired/cancelled from the
  * previous run).
  */
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test } from './support/fixtures';
+import { type Page } from '@playwright/test';
 import { waitForLoginCode } from './support/emailOutbox';
 
 const ADMIN_EMAIL = 'admin@example.org';

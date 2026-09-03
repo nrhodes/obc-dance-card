@@ -18,7 +18,7 @@
  * and is a cold-cycle test: it assumes a freshly seeded emulator (re-running
  * without re-seeding will find Peter already committed on this session).
  */
-import { expect, test } from '@playwright/test';
+import { expect, test } from './support/fixtures';
 import { waitForLoginCode } from './support/emailOutbox';
 
 const MEMBER_EMAIL = 'peter.wilson@example.org';

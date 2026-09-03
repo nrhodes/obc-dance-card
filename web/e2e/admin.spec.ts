@@ -23,7 +23,8 @@
  * has a 5/day rate limit and the sweep/audit-log assertions assume no other
  * spec's traffic has run first).
  */
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test } from './support/fixtures';
+import { type Page } from '@playwright/test';
 import { waitForLoginCode } from './support/emailOutbox';
 
 const ADMIN_EMAIL = 'admin@example.org';
@@ -41,6 +42,16 @@ async function signIn(page: Page, email: string) {
   await expect(page.getByRole('heading', { name: /Hello/ })).toBeVisible({ timeout: 15_000 });
 }
 
+
+async function openAdmin(page: Page, child: string): Promise<void> {
+  // The admin links live behind an "Admin" disclosure that closes on each
+  // navigation, so re-open it each time. In-app (SPA) clicks preserve the
+  // in-memory "acting on behalf" state that a full page.goto would reset.
+  await page.getByLabel('Main').getByRole('button', { name: /Admin/ }).click();
+  await page.getByLabel('Main').getByRole('link', { name: child, exact: true }).click();
+}
+
+
 test('admin acts on behalf of a member, audits it, checks integrity, and broadcasts', async ({ browser }) => {
   test.setTimeout(120_000);
 
@@ -53,7 +64,7 @@ test('admin acts on behalf of a member, audits it, checks integrity, and broadca
     await signIn(adminPage, ADMIN_EMAIL);
 
     // ---- Admin: Members -> Act on behalf ----
-    await adminPage.getByLabel('Main').getByRole('link', { name: 'Admin: Members' }).click();
+    await openAdmin(adminPage, 'Members');
     await expect(adminPage.getByRole('heading', { name: 'Members' })).toBeVisible();
     await adminPage.getByLabel('Search by name').fill('Susan Clark');
     const memberRow = adminPage.getByRole('row', { name: new RegExp(MEMBER_NAME) });
@@ -88,7 +99,7 @@ test('admin acts on behalf of a member, audits it, checks integrity, and broadca
     await expect(actingAsBanner).toHaveCount(0);
 
     // ---- Admin: Audit log ----
-    await adminPage.getByLabel('Main').getByRole('link', { name: 'Admin: Audit log' }).click();
+    await openAdmin(adminPage, 'Audit log');
     await adminPage.getByLabel('Filter by').selectOption('action');
     await adminPage.getByLabel('Action').selectOption('set_solo_status_on_behalf');
     const auditRow = adminPage.getByRole('row', { name: /set_solo_status_on_behalf/ });
@@ -97,7 +108,7 @@ test('admin acts on behalf of a member, audits it, checks integrity, and broadca
     await expect(auditRow.getByText(MEMBER_NAME)).toBeVisible();
 
     // ---- Admin: Integrity ----
-    await adminPage.getByLabel('Main').getByRole('link', { name: 'Admin: Integrity' }).click();
+    await openAdmin(adminPage, 'Integrity');
     await adminPage.getByRole('button', { name: 'Run check', exact: true }).click();
     await expect(adminPage.getByText('Violations found: 0')).toBeVisible({ timeout: 15_000 });
     await expect(adminPage.getByText('No violations found.')).toBeVisible();
@@ -106,7 +117,7 @@ test('admin acts on behalf of a member, audits it, checks integrity, and broadca
     await memberPage.goto('/'); // start Susan's sign-in before the broadcast fires, so no polling race
     await signIn(memberPage, MEMBER_EMAIL);
 
-    await adminPage.getByLabel('Main').getByRole('link', { name: 'Admin: Broadcast' }).click();
+    await openAdmin(adminPage, 'Broadcast');
     const broadcastTitle = 'Club news';
     const broadcastBody = 'The car park will be resealed next weekend.';
     await adminPage.getByLabel(/Title/).fill(broadcastTitle);

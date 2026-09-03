@@ -14,7 +14,8 @@
  * `programme.spec.ts` uses, and does not mutate any data itself — safe to
  * run in any batch, any number of times).
  */
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test } from './support/fixtures';
+import { type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { waitForLoginCode } from './support/emailOutbox';
 
@@ -91,23 +92,23 @@ test.describe('accessibility (axe)', () => {
     await page.goto('/');
     await expect(page.getByRole('heading', { name: /Hello/ })).toBeVisible();
 
-    await page.getByLabel('Main').getByRole('link', { name: 'Admin: Members' }).click();
+    await page.goto('/admin/members');
     await expect(page.getByRole('heading', { name: 'Members' })).toBeVisible();
     await assertNoSeriousViolations(page, '/admin/members');
 
-    await page.getByLabel('Main').getByRole('link', { name: 'Admin: Programme' }).click();
+    await page.goto('/admin/programme');
     await expect(page.getByRole('heading', { name: 'Import programme' })).toBeVisible();
     await assertNoSeriousViolations(page, '/admin/programme');
 
-    await page.getByLabel('Main').getByRole('link', { name: 'Admin: Broadcast' }).click();
+    await page.goto('/admin/broadcast');
     await expect(page.getByRole('heading', { name: 'Broadcast' })).toBeVisible();
     await assertNoSeriousViolations(page, '/admin/broadcast');
 
-    await page.getByLabel('Main').getByRole('link', { name: 'Admin: Audit log' }).click();
+    await page.goto('/admin/audit');
     await expect(page.getByRole('heading', { name: 'Audit log' })).toBeVisible();
     await assertNoSeriousViolations(page, '/admin/audit');
 
-    await page.getByLabel('Main').getByRole('link', { name: 'Admin: Integrity' }).click();
+    await page.goto('/admin/integrity');
     await expect(page.getByRole('heading', { name: 'Integrity' })).toBeVisible();
     await assertNoSeriousViolations(page, '/admin/integrity');
   });

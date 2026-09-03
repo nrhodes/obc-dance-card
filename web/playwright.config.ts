@@ -1,27 +1,41 @@
 import { defineConfig, devices } from '@playwright/test';
 
 /**
- * Assumes the emulators + seed are already running and `npm run dev -w web`
- * is serving the app — see `web/README.md`. Deliberately does NOT start
- * either itself: the seed data (and the functions emulator's printed login
- * codes) need to exist before the suite runs, and re-seeding on every run
- * would be slow and noisy.
+ * The emulators must already be running and seeded before the suite starts
+ * (they carry the programme + members + the functions emulator that prints
+ * login codes) — see `web/README.md` / the CI `e2e-test` job. Playwright
+ * itself owns only the Vite dev server (via `webServer`), so a run is one
+ * command once the emulators are up.
+ *
+ * Robustness: the auth-throttle reset fixture (support/fixtures.ts) removes the
+ * login-code rate limit as a flake source; on CI we also retry twice and keep
+ * a trace on the first retry. Specs run serially (workers: 1) so the two-context
+ * specs don't contend for the shared emulator.
  */
+const PORT = Number(process.env.WEB_E2E_PORT ?? 5173);
+const BASE_URL = process.env.WEB_BASE_URL ?? `http://localhost:${PORT}`;
+
 export default defineConfig({
   testDir: './e2e',
-  timeout: 30_000,
+  timeout: 45_000,
+  expect: { timeout: 10_000 },
   fullyParallel: false,
   workers: 1,
-  retries: 0,
-  reporter: [['list']],
+  retries: process.env.CI ? 2 : 1,
+  forbidOnly: !!process.env.CI,
+  reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : [['list']],
   use: {
-    baseURL: process.env.WEB_BASE_URL ?? 'http://localhost:5173',
-    trace: 'retain-on-failure',
+    baseURL: BASE_URL,
+    trace: 'on-first-retry',
+    actionTimeout: 15_000,
+    navigationTimeout: 20_000,
   },
-  projects: [
-    {
-      name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
-    },
-  ],
+  webServer: {
+    command: `npm run dev -w web -- --port ${PORT} --strictPort`,
+    url: BASE_URL,
+    reuseExistingServer: !process.env.CI,
+    timeout: 120_000,
+    cwd: '..',
+  },
+  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
 });

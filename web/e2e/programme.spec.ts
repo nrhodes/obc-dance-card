@@ -8,7 +8,7 @@
  * Pairs" starting `2027-01-11` — this test does not depend on the real
  * calendar date, only on that fixed, published programme.
  */
-import { expect, test } from '@playwright/test';
+import { expect, test } from './support/fixtures';
 import { waitForLoginCode } from './support/emailOutbox';
 
 const ADMIN_EMAIL = 'admin@example.org';

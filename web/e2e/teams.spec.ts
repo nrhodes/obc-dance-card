@@ -22,7 +22,8 @@
  * series, and `createTeam` will fail with "You are already on a team for
  * this series.").
  */
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test } from './support/fixtures';
+import { type Page } from '@playwright/test';
 import { waitForLoginCode } from './support/emailOutbox';
 
 const CAPTAIN_EMAIL = 'mary.brown@example.org';

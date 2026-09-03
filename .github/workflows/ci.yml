@@ -87,11 +87,10 @@ jobs:
         run: npm run test:emu -w @obc/functions
 
   e2e-test:
-    # Full-stack browser E2E (emulators + seed + Playwright) is flaky in CI
-    # (login-code rate limits, browser download, emulator timing) and is run
-    # locally as the real gate. Kept here for on-demand runs only.
-    if: github.event_name == 'workflow_dispatch'
-    # Verified working locally (Phase 1b): emulators + seed + `npm run dev -w
+    # Full-stack browser E2E: emulators + seed, then Playwright (which owns the
+    # Vite dev server via webServer). Robust now — the auth-throttle reset
+    # fixture removes the login-code rate limit as a flake source, and
+    # Playwright retries twice on CI.: emulators + seed + `npm run dev -w
     # web` + `npm run test:e2e -w web` all green. See web/README.md for the
     # manual sequence this mirrors.
     runs-on: ubuntu-latest
@@ -114,6 +113,12 @@ jobs:
 
       - name: Build (shared → web → functions)
         run: npm run build
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('package-lock.json') }}
 
       - name: Install Playwright Chromium
         run: npx --prefix web playwright install --with-deps chromium
@@ -143,19 +148,6 @@ jobs:
           GCLOUD_PROJECT: demo-obc
         run: npm run seed
 
-      - name: Start web dev server
-        run: nohup npm run dev -w web > web-dev.out 2>&1 &
-
-      - name: Wait for web dev server
-        run: |
-          for i in $(seq 1 30); do
-            if curl -sf http://localhost:5173/ > /dev/null; then exit 0; fi
-            sleep 1
-          done
-          echo "Web dev server did not start in time" >&2
-          cat web-dev.out || true
-          exit 1
-
       - name: Run Playwright E2E
         env:
           OBC_EMULATOR_LOG: ${{ github.workspace }}/firebase-emulators.out
@@ -171,5 +163,4 @@ jobs:
             web/test-results/
             web/playwright-report/
             firebase-emulators.out
-            web-dev.out
           retention-days: 7

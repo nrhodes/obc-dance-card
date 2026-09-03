@@ -16,7 +16,7 @@
  * to the sign-in email created after the "Email me a code" click, and pulls
  * the 6 digits out of `text`.
  */
-import { expect, test } from '@playwright/test';
+import { expect, test } from './support/fixtures';
 import { waitForLoginCode } from './support/emailOutbox';
 
 const ADMIN_EMAIL = 'admin@example.org';
