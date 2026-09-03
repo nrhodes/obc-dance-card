@@ -67,7 +67,7 @@ jobs:
           java-version: 21
 
       - name: Cache Firebase emulator binaries
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cache/firebase/emulators
           key: firebase-emulators-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
@@ -106,7 +106,7 @@ jobs:
       # Pin the package checkout somewhere stable so it can be cached —
       # by default SwiftPM clones inside DerivedData, which is not.
       - name: Cache SwiftPM checkouts
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ios/.spm
           key: spm-${{ runner.os }}-${{ hashFiles('ios/OBCDanceCard.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
@@ -240,7 +240,7 @@ jobs:
         run: npm run build
 
       - name: Cache Playwright browsers
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
           key: ${{ runner.os }}-playwright-${{ hashFiles('package-lock.json') }}
