@@ -66,3 +66,24 @@ whenever a new project is stood up:
 7. The manual post-E2E log grep for PII (item 9) — the *scan* is automated
    and runs in CI; the *grep of a real emulator log after a real E2E run* is
    a one-off manual step to do once before pilot.
+8. **iOS**: register the app's App Attest key (App Check → Apps → the iOS app
+   → App Attest) and upload the APNs auth key (Cloud Messaging → Apple app
+   configuration) for the real project. Until both are done, a device build
+   pointed at that project gets placeholder App Check tokens and receives no
+   push. The client side of both is in the repo — `App/FirebaseService.swift`
+   registers App Attest with a DeviceCheck fallback, and
+   `App/PushManager.swift` registers the device token via `registerDevice` —
+   so nothing here needs a code change, only the console records.
+
+### iOS client-side items (in `code`)
+
+| Item | Enforced by | How to verify |
+|---|---|---|
+| Clients never write Firestore | `ios/OBCDanceCard/Shared/Api.swift` is the only mutation path; `App/Stores.swift` only reads | `grep -rn "setData\|updateData\|addDocument\|\.delete()" ios/OBCDanceCard` returns nothing |
+| No admin surface on iOS (plan §14.1) | `Shared/Api.swift` binds only non-admin callables; no admin views exist | `grep -o 'Callable.call("[a-zA-Z]*"' ios/OBCDanceCard/Shared/Api.swift \| sort -u` — the list contains no admin callable (`importMembers`, `setMemberRole`, `deactivateMember`, `reactivateMember`, `eraseMember`, `importProgramme`, `publishProgramme`, `updateSeries`, `updateSession`, `broadcast`, `listAuditLog`, `runPairingSweep`) and no payload sets `onBehalfOfMemberId` or `force` |
+| Never log codes, tokens, emails, phones | `Callable` never logs its payload; subscription failures log an error code only | `grep -rn "print(" ios/OBCDanceCard` — every call site logs a name plus a numeric code |
+| No magic links; generic sign-in errors | `Auth/SignInView.swift`, `Support/AppError.swift` | `OBCDanceCardTests` → `ErrorMappingTests.testPasswordSignInCopyIsIdenticalWhateverWentWrong` |
+| Optional Face ID / Touch ID app lock, default off, passcode fallback | `Auth/AppLock.swift` (`deviceOwnerAuthentication`) | Profile → App lock; the preference starts off on a fresh install |
+| Firestore offline persistence off (shared devices) | `App/FirebaseService.swift` (`MemoryCacheSettings`) | Read the file; there is one settings assignment and it is memory-only |
+| Emulator only in DEBUG + explicit opt-in | `App/AppEnvironment.swift` (`useEmulators` is `#if DEBUG` **and** an env var) | A Release build cannot be pointed at an emulator |
+| No analytics SDKs | SwiftPM dependencies are Auth, Firestore, Functions, Messaging, AppCheck only | `grep -n "productName" ios/OBCDanceCard.xcodeproj/project.pbxproj` |
