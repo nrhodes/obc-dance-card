@@ -71,6 +71,18 @@ interface NotificationClickEvent {
 // worker scope.
 const worker = self as unknown as WorkerScope;
 
+// vite-plugin-pwa's update flow (`usePwaUpdate` → `updateSW(true)`) posts
+// SKIP_WAITING to the waiting worker; with `injectManifest` nothing handles
+// it unless we do — without this listener the "Reload" button is inert.
+(self as unknown as { addEventListener(t: 'message', l: (e: { data?: { type?: string } }) => void): void; skipWaiting(): void }).addEventListener(
+  'message',
+  (event) => {
+    if (event.data?.type === 'SKIP_WAITING') {
+      (self as unknown as { skipWaiting(): void }).skipWaiting();
+    }
+  },
+);
+
 /* ------------------------------- app shell precache ------------------------------ */
 
 // workbox's `injectManifest` build step finds where to splice the real

@@ -77,6 +77,9 @@ export function checkServiceWorker(dir = distDir) {
     }
   }
 
+  if (!content.includes('SKIP_WAITING')) {
+    errors.push(`${SW_FILENAME} is missing the SKIP_WAITING message handler — the update Reload button would be inert.`);
+  }
   if (!content.includes('notificationclick')) {
     errors.push(`${SW_FILENAME} is missing a "notificationclick" handler — push deep-linking would be broken.`);
   }
