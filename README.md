@@ -15,7 +15,7 @@ low-friction.
 | `shared/` | TypeScript types, zod schemas, pairing/time helpers, and CSV import templates — the single source of truth for the data model and callable contracts. Consumed by `web` and `firebase/functions`; the iOS app mirrors these as `Codable` structs. |
 | `firebase/` | `firebase.json`, Firestore rules + indexes, emulator config, Cloud Functions (`functions/`, Node 22, gen2), seed scripts (`seed/`), one-off ops scripts requiring a service account (`scripts/`: `make-admin.ts`, `check-auth-config.ts`). |
 | `web/` | React + Vite + TypeScript PWA. Also the Android / desktop experience. |
-| `ios/` | Native SwiftUI app (added in Phase 2). |
+| `ios/` | Native SwiftUI app — member-only client with parity to the web member screens. See [`ios/README.md`](ios/README.md). |
 | `docs/` | Data model, CSV formats, ops runbook, security checklist, pilot runbook, web hardening notes, manual test script. |
 
 ## Scope
@@ -42,6 +42,7 @@ Build phases per plan §16; "Definition of done" for each is in that section.
 | 5 Notifications | Fan-out, FCM (iOS + web push), email, digest, reminders | Done |
 | 6 Admin & integrity | On-behalf, roles, erasure, broadcast, audit log, pairing sweep | Done |
 | 7 Hardening & pilot | App Check on, CSP hardening, accessibility pass, PWA polish, privacy/help pages, pilot runbook | Done (this pass) — real-project console items and the pilot itself are still to run; see `docs/security-checklist.md` and `docs/pilot-runbook.md` |
+| 8 iOS client | SwiftUI member app: sign-in (code/password), Face ID lock, card, programme, session + teams, invites, notifications, profile/visitors, FCM | Done (this pass) — builds, unit tests green, signs in against the emulator. TestFlight upload and the App Attest console registration are still to do; see `ios/README.md` |
 
 Everything is green against the emulator (`npm run build && npm run
 typecheck && npm run lint && npm test`, `npm run test:rules -w

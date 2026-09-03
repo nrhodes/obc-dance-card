@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Template only. The real GoogleService-Info.plist is gitignored (plan §14.2,
+  .gitignore "ios/**/GoogleService-Info.plist") and must never be committed.
+
+  To set up a machine for a *real* project:
+    1. Firebase console -> Project settings -> General -> Your apps -> iOS app.
+       Register the bundle id below if it isn't there yet.
+    2. Download GoogleService-Info.plist.
+    3. Save it as ios/OBCDanceCard/GoogleService-Info.plist. The app target
+       uses a synchronized folder, so it is picked up as a resource with no
+       Xcode project edit.
+
+  To run against the **emulator** you do not need this file at all: launch the
+  OBCDanceCard scheme (it sets OBC_USE_EMULATORS=1) and the app synthesises
+  demo-obc options in code. See ios/README.md.
+
+  Nothing in this file is a secret in the "leaked credential" sense — an iOS
+  API key is shipped in every copy of the app — but the real one still stays
+  out of git so a checkout can't accidentally point at the live project.
+-->
+<plist version="1.0">
+<dict>
+	<key>API_KEY</key>
+	<string>REPLACE_WITH_YOUR_IOS_API_KEY</string>
+	<key>GCM_SENDER_ID</key>
+	<string>REPLACE_WITH_YOUR_PROJECT_NUMBER</string>
+	<key>PLIST_VERSION</key>
+	<string>1</string>
+	<key>BUNDLE_ID</key>
+	<string>nz.org.orewabridge.dancecard</string>
+	<key>PROJECT_ID</key>
+	<string>obc-dance-card</string>
+	<key>STORAGE_BUCKET</key>
+	<string>obc-dance-card.firebasestorage.app</string>
+	<key>IS_ADS_ENABLED</key>
+	<false/>
+	<key>IS_ANALYTICS_ENABLED</key>
+	<false/>
+	<key>IS_APPINVITE_ENABLED</key>
+	<false/>
+	<key>IS_GCM_ENABLED</key>
+	<true/>
+	<key>IS_SIGNIN_ENABLED</key>
+	<true/>
+	<key>GOOGLE_APP_ID</key>
+	<string>REPLACE_WITH_YOUR_GOOGLE_APP_ID</string>
+</dict>
+</plist>
