@@ -797,3 +797,149 @@ Still open:
 2. **Digest time** 17:00 NZ — confirm.
 3. **Team defaults** `teamMin=4`, `teamMax=6` — confirm against how the club actually
    runs its Teams events.
+
+## 21. Backlog — requested enhancements (captured 2026-09-04, not yet scheduled)
+
+These are member-experience features Neil requested after the core build. They are
+**not** yet implemented and not assigned to a phase. Each entry records the intent and
+a sketch of the approach so an implementer can pick it up; treat the sketches as
+SHOULD, not settled decisions, and confirm the open questions before building.
+
+### B1. iCal subscription feed
+
+**Intent.** A member can subscribe to their own bridge schedule from Apple Calendar or
+Google Calendar, so booked sessions (and optionally sessions they are still looking to
+fill) appear alongside the rest of their life. Read-only, auto-refreshing.
+
+**Sketch.**
+- An HTTPS Cloud Function (`onRequest`, not callable) that emits `text/calendar`
+  (RFC 5545). One `VEVENT` per non-cancelled entry for the member, with `DTSTART`/
+  `DTEND` in `Pacific/Auckland` (VTIMEZONE block or UTC with the offset resolved via
+  the §6 helpers), `SUMMARY` = series/session title + partner name, `LOCATION` = the
+  club, `UID` = the deterministic entry id, `LAST-MODIFIED` from `updatedAt`.
+- **Auth without a login.** Calendar clients cannot do App Check or Firebase Auth, so
+  the feed is authorised by an unguessable per-member token in the URL
+  (`/ical/{feedToken}.ics`). Store a CSPRNG `feedToken` (hashed) in `memberPrivate`;
+  expose "Subscribe to my calendar" in Profile that reveals the URL and a "reset link"
+  action (rotates the token, invalidating the old URL). Token grants read of that one
+  member's schedule only. Rate-limit by token. Document that the URL is a secret.
+- Decide scope: confirmed sessions only, or also `looking_for_partner`/`available`
+  (probably a toggle). No PII of other members beyond partner display name.
+- This is the one deliberate exception to "clients only read Firestore / everything
+  else is a callable" — it is an unauthenticated read endpoint, so it must be
+  especially careful: token-scoped, no enumeration, minimal data.
+
+**Open.** Include unbooked/available sessions? Separate feed per year or one combined?
+
+### B2. Bulk day/weekday availability ("I never play Mondays")
+
+**Intent.** Select many sessions at once and set a solo status across all of them —
+e.g. mark every Monday as unavailable for the season, or mark a run of dates
+available in one action.
+
+**Sketch.**
+- Introduce an explicit **`unavailable`** solo status (today §5.6 has
+  `looking_for_partner` / `available` but no "do not offer me"). Add it to
+  `ENTRY_STATUSES`, the validators (still a solo status under I6), rules, and UI.
+  `unavailable` = "don't show me on the noticeboard, don't send me matchmaking alerts
+  for this session"; it is not a booking.
+- New callable `setBulkSoloStatus({ sessionIds[] | filter, status })` where `filter`
+  can be `{ weekday, fromDate?, toDate?, year? }`. Server expands the filter to the
+  concrete bookable, unlocked session ids, skips any session where the member already
+  has a non-cancelled *booked* entry (never silently overwrite a real pairing —
+  return those as skipped), and upserts entries transactionally in batches (§13 batch
+  limits). Cap the number of sessions per call.
+- UI: on the Programme / month view, a "Set availability…" mode with weekday and date
+  filters, a preview of how many sessions will change and which are skipped, then
+  confirm. Must be reversible (clear back to no-entry).
+
+**Open.** Should `unavailable` suppress reminders too? Does a standing "never Mondays"
+rule need to auto-apply to *next year's* programme on publish, or is it a one-time
+bulk action the member re-runs each year? (Leaning one-time to start; a standing rule
+is a bigger feature.)
+
+### B3. Hide past events by default + two-year (this year + next year) horizon
+
+**Intent.** (a) Don't show sessions before today by default, with a way to reveal
+earlier ones. (b) Show this year's remaining sessions **and** next year's, because the
+new programme is published before the current year ends and members book across the
+boundary.
+
+**Sketch.**
+- **Past hiding is a view concern, not a data change.** Default every list/calendar to
+  start at `todayNZ()`; add a "Show past" affordance (a toggle or a "‹ earlier"
+  control) that widens the range. Past sessions remain locked (I7) — read-only.
+- **Two-year horizon.** The data model already keys programmes by year
+  (`programmes/{year}`) and sessions already carry an absolute `date`. The work is to
+  make the clients query and merge **multiple published programme years** (current and
+  next) into one chronological stream, rather than assuming a single active year.
+  - Prefer querying sessions by `date >= todayNZ()` across published years and merging,
+    over the plan's throwaway idea of "augmenting this year's programme with next
+    year's" — keep programmes as separate year documents (cleaner import/publish,
+    §13's `replace:true` still works per year) and merge in the read layer.
+  - Confirm `importProgramme`/`publishProgramme` and the CSV flow already allow a
+    future year's draft to exist and be published while the current year is still
+    active (they should — year is a parameter — but verify and add a test).
+  - Reminders, iCal (B1), and the overview (B4) all consume the same merged,
+    from-today stream.
+
+**Open.** How far back should "Show past" reach — whole current year, or all history?
+
+### B4. Calendar overview: month view, list mode, year heat-map
+
+**Intent.** See the schedule at a glance, not one day at a time. Specifically: the next
+~two weeks; a month grid; a list mode as an alternative to the grid; and a whole-year
+overview colour-coded per day so a member can spot dates they are *available for but
+have not booked*.
+
+**Sketch.**
+- A new **Overview** screen (member) with three modes sharing one from-today, two-year
+  (B3) data source:
+  1. **Agenda/list** — chronological list of upcoming sessions with the member's status
+     per session (booked-with-whom / looking / available / unavailable / nothing).
+     Default to the next two weeks with "show more".
+  2. **Month grid** — a calendar month; each day cell shows its session(s) and the
+     member's status, with prev/next month.
+  3. **Year heat-map** — 12 compact month blocks; each day colour-coded by the member's
+     relationship to that day's sessions. Suggested legend: **booked**, **partially
+     booked** (some sessions that day booked, some not), **open** (a session exists the
+     member could book but hasn't), **unavailable**, **no session / past**. The point
+     is to make "open" days pop so members fill gaps.
+- All derived client-side from the entries + sessions the member can already read; no
+  new write path. Colours must meet WCAG AA and not rely on hue alone (§14.1
+  accessibility) — pair colour with an icon/label, important for an elderly user base.
+
+**Open.** Exact status→colour taxonomy; whether "open" should exclude sessions whose
+series the member is ineligible for (grade notes are advisory, §2, so probably show
+them but flag).
+
+### B5. Admin: sign-up counts per event
+
+**Intent.** In admin mode, see how many pairs (and teams) have signed up for each
+session/series, to gauge turnout and chase low numbers.
+
+**Sketch.**
+- Admin Programme view gains a count per session: **pairs** = non-cancelled member
+  entries that are `confirmed` with a partner, counted as pairs (member–member counted
+  once per pairing via `pairingId`; member–visitor counted as one pair), plus a
+  separate **teams** count (distinct `active`/`forming` `teamId`s with sessions that
+  day) and a **solo/looking** count.
+- Also surface a per-series roll-up. Prefer computing via a callable
+  (`getSignupCounts({ year, weekday? | seriesId? })`) that aggregates server-side and
+  returns only counts (no rosters beyond what admins can already see), rather than
+  pulling every entry to the client. Consider a denormalised counter on the session
+  doc updated by the entry-mutation callables if live counts on the member-facing
+  session page are wanted later; start with on-demand aggregation.
+
+**Open.** Live (denormalised counters) vs. on-demand aggregation — start on-demand.
+
+### Cross-cutting notes for the backlog
+
+- **B3 is a prerequisite** for B1, B4, and the value of B2 (bulk-setting across the
+  year boundary), so schedule it first if these are picked up together.
+- **B2's `unavailable` status** and **B4's "open" colour** are two halves of the same
+  idea (what am I free for?) — design them together.
+- None of these change the security model except **B1**, which adds the first
+  token-authenticated unauthenticated read endpoint; give it its own threat-model row
+  (token entropy, rotation, rate-limiting, minimal payload, no enumeration) before it
+  ships.
