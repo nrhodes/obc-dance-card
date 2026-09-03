@@ -77,3 +77,6 @@ firebase/web-dist/
 
 # Bundled functions deploy directory (built by functions/scripts/bundle.mjs)
 firebase/functions-deploy/
+
+# Committed emulator config (non-secret) — see the file header
+!firebase/functions/.env.demo-obc
