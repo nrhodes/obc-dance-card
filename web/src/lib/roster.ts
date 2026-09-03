@@ -151,6 +151,7 @@ export function describeOwnEntry(entry: Entry, teams: Team[]): string | null {
   }
   if (entry.status === 'looking_for_partner') return "You're looking for a partner.";
   if (entry.status === 'available') return "You're marked as available.";
+  if (entry.status === 'unavailable') return "You've marked yourself unavailable for this session.";
   return null;
 }
 

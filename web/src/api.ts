@@ -65,6 +65,8 @@ import type {
   RunPairingSweepResult,
   SendInviteInput,
   SendInviteResult,
+  SetBulkSoloStatusInput,
+  SetBulkSoloStatusResult,
   SetMemberRoleInput,
   SetMemberRoleResult,
   SetSoloStatusInput,
@@ -105,6 +107,7 @@ export const respondToInvite = callable<RespondToInviteInput, RespondToInviteRes
 export const cancelInvite = callable<CancelInviteInput, CancelInviteResult>('cancelInvite');
 export const setSoloStatus = callable<SetSoloStatusInput, SetSoloStatusResult>('setSoloStatus');
 export const clearSoloStatus = callable<ClearSoloStatusInput, ClearSoloStatusResult>('clearSoloStatus');
+export const setBulkSoloStatus = callable<SetBulkSoloStatusInput, SetBulkSoloStatusResult>('setBulkSoloStatus');
 export const claimLookingForPartner = callable<ClaimLookingForPartnerInput, ClaimLookingForPartnerResult>(
   'claimLookingForPartner',
 );

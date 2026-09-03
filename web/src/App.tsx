@@ -14,6 +14,7 @@ import { HomeScreen } from './screens/HomeScreen';
 import { ProfileScreen } from './screens/ProfileScreen';
 import { VisitorsScreen } from './screens/VisitorsScreen';
 import { ProgrammeScreen } from './screens/ProgrammeScreen';
+import { CalendarScreen } from './screens/CalendarScreen';
 import { SessionScreen } from './screens/SessionScreen';
 import { InvitesScreen } from './screens/InvitesScreen';
 import { NotificationsScreen } from './screens/NotificationsScreen';
@@ -61,6 +62,7 @@ export function App() {
             <Route path="/profile" element={<ProfileScreen />} />
             <Route path="/visitors" element={<VisitorsScreen />} />
             <Route path="/programme" element={<ProgrammeScreen />} />
+            <Route path="/calendar" element={<CalendarScreen />} />
             <Route path="/session/:year/:sessionId" element={<SessionScreen />} />
             <Route path="/invites" element={<InvitesScreen />} />
             <Route path="/notifications" element={<NotificationsScreen />} />

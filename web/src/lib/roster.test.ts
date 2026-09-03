@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Entry, Team } from '@obc/shared';
-import { buildPairsRoster, buildSoloRows, describeOwnEntry, noticeboardLabels } from './roster';
+import { buildPairsRoster, buildSessionRoster, buildSoloRows, describeOwnEntry, noticeboardLabels } from './roster';
 
 function baseEntry(overrides: Partial<Entry>): Entry {
   return {
@@ -122,6 +122,18 @@ describe('buildSoloRows', () => {
   });
 });
 
+describe('buildSessionRoster', () => {
+  it('never lists an unavailable entry on either noticeboard list (plan §21 B2)', () => {
+    const entries: Entry[] = [
+      baseEntry({ id: 'e-unavailable', memberId: 'member-a', status: 'unavailable' }),
+      baseEntry({ id: 'e-lfp', memberId: 'member-b', status: 'looking_for_partner' }),
+    ];
+    const roster = buildSessionRoster(entries, nameOf);
+    expect(roster.lookingForPartner.map((r) => r.memberId)).toEqual(['member-b']);
+    expect(roster.available).toEqual([]);
+  });
+});
+
 describe('noticeboardLabels', () => {
   it('reads "Looking for a partner" / "Available" for non-Teams formats', () => {
     expect(noticeboardLabels('Pairs')).toEqual({ lfp: 'Looking for a partner', available: 'Available' });
@@ -147,6 +159,10 @@ describe('describeOwnEntry', () => {
   it('describes looking_for_partner and available', () => {
     expect(describeOwnEntry(baseEntry({ status: 'looking_for_partner' }), [])).toBe("You're looking for a partner.");
     expect(describeOwnEntry(baseEntry({ status: 'available' }), [])).toBe("You're marked as available.");
+  });
+
+  it('describes unavailable (plan §21 B2)', () => {
+    expect(describeOwnEntry(baseEntry({ status: 'unavailable' }), [])).toBe("You've marked yourself unavailable for this session.");
   });
 
   it('describes a team member entry using the team name', () => {

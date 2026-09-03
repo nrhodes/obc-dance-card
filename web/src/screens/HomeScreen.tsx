@@ -1,21 +1,19 @@
 /**
- * My Dance Card (`/`, plan Phase 3b task, deliverable 1). Subscribes once to
- * every entry belonging to the signed-in member (`entries` where
- * `memberId == uid`, ordered by `date` — the existing `entries(memberId,
- * date)` index), then splits that one list into "upcoming" (grouped by
- * weekday → series, plan §5.4) and a collapsed "Past" (last 10) client-side.
- * A single subscription is enough at club scale and reuses the one
- * `entries(memberId, date)` composite index for both halves, rather than
- * running two separate range queries.
+ * My Dance Card (`/`, plan Phase 3b task, deliverable 1). Reads the shared
+ * `useMyEntries` subscription (plan §21 B2/B4 — extracted so the new
+ * Calendar screen can read the exact same live `entries` data), then splits
+ * that one list into "upcoming" (grouped by weekday → series, plan §5.4) and
+ * a collapsed "Past" (last 10) client-side.
  */
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { collection, documentId, onSnapshot, orderBy, query, where } from 'firebase/firestore';
+import { collection, documentId, onSnapshot, query, where } from 'firebase/firestore';
 import { paths, todayNZ, type Entry, type Team } from '@obc/shared';
 import { db } from '../firebase';
 import { useAuth } from '../auth/useAuth';
 import { useEffectiveMember } from '../admin/useEffectiveMember';
 import { useProgramme } from '../programme/useProgramme';
+import { useMyEntries } from '../entries/useMyEntries';
 import { formatDateNZ } from '../lib/format';
 import { buildPastRows, groupCardEntries, type CardRow } from '../lib/card';
 import { SubscriptionError } from '../components/SubscriptionError';
@@ -32,37 +30,12 @@ export function HomeScreen() {
   // Plan Phase 6b task deliverable 2: while an admin is acting on behalf of
   // a member, "My dance card" shows that member's card instead of the
   // admin's own.
-  const { effectiveMemberId, actingAsName } = useEffectiveMember();
+  const { actingAsName } = useEffectiveMember();
   const { sessions, series, weekdays, loading: programmeLoading } = useProgramme();
+  const { entries, loading: entriesLoadingState, error: entriesError } = useMyEntries();
+  const entriesLoaded = !entriesLoadingState;
 
-  const [entries, setEntries] = useState<Entry[]>([]);
-  const [entriesLoaded, setEntriesLoaded] = useState(false);
-  const [entriesError, setEntriesError] = useState<{ code: string } | null>(null);
   const [pastOpen, setPastOpen] = useState(false);
-
-  useEffect(() => {
-    if (!effectiveMemberId) {
-      setEntries([]);
-      setEntriesLoaded(true);
-      return;
-    }
-    setEntriesLoaded(false);
-    const q = query(collection(db, paths.entries()), where('memberId', '==', effectiveMemberId), orderBy('date', 'asc'));
-    return onSnapshot(
-      q,
-      (snap) => {
-        setEntries(snap.docs.map((d) => d.data() as Entry));
-        setEntriesError(null);
-        setEntriesLoaded(true);
-      },
-      (err) => {
-        console.error('subscription_failed', 'home_entries', err.code);
-        setEntries([]);
-        setEntriesError({ code: err.code });
-        setEntriesLoaded(true);
-      },
-    );
-  }, [effectiveMemberId]);
 
   const today = todayNZ();
   const futureEntries = useMemo(() => entries.filter((e) => e.date >= today), [entries, today]);

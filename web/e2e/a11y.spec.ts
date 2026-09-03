@@ -62,6 +62,18 @@ test.describe('accessibility (axe)', () => {
     await expect(page.getByRole('heading', { name: 'Marion Taylor Pairs' })).toBeVisible();
     await assertNoSeriousViolations(page, '/session/:year/:sessionId');
 
+    await page.getByLabel('Main').getByRole('link', { name: 'Calendar' }).click();
+    await expect(page.getByRole('heading', { name: 'Calendar' })).toBeVisible();
+    await assertNoSeriousViolations(page, '/calendar (List mode)');
+    await page.getByRole('tab', { name: 'Month' }).click();
+    await assertNoSeriousViolations(page, '/calendar (Month mode)');
+    await page.getByRole('tab', { name: 'Year' }).click();
+    await assertNoSeriousViolations(page, '/calendar (Year mode)');
+    await page.getByRole('button', { name: 'Set availability…' }).click();
+    await expect(page.getByRole('dialog')).toBeVisible();
+    await assertNoSeriousViolations(page, '/calendar (Set availability… dialog)');
+    await page.keyboard.press('Escape');
+
     await page.getByLabel('Main').getByRole('link', { name: 'Invites' }).click();
     await expect(page.getByRole('heading', { name: 'Invites' })).toBeVisible();
     await assertNoSeriousViolations(page, '/invites');
@@ -136,5 +148,19 @@ test.describe('accessibility (axe)', () => {
       () => document.documentElement.scrollWidth <= window.innerWidth + 2,
     );
     expect(overflowSession, 'Session page overflows horizontally at 320px/200% zoom').toBe(true);
+
+    // The Month/Year grids are the densest layouts in the app — the most
+    // likely place a fixed-column grid could push past a narrow viewport.
+    await page.getByLabel('Main').getByRole('link', { name: 'Calendar' }).click();
+    await expect(page.getByRole('heading', { name: 'Calendar' })).toBeVisible();
+    await page.getByRole('tab', { name: 'Month' }).click();
+    await page.waitForTimeout(50);
+    const overflowMonth = await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 2);
+    expect(overflowMonth, 'Calendar Month view overflows horizontally at 320px/200% zoom').toBe(true);
+
+    await page.getByRole('tab', { name: 'Year' }).click();
+    await page.waitForTimeout(50);
+    const overflowYear = await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 2);
+    expect(overflowYear, 'Calendar Year view overflows horizontally at 320px/200% zoom').toBe(true);
   });
 });

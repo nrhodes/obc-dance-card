@@ -145,6 +145,10 @@ export function SessionScreen() {
   const [removeSubOpen, setRemoveSubOpen] = useState(false);
   const [removeSubBusy, setRemoveSubBusy] = useState(false);
   const [removeSubError, setRemoveSubError] = useState<string | null>(null);
+
+  const [unavailableConfirmOpen, setUnavailableConfirmOpen] = useState(false);
+  const [unavailableBusy, setUnavailableBusy] = useState(false);
+  const [unavailableError, setUnavailableError] = useState<string | null>(null);
   const [inviteResponseError, setInviteResponseError] = useState<string | null>(null);
   const [inviteResponseBusy, setInviteResponseBusy] = useState(false);
 
@@ -343,6 +347,26 @@ export function SessionScreen() {
       setSoloError(mapActionError(err as AppError));
     } finally {
       setSoloBusy(false);
+    }
+  }
+
+  async function handleSetUnavailable() {
+    if (!session) return;
+    setUnavailableBusy(true);
+    setUnavailableError(null);
+    try {
+      await setSoloStatus({
+        year,
+        sessionId: session.id,
+        status: 'unavailable',
+        ...(onBehalfOfMemberId ? { onBehalfOfMemberId } : {}),
+      });
+      setUnavailableConfirmOpen(false);
+      setNotice("You're marked as unavailable for this session.");
+    } catch (err) {
+      setUnavailableError(mapActionError(err as AppError));
+    } finally {
+      setUnavailableBusy(false);
     }
   }
 
@@ -709,6 +733,10 @@ export function SessionScreen() {
             }}
             onChangeSolo={(status) => void handleChangeSolo(status)}
             onRemoveSolo={() => void handleRemoveSolo()}
+            onUnavailable={() => {
+              clearAllErrors();
+              setUnavailableConfirmOpen(true);
+            }}
             onCancel={() => {
               clearAllErrors();
               setCancelDialogOpen(true);
@@ -841,6 +869,18 @@ export function SessionScreen() {
           onClose={() => setRemoveSubOpen(false)}
         />
       )}
+
+      {unavailableConfirmOpen && (
+        <ConfirmDialog
+          title="Mark yourself unavailable?"
+          body="Don't show me as free and don't let others invite me to this session — you can undo this any time."
+          confirmLabel="I'm unavailable"
+          busy={unavailableBusy}
+          error={unavailableError}
+          onConfirm={() => void handleSetUnavailable()}
+          onClose={() => setUnavailableConfirmOpen(false)}
+        />
+      )}
     </div>
   );
 }
@@ -891,6 +931,7 @@ function ActionsPanel({
   onSolo,
   onChangeSolo,
   onRemoveSolo,
+  onUnavailable,
   onCancel,
   onPlayWithVisitor,
   onArrangeSubstitute,
@@ -905,6 +946,7 @@ function ActionsPanel({
   onSolo: (status: 'looking_for_partner' | 'available') => void;
   onChangeSolo: (status: 'looking_for_partner' | 'available') => void;
   onRemoveSolo: () => void;
+  onUnavailable: () => void;
   onCancel: () => void;
   onPlayWithVisitor: () => void;
   onArrangeSubstitute: () => void;
@@ -930,6 +972,22 @@ function ActionsPanel({
         </button>
         <button type="button" className="button button-secondary" onClick={onPlayWithVisitor}>
           Play with a visitor
+        </button>
+        <button type="button" className="button button-secondary" onClick={onUnavailable}>
+          I&apos;m unavailable
+        </button>
+      </div>
+    );
+  }
+
+  if (state.kind === 'unavailable') {
+    if (disableSoloEdit) {
+      return <p className="muted">Clearing an unavailable marker isn&apos;t available while acting on behalf of another member.</p>;
+    }
+    return (
+      <div className="actions-row">
+        <button type="button" className="button button-secondary" onClick={onRemoveSolo}>
+          I&apos;m available again
         </button>
       </div>
     );

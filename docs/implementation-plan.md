@@ -856,8 +856,24 @@ fill) appear alongside the rest of their life. Read-only, auto-refreshing.
 > absent entry is freely upserted (`clear` → `cancelled`; entries are never
 > deleted). This is a **one-time bulk action** the member re-runs as needed —
 > no standing "never Mondays" rule that auto-applies to a newly published
-> year (Neil's call, §21 "Open" below). Web UI is not built yet (later
-> stage). See `firebase/functions/src/entries/bulkSoloStatus.ts`.
+> year (Neil's call, §21 "Open" below). See
+> `firebase/functions/src/entries/bulkSoloStatus.ts`.
+>
+> **Status: web UI implemented 2026-09-04**, alongside B4 (they share one
+> screen). "Set availability…" lives on the new `/calendar` screen (B4 below)
+> as a button opening a dialog: status radios (Available/Unavailable/Clear,
+> each with a one-line explanation), Mon-Fri weekday checkboxes, native
+> `<input type=date>` from/to (default today → end of the newest loaded
+> year), and a live client-side preview (`web/src/lib/bulkAvailability.ts`,
+> pure and unit-tested) mirroring the server's weekday/date-range/bookable
+> filtering — deliberately not the lock check or 200-cap, which the plan
+> settles the server owns; the preview says "about N". Confirm calls
+> `setBulkSoloStatus` and shows `updated`/`skipped` in plain English. The
+> session page (`SessionScreen`) also grew a same-callable single-session "I'm
+> unavailable" action next to "I'm available"/"I'm looking for a partner", and
+> `deriveSessionActions` (`web/src/lib/sessionActions.ts`) got a dedicated
+> `unavailable` state — it previously fell through to the `confirmed` branch
+> and would have mis-rendered a solo `unavailable` marker as a real booking.
 
 **Intent.** Select many sessions at once and set a solo status across all of them —
 e.g. mark every Monday as unavailable for the season, or mark a run of dates
@@ -923,6 +939,36 @@ boundary.
 **Open.** How far back should "Show past" reach — whole current year, or all history?
 
 ### B4. Calendar overview: month view, list mode, year heat-map
+
+> **Status: implemented 2026-09-04.** New `/calendar` screen ("Calendar" in
+> the member nav, My Card left untouched), sharing `useProgramme()` (B3) and a
+> new `useMyEntries()` hook extracted from `HomeScreen` so both screens read
+> one live `entries` subscription. Pure view-model in `web/src/lib/overview.ts`
+> (heavily unit-tested): a six-way day taxonomy — `none` (no bookable session,
+> or the day is past — always muted), `booked` (every session that day
+> booked), `partly` (some but not all), `seeking` (not booked, but a
+> looking_for_partner/available entry that day), `unavailable` (every session
+> that day covered by an `unavailable` entry — partial coverage reads as
+> `open` instead, per the settled rule below), `open` (a bookable session
+> with no active relationship — the state the year view exists to surface).
+> Three modes behind a weekday-tabs-style segmented control: **List**
+> (default, next 14 days, "Show more", days with nothing omitted), **Month**
+> (Mon-Fri grid only — the programme never runs weekends — prev/next bounded
+> by the loaded years, today outlined), **Year** (a picker over loaded years,
+> 12 compact month blocks, a legend). Every status is colour *and* a letter
+> glyph (never colour alone, WCAG 1.4.1); Year-view day cells are deliberately
+> smaller than the app's usual 48px tap target (12 months of Mon-Fri cells
+> would not otherwise fit on a phone) — a documented, conscious exception for
+> this one dense "spot the pattern" view, not the Month/List views. Clicking a
+> single-session day cell opens that session; a multi-session cell (or any
+> Year-view cell) jumps to List anchored at that date. See
+> `web/src/screens/CalendarScreen.tsx`, `web/src/lib/overview.ts`,
+> `web/src/entries/useMyEntries.ts`; e2e in `web/e2e/calendar.spec.ts`.
+>
+> Loose ends fixed along the way: `web/src/screens/InvitesScreen.tsx` had an
+> un-year-qualified `series.find` (a latent bug from B3's `seriesId`
+> collision-across-years risk, since fixed by deriving the year from the
+> invite's own session dates).
 
 **Intent.** See the schedule at a glance, not one day at a time. Specifically: the next
 ~two weeks; a month grid; a list mode as an alternative to the grid; and a whole-year

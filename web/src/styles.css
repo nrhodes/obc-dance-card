@@ -28,6 +28,20 @@
   --space-2: 16px;
   --space-3: 24px;
   --space-4: 32px;
+
+  /* Calendar day-status palette (plan §21 B4). Each status also carries a
+     letter glyph in the markup — colour is never the only signal (WCAG
+     1.4.1) — these are the *additional* colour cue for sighted users. */
+  --color-status-booked-bg: var(--color-success-bg);
+  --color-status-booked-text: var(--color-success-text);
+  --color-status-partly-bg: #e0f2f1;
+  --color-status-partly-text: #0f4c4c;
+  --color-status-seeking-bg: #e8eaf6;
+  --color-status-seeking-text: #1a237e;
+  --color-status-unavailable-bg: var(--color-secondary-bg);
+  --color-status-unavailable-text: var(--color-secondary-text);
+  --color-status-open-bg: #ffe8cc;
+  --color-status-open-text: #5c2e00;
 }
 
 * {
@@ -193,9 +207,30 @@ textarea {
   min-height: var(--tap-target);
 }
 
-.checkbox-field input[type='checkbox'] {
+.checkbox-field input[type='checkbox'],
+.checkbox-field input[type='radio'] {
   width: 28px;
   height: 28px;
+  flex-shrink: 0;
+}
+
+/* A radio option with a one-line explanation under the label (plan §21 B2
+   "Set availability…" dialog) reads better top-aligned than vertically
+   centred against two lines of text. */
+.radio-option {
+  align-items: flex-start;
+}
+
+.fieldset-plain {
+  border: none;
+  padding: 0;
+  margin: 0 0 var(--space-2) 0;
+}
+
+.fieldset-plain legend {
+  font-weight: 600;
+  padding: 0;
+  margin-bottom: var(--space-1);
 }
 
 .alert {
@@ -526,4 +561,174 @@ td {
 }
 .admin-menu-list a {
   padding: 0 var(--space-2);
+}
+
+/* Calendar screen (plan §21 B4) */
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.day-status-none {
+  background: transparent;
+  color: var(--color-muted);
+}
+
+.day-status-booked {
+  background: var(--color-status-booked-bg);
+  color: var(--color-status-booked-text);
+}
+
+.day-status-partly {
+  background: var(--color-status-partly-bg);
+  color: var(--color-status-partly-text);
+}
+
+.day-status-seeking {
+  background: var(--color-status-seeking-bg);
+  color: var(--color-status-seeking-text);
+}
+
+.day-status-unavailable {
+  background: var(--color-status-unavailable-bg);
+  color: var(--color-status-unavailable-text);
+}
+
+.day-status-open {
+  background: var(--color-status-open-bg);
+  color: var(--color-status-open-text);
+}
+
+.month-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow-x: auto;
+}
+
+.month-grid-header {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 4px;
+  font-weight: 600;
+  text-align: center;
+  font-size: 0.85rem;
+}
+
+.month-grid-week {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 4px;
+}
+
+.month-cell {
+  min-height: var(--tap-target);
+  min-width: var(--tap-target);
+  border: 2px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-bg);
+  color: var(--color-text);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 4px;
+  font-weight: 600;
+}
+
+.month-cell:disabled {
+  cursor: default;
+}
+
+.month-cell-blank {
+  visibility: hidden;
+  min-height: var(--tap-target);
+  min-width: var(--tap-target);
+}
+
+.month-cell-today {
+  outline: 3px solid var(--color-primary);
+  outline-offset: -3px;
+}
+
+.month-cell-day {
+  font-size: 0.95rem;
+  line-height: 1.1;
+}
+
+.month-cell-glyph {
+  font-size: 0.75rem;
+  line-height: 1.1;
+}
+
+/*
+ * Year-view mini-grids (plan §21 B4) deliberately do not meet the app's
+ * usual 48px tap-target minimum — 12 months' worth of Mon-Fri day cells at
+ * full size would not fit on a phone screen, and the Year view's whole
+ * purpose is a compact "spot the open days" glance, not a primary input
+ * surface (that's the Month/List views, whose cells stay full-size). Every
+ * cell still carries a real `aria-label` and remains keyboard-operable.
+ */
+.month-cell-compact {
+  min-height: 22px;
+  min-width: 22px;
+  padding: 1px;
+  border-width: 1px;
+  font-size: 0.65rem;
+}
+
+.month-cell-compact .month-cell-day {
+  font-size: 0.6rem;
+}
+
+.month-cell-compact .month-cell-glyph {
+  font-size: 0.55rem;
+}
+
+.year-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: var(--space-2);
+}
+
+.year-month-card {
+  padding: var(--space-2);
+  margin-bottom: 0;
+}
+
+.calendar-legend {
+  margin-top: var(--space-2);
+}
+
+.calendar-legend-heading {
+  margin-bottom: var(--space-1);
+}
+
+.calendar-legend-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.calendar-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.calendar-legend-swatch {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  font-weight: 700;
 }

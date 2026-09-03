@@ -45,6 +45,8 @@ export type OwnEntryActionState =
   | { kind: 'teamsFormat'; hasOwnEntry: boolean; teamId: string | null; role: TeamsRole }
   | { kind: 'noEntryOpen' }
   | { kind: 'solo'; status: 'looking_for_partner' | 'available'; note?: string }
+  /** Plan §21 B2: a solo `unavailable` marker — "don't offer me this session". The only action is to clear it. */
+  | { kind: 'unavailable' }
   | { kind: 'confirmed'; partner: PartnerRef; partnerSubstitute: PartnerRef | null; substituteOption: SubstituteOption }
   | { kind: 'substituted'; partner: PartnerRef | null; substitute: PartnerRef | null }
   | { kind: 'sub'; isSubstituteFor: string };
@@ -153,6 +155,12 @@ export function deriveSessionActions(
         ? { kind: 'solo', status: entry.status }
         : { kind: 'solo', status: entry.status, note: entry.note },
     );
+  }
+
+  // A solo `unavailable` marker (plan §21 B2) — must not fall through to the
+  // `confirmed` branch below, which would mis-render it as a real booking.
+  if (entry.status === 'unavailable') {
+    return noAction({ kind: 'unavailable' });
   }
 
   if (entry.isSubstituteFor) {

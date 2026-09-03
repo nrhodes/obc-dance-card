@@ -255,6 +255,13 @@ describe('deriveSessionActions', () => {
     expect(result.state).toEqual({ kind: 'solo', status: 'available', note: undefined });
   });
 
+  it('unavailable: does not mis-render as confirmed (plan §21 B2 fix)', () => {
+    const solo = entry({ status: 'unavailable', partner: null });
+    const result = deriveSessionActions(solo, session(), weekday(), emptyRoster, BEFORE_CUTOFF);
+    expect(result.state).toEqual({ kind: 'unavailable' });
+    expect(result.canActOnRoster).toBe(false);
+  });
+
   it('confirmed: paired with a member, series allows substitutes -> available', () => {
     const paired = entry({ status: 'confirmed', partner: { kind: 'member', memberId: 'member-b', displayName: 'John Smith' } });
     const result = deriveSessionActions(paired, session(), weekday(), emptyRoster, BEFORE_CUTOFF, {

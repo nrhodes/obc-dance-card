@@ -36,19 +36,34 @@ function datesLabel(invite: Invite, sessions: Session[]): string {
   return dates.map(formatDateNZ).join(', ');
 }
 
+/**
+ * The programme year an invite's sessions belong to, derived from the first
+ * session's own date (mirrors `lib/card.ts`'s `entryYear` — never from a
+ * `seriesId` lookup). `seriesId` is `${weekday}-${slug(name)}` and can
+ * collide across published years (plan §21 B3 id-collision warning), so any
+ * `series.find` against the merged multi-year `series` array must be
+ * year-qualified with this.
+ */
+function inviteYear(invite: Invite, sessions: Session[]): number | null {
+  const firstSessionId = invite.sessionIds[0];
+  const date = firstSessionId ? sessions.find((s) => s.id === firstSessionId)?.date : undefined;
+  return date ? Number(date.slice(0, 4)) : null;
+}
+
 /** "Team invite from <captain> — <team name> (<series>)" / "<name> wants you to be captain of <team>" (plan §12A.3). */
 function inviteHeadline(
   invite: Invite,
   nameOf: (memberId: string) => string,
   teamName: (teamId: string) => string,
-  seriesName: (seriesId: string | null) => string | null,
+  seriesName: (seriesId: string | null, year: number | null) => string | null,
+  sessions: Session[],
 ): string {
   if (invite.scope === 'team') {
     const team = invite.teamId ? teamName(invite.teamId) : 'a team';
     if (invite.kind === 'captaincy') {
       return `${nameOf(invite.fromMemberId)} wants you to be captain of ${team}`;
     }
-    const sName = seriesName(invite.seriesId);
+    const sName = seriesName(invite.seriesId, inviteYear(invite, sessions));
     return `Team invite from ${nameOf(invite.fromMemberId)} — ${team}${sName ? ` (${sName})` : ''}`;
   }
   return `${nameOf(invite.fromMemberId)} invited you`;
@@ -61,7 +76,8 @@ export function InvitesScreen() {
   const { teamById } = useTeams();
 
   const teamName = (teamId: string) => teamById(teamId)?.name ?? 'a team';
-  const seriesName = (seriesId: string | null) => (seriesId ? (series.find((s) => s.id === seriesId)?.name ?? null) : null);
+  const seriesName = (seriesId: string | null, year: number | null) =>
+    seriesId ? (series.find((s) => s.id === seriesId && (year == null || s.year === year))?.name ?? null) : null;
 
   const [busyId, setBusyId] = useState<string | null>(null);
   const [errorById, setErrorById] = useState<Record<string, string>>({});
@@ -140,7 +156,7 @@ export function InvitesScreen() {
           incoming.map((invite) => (
             <div key={invite.id} className="card">
               <p>
-                <strong>{inviteHeadline(invite, nameOf, teamName, seriesName)}</strong>
+                <strong>{inviteHeadline(invite, nameOf, teamName, seriesName, sessions)}</strong>
                 {invite.scope !== 'team' && <> &mdash; {scopeLabel(invite)}</>}
               </p>
               {invite.sessionIds.length > 0 && <p className="muted">{datesLabel(invite, sessions)}</p>}

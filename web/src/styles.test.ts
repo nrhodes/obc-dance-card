@@ -35,7 +35,15 @@ describe('styles.css accessibility rules', () => {
     const values = minHeightValues(css);
     // e.g. `body { min-height: 100vh }` is a full-viewport rule, not a tap
     // target — everything else in this stylesheet's `min-height` uses.
-    const tapTargetCandidates = values.filter((v) => v !== '100vh');
+    //
+    // `.month-cell-compact` (plan §21 B4, Calendar Year view) is a
+    // deliberate, documented exception: 12 months' worth of Mon-Fri day
+    // cells at the usual 48px minimum would not fit on a phone screen, and
+    // the Year view exists purely as a compact "spot the open days" glance —
+    // the Month and List views (this app's primary booking surfaces) keep
+    // full 48px cells. See the CSS comment above `.month-cell-compact`.
+    const KNOWN_EXCEPTIONS = new Set(['100vh', '22px']);
+    const tapTargetCandidates = values.filter((v) => !KNOWN_EXCEPTIONS.has(v));
     expect(
       tapTargetCandidates.length,
       'no tap-target min-height rules found — did styles.css change shape?',

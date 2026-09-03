@@ -71,6 +71,7 @@ export function AppShell() {
             My card
           </NavLink>
           <NavLink to="/programme">Programme</NavLink>
+          <NavLink to="/calendar">Calendar</NavLink>
           <NavLink to="/invites">
             Invites
             {incoming.length > 0 && <span className="nav-badge">{incoming.length}</span>}
