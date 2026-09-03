@@ -19,6 +19,9 @@
 // importing it here does not risk initialising anything before the guard has
 // had a chance to run (and it's what `seedGuard.test.ts` exercises directly).
 import { checkEmulatorSafe } from '../functions/src/lib/seedGuard.js';
+// Pure date helpers only (no Admin SDK, no I/O) — safe to import statically
+// alongside `seedGuard.ts` above, ahead of the guard running.
+import { addDaysNZ, todayNZ, weekdayOfNZ } from '@obc/shared';
 
 function assertEmulatorSafe(): string {
   try {
@@ -191,6 +194,108 @@ function singlesCsv(): string {
   return rows.map(csvRow).join('\n');
 }
 
+/* -------------------------------------------------------------------------- */
+/* Second, current-dated programme (plan §21 B3: "two-year horizon")         */
+/*                                                                            */
+/* The 2027 programme above is fixed/transcribed and always in the future    */
+/* relative to a real clock, which is exactly what most specs want (a stable */
+/* programme that never goes stale) — but it can never exercise "hide past   */
+/* events by default", since every one of its sessions is always upcoming.   */
+/* This second programme is keyed to *today's* NZ year and includes two      */
+/* already-past sessions and two upcoming ones, so B3's past-hiding default  */
+/* and the two-year merge both have something real to show against.         */
+/* -------------------------------------------------------------------------- */
+
+/** True when `date` (`YYYY-MM-DD`) falls on a Monday (NZ) — `weekdayOfNZ` throws for Sat/Sun. */
+function isMondayNZ(date: string): boolean {
+  try {
+    return weekdayOfNZ(date) === 'monday';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * `count` Mondays starting from `addDaysNZ(from, direction)` and walking in
+ * `direction` (+1 forward, -1 backward) one calendar day at a time. Nearest
+ * first — e.g. `direction: -1` returns `[mostRecentMonday, theOneBeforeThat]`.
+ */
+function walkMondays(from: string, direction: 1 | -1, count: number): string[] {
+  const found: string[] = [];
+  let date = from;
+  // A week has 7 days; bound the walk generously (any `count` here is small).
+  for (let i = 0; i < count * 7 + 7 && found.length < count; i++) {
+    date = addDaysNZ(date, direction);
+    if (isMondayNZ(date)) found.push(date);
+  }
+  return found;
+}
+
+/**
+ * Distinct from every 2027 Monday series name on purpose (plan §21 B3 seed
+ * note): the natural way to exercise the seriesId collision the plan calls
+ * out (`${weekday}-${slug(name)}` can collide across years) would be to
+ * reuse a 2027 Monday series name here too — but `programme.spec.ts` and
+ * `a11y.spec.ts` already assert on the *text* "Marion Taylor Pairs" being
+ * visible/unique on the Monday tab, and reusing that name would make both
+ * years' cards carry the same heading text, breaking those (Playwright
+ * strict-mode) selectors. The plan explicitly allows this fallback: keep
+ * seed names distinct and cover the collision with a unit test instead —
+ * see `web/src/lib/programmeView.test.ts`'s "cross-year seriesId collision"
+ * suite, which exercises the exact same `${weekday}-${slug(name)}` shape
+ * colliding (`monday-pairs`, deliberately shared between two fake years).
+ */
+const SPRING_PAIRS_NAME = 'Spring Pairs';
+
+/**
+ * The two most recent past Mondays are seeded as standalone singles, not as
+ * more `Spring Pairs` sessions, even though the plan's B3 seed sketch reads
+ * as "4 sessions, one series" (`seriesId`-shaped ids for all four). Reason:
+ * per B3's own past-hiding rule, a series with *any* future session is
+ * "partially past" and stays fully visible — every date shown, past ones
+ * merely dimmed (`session-past`) — never hidden by the toggle. If all four
+ * dates belonged to one series, there would be nothing on the Monday tab
+ * that the "Show earlier sessions" toggle actually hides, and the e2e
+ * coverage B3 asks for (a past session hidden by default, shown after the
+ * toggle) would have nothing real to assert against. Splitting the two past
+ * Mondays out as standalone sessions — which the fully-past-standalone rule
+ * *does* hide by default — keeps the seed exercising the feature it exists
+ * to demonstrate, while `Spring Pairs` (the two future Mondays) exercises
+ * the two-year merge and cross-year navigation instead.
+ */
+const CASUAL_MONDAY_TITLE = 'Casual Monday Bridge';
+
+function currentYearWeekdaysCsv(): string {
+  const rows = [
+    ['weekday', 'label', 'startTime', 'seatedBy', 'stewardEmail', 'notes'],
+    ['monday', 'Monday Bridge', '13:00', '12:45', 'admin@example.org', ''],
+  ];
+  return rows.map(csvRow).join('\n');
+}
+
+/**
+ * `Spring Pairs`, running on the upcoming Monday dates only (see the note
+ * above `CASUAL_MONDAY_TITLE`). Omits the series row entirely if
+ * `futureDates` is empty (year-boundary edge) rather than import a series
+ * with zero dates.
+ */
+function currentYearSeriesCsv(futureDates: string[]): string {
+  const rows = [['weekday', 'name', 'scoring', 'format', 'bestOfN', 'bestOfM', 'allowSubstitute', 'eligibilityNote', 'note', 'dates', 'teamMin', 'teamMax']];
+  if (futureDates.length > 0) {
+    rows.push(['monday', SPRING_PAIRS_NAME, 'Scr', 'Pairs', '', '', 'yes', '', '', futureDates.join(';'), '', '']);
+  }
+  return rows.map(csvRow).join('\n');
+}
+
+/** One standalone (non-series) single per past Monday date — see the note above `CASUAL_MONDAY_TITLE`. */
+function currentYearSinglesCsv(pastDates: string[]): string {
+  const rows = [
+    ['date', 'weekday', 'kind', 'title', 'partnerRequired'],
+    ...pastDates.map((date) => [date, 'monday', 'holidayBridge', CASUAL_MONDAY_TITLE, 'yes']),
+  ];
+  return rows.map(csvRow).join('\n');
+}
+
 async function main(): Promise<void> {
   const projectId = assertEmulatorSafe();
   // Set before any dynamic import below runs `initializeApp()` inside
@@ -262,6 +367,52 @@ async function main(): Promise<void> {
 
   const publishResult = await runPublishProgramme({ year: PROGRAMME_YEAR }, adminUid);
   console.log(`Published ${PROGRAMME_YEAR} programme at ${publishResult.publishedAt}.`);
+
+  // ---- second, current-dated programme (plan §21 B3 "two-year horizon") ----
+  const currentYear = Number(todayNZ().slice(0, 4));
+  if (currentYear === PROGRAMME_YEAR) {
+    console.log(
+      `Current NZ year is ${currentYear}, same as the seeded ${PROGRAMME_YEAR} programme — skipping the second, current-dated programme.`,
+    );
+    return;
+  }
+
+  const today = todayNZ();
+  // Nearest-first from `walkMondays`; sort ascending for readability in CSVs/logs.
+  const pastMondays = walkMondays(today, -1, 2)
+    .filter((d) => d.startsWith(`${currentYear}-`)) // drop any that spilled into an adjacent year (year-boundary edge)
+    .sort();
+  const futureMondays = walkMondays(today, 1, 2)
+    .filter((d) => d.startsWith(`${currentYear}-`))
+    .sort();
+
+  if (pastMondays.length === 0 && futureMondays.length === 0) {
+    console.warn(`No Monday session dates for ${currentYear} landed inside the year (year-boundary edge) — skipping the second programme.`);
+    return;
+  }
+
+  const currentYearImportReport = await runProgrammeImport(
+    {
+      year: currentYear,
+      weekdaysCsv: currentYearWeekdaysCsv(),
+      seriesCsv: currentYearSeriesCsv(futureMondays),
+      singlesCsv: currentYearSinglesCsv(pastMondays),
+    },
+    adminUid,
+  );
+
+  if (currentYearImportReport.errors.length > 0) {
+    console.error(`Programme import for ${currentYear} failed with ${currentYearImportReport.errors.length} error(s):`);
+    for (const e of currentYearImportReport.errors) console.error(`  [${e.file} row ${e.row}] ${e.message}`);
+    process.exit(1);
+  }
+  for (const w of currentYearImportReport.warnings) console.warn(`  warning: ${w}`);
+  console.log(
+    `Imported ${currentYear} programme: ${currentYearImportReport.weekdays} weekday(s), ${currentYearImportReport.series} series, ${currentYearImportReport.sessions} session(s) (past Mondays: ${pastMondays.join(', ') || 'none'}; future Mondays: ${futureMondays.join(', ') || 'none'}).`,
+  );
+
+  const currentYearPublishResult = await runPublishProgramme({ year: currentYear }, adminUid);
+  console.log(`Published ${currentYear} programme at ${currentYearPublishResult.publishedAt}.`);
 }
 
 main().catch((err) => {

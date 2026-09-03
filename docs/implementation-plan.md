@@ -860,6 +860,17 @@ is a bigger feature.)
 
 ### B3. Hide past events by default + two-year (this year + next year) horizon
 
+> **Status: implemented 2026-09-04.** `ProgrammeProvider` loads the 3 newest
+> published years (per-year subscriptions merged client-side, every item
+> year-tagged — `seriesId`/weekday ids collide across years, session ids don't);
+> `useProgramme(year)` returns a year slice; ProgrammeScreen hides past
+> standalone sessions and fully-past series by default behind a "Show earlier
+> sessions" toggle (rendered only when something is hidden). "Show past" reach =
+> whatever is loaded (up to 3 published years). Server side needed no changes;
+> a test now pins that publishing one year never unpublishes another. Seed
+> publishes a second, current-dated year; e2e `programme-horizon.spec.ts` covers
+> the merge, the toggle, and cross-year navigation.
+
 **Intent.** (a) Don't show sessions before today by default, with a way to reveal
 earlier ones. (b) Show this year's remaining sessions **and** next year's, because the
 new programme is published before the current year ends and members book across the

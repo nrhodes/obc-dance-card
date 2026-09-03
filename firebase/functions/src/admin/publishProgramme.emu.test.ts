@@ -90,4 +90,23 @@ describe('publishProgramme', () => {
     const year = freshYear();
     await expect(publishProgrammeHandler(await adminReq({ year }))).rejects.toMatchObject({ code: 'not-found' });
   });
+
+  // plan §21 B3 ("two-year horizon"): the club publishes next year's
+  // programme while the current year is still active, so two years must be
+  // publishable independently, each ending up (and staying) published.
+  it('publishing one year does not unpublish another year (two-year horizon, plan §21 B3)', async () => {
+    const yearA = freshYear();
+    const yearB = freshYear();
+    await makeDraftProgramme(yearA, { withSession: true });
+    await makeDraftProgramme(yearB, { withSession: true });
+
+    const resultA = await publishProgrammeHandler(await adminReq({ year: yearA }));
+    expect(resultA.year).toBe(yearA);
+    const resultB = await publishProgrammeHandler(await adminReq({ year: yearB }));
+    expect(resultB.year).toBe(yearB);
+
+    const [snapA, snapB] = await Promise.all([db.doc(paths.programme(yearA)).get(), db.doc(paths.programme(yearB)).get()]);
+    expect(snapA.data()).toMatchObject({ status: 'published' });
+    expect(snapB.data()).toMatchObject({ status: 'published' });
+  });
 });

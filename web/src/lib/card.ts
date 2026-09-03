@@ -14,6 +14,21 @@ import { ACTIVE_ENTRY_STATUSES, WEEKDAYS, type Entry, type Series, type Session,
 
 const ACTIVE = new Set<string>(ACTIVE_ENTRY_STATUSES as readonly string[]);
 
+/**
+ * `sessions`/`series`/`weekdays` may come from `useProgramme()`'s merged,
+ * multi-year view (plan §21 B3), where each item is tagged with its year —
+ * or from a plain single-year fixture (`year` absent). `seriesId` can
+ * collide across years (`${weekday}-${slug(name)}`), so a series lookup
+ * must only match a same-year doc when the year is known; an untagged item
+ * (`year` absent, e.g. older tests/callers) always matches, preserving the
+ * pre-B3 single-year behaviour.
+ */
+type Tagged<T> = T & { year?: number };
+
+function entryYear(entry: Entry): number {
+  return Number(entry.date.slice(0, 4));
+}
+
 /** True for any entry that still occupies a place on the card (plan §5.6 status list, minus `cancelled`). */
 export function isActiveCardEntry(entry: Entry): boolean {
   return ACTIVE.has(entry.status);
@@ -50,11 +65,12 @@ export function describeCardStatus(entry: Entry, teams: Team[] = []): string {
 }
 
 /** The title to show for one entry's session: the session's own title, or its series name as a fallback. */
-export function cardSessionTitle(entry: Entry, sessions: Session[], series: Series[]): string {
+export function cardSessionTitle(entry: Entry, sessions: Tagged<Session>[], series: Tagged<Series>[]): string {
   const session = sessions.find((s) => s.id === entry.sessionId);
   if (session) return session.title;
   if (entry.seriesId) {
-    const s = series.find((sr) => sr.id === entry.seriesId);
+    const year = entryYear(entry);
+    const s = series.find((sr) => sr.id === entry.seriesId && (sr.year == null || sr.year === year));
     if (s) return s.name;
   }
   return 'Session';
@@ -82,7 +98,7 @@ export interface CardWeekdayGroup {
   groups: CardGroup[];
 }
 
-function toRow(entry: Entry, sessions: Session[], series: Series[], teams: Team[]): CardRow {
+function toRow(entry: Entry, sessions: Tagged<Session>[], series: Tagged<Series>[], teams: Team[]): CardRow {
   return {
     entry,
     title: cardSessionTitle(entry, sessions, series),
@@ -100,9 +116,9 @@ function toRow(entry: Entry, sessions: Session[], series: Series[], teams: Team[
  */
 export function groupCardEntries(
   entries: Entry[],
-  sessions: Session[],
-  series: Series[],
-  weekdays: WeekdayProgramme[],
+  sessions: Tagged<Session>[],
+  series: Tagged<Series>[],
+  weekdays: Tagged<WeekdayProgramme>[],
   teams: Team[] = [],
 ): CardWeekdayGroup[] {
   const active = entries.filter(isActiveCardEntry);
@@ -118,9 +134,13 @@ export function groupCardEntries(
     const list = byWeekday.get(wd);
     if (!list || list.length === 0) continue;
 
+    // Grouping key is year-qualified from the *entry's own* date, not from a
+    // series lookup — `seriesId` can collide across years, so two entries in
+    // different years' identically-slugged series must never land in the
+    // same group (plan §21 B3 id-collision note).
     const bySeries = new Map<string, Entry[]>();
     for (const e of list) {
-      const key = e.seriesId ?? `single:${e.sessionId}`;
+      const key = e.seriesId ? `${entryYear(e)}:${e.seriesId}` : `single:${e.sessionId}`;
       const group = bySeries.get(key) ?? [];
       group.push(e);
       bySeries.set(key, group);
@@ -129,12 +149,18 @@ export function groupCardEntries(
     const groups: CardGroup[] = [];
     for (const [key, groupEntries] of bySeries) {
       const sorted = [...groupEntries].sort((a, b) => a.date.localeCompare(b.date));
-      const seriesDoc = key.startsWith('single:') ? undefined : series.find((s) => s.id === key);
-      const title = seriesDoc ? seriesDoc.name : cardSessionTitle(sorted[0]!, sessions, series);
+      const first = sorted[0]!;
+      const seriesDoc = first.seriesId
+        ? series.find((s) => s.id === first.seriesId && (s.year == null || s.year === entryYear(first)))
+        : undefined;
+      const title = seriesDoc ? seriesDoc.name : cardSessionTitle(first, sessions, series);
       groups.push({ key, title, rows: sorted.map((e) => toRow(e, sessions, series, teams)) });
     }
     groups.sort((a, b) => (a.rows[0]?.date ?? '').localeCompare(b.rows[0]?.date ?? ''));
 
+    // `weekdays` is newest-year-first when it comes from `useProgramme()`'s
+    // merged view (see `ProgrammeProvider`), so this `.find()` already
+    // prefers the newest year's label for a repeated weekday.
     const weekdayDoc = weekdays.find((w) => w.weekday === wd);
     result.push({ weekday: wd, label: weekdayDoc?.label ?? wd, groups });
   }
@@ -142,7 +168,7 @@ export function groupCardEntries(
 }
 
 /** Flat, most-recent-first rows for the collapsed "Past" section. */
-export function buildPastRows(entries: Entry[], sessions: Session[], series: Series[], teams: Team[] = []): CardRow[] {
+export function buildPastRows(entries: Entry[], sessions: Tagged<Session>[], series: Tagged<Series>[], teams: Team[] = []): CardRow[] {
   return [...entries.filter(isActiveCardEntry)]
     .sort((a, b) => b.date.localeCompare(a.date))
     .map((e) => toRow(e, sessions, series, teams));

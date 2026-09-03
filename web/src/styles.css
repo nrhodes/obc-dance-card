@@ -376,7 +376,12 @@ td {
 }
 
 .session-past {
-  opacity: 0.55;
+  /* 0.55 measured ~3.0:1 against --color-secondary-bg (the `.single-row-nobridge`
+     background) — below WCAG AA's 4.5:1 for normal text. 0.75 clears 4.5:1
+     against both --color-bg and --color-secondary-bg with margin. Caught by
+     `a11y.spec.ts` (axe) on the Good Friday "No bridge" row, which is
+     `.session-past` unconditionally regardless of date (plan §14.1). */
+  opacity: 0.75;
 }
 
 .single-row-nobridge {

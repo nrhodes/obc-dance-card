@@ -1,9 +1,15 @@
 /**
  * Programme browser (`/programme`, plan Phase 2b task, §5.4, §14.1). Members
- * only ever see the *published* programme — `useProgramme` subscribes to the
- * latest `programmes/{year}` with `status: 'published'` and its
- * weekdays/series/sessions subcollections; drafts are invisible to members
- * at the rules layer, so there is nothing to filter here.
+ * only ever see *published* programmes — `useProgramme` subscribes to every
+ * `programmes/{year}` with `status: 'published'` (newest few years) and
+ * their weekdays/series/sessions subcollections, and merges them into one
+ * chronological, year-tagged view; drafts are invisible to members at the
+ * rules layer, so there is nothing to filter here.
+ *
+ * Extended by plan §21 B3 ("Hide past events by default + two-year
+ * horizon"): the timeline now spans every loaded published year, and past
+ * sessions/series are hidden by default with a toggle to reveal them —
+ * mirroring `HomeScreen`'s "Show past" pattern.
  */
 import { useEffect, useMemo, useState, type KeyboardEvent } from 'react';
 import { Link } from 'react-router-dom';
@@ -11,12 +17,20 @@ import { WEEKDAYS, isPastNZ, todayNZ, type Series, type Session, type Weekday, t
 import { useProgramme } from '../programme/useProgramme';
 import { useMembersDirectory } from '../members/useMembersDirectory';
 import { formatDateNZ, formatTimeOfDay, shortWeekdayLabel } from '../lib/format';
-import { buildWeekdayTimeline, defaultProgrammeWeekday, weekdaysWithData, type WeekdayTimelineItem } from '../lib/programmeView';
+import { buildWeekdayTimeline, defaultProgrammeWeekday, weekdaysWithData, type SeriesTimelineItem, type WeekdayTimelineItem } from '../lib/programmeView';
 import { SubscriptionError } from '../components/SubscriptionError';
 
+type Tagged<T> = T & { year: number };
+
+/** A fully-past series (every session on it is before today, NZ) is hidden by default (plan §21 B3). */
+function isSeriesFullyPast(item: SeriesTimelineItem): boolean {
+  return item.sessions.length > 0 && item.sessions.every((s) => isPastNZ(s.date));
+}
+
 export function ProgrammeScreen() {
-  const { year, weekdays, series, sessions, loading, error } = useProgramme();
+  const { years, weekdays, series, sessions, loading, error } = useProgramme();
   const [activeWeekday, setActiveWeekday] = useState<Weekday>(defaultProgrammeWeekday());
+  const [pastOpen, setPastOpen] = useState(false);
 
   const presentWeekdays = useMemo(
     () => weekdaysWithData(weekdays.map((w) => w.weekday), WEEKDAYS),
@@ -75,7 +89,7 @@ export function ProgrammeScreen() {
     );
   }
 
-  if (year == null) {
+  if (years.length === 0) {
     return (
       <div className="card">
         <h1>Programme</h1>
@@ -84,13 +98,24 @@ export function ProgrammeScreen() {
     );
   }
 
+  // `weekdays` is newest-year-first (see `ProgrammeProvider`), so a plain
+  // `.find()` here already implements "prefer the newest year's weekday
+  // doc, fall back to an older year's if the newest year lacks it."
   const weekdayDoc = weekdays.find((w) => w.weekday === activeWeekday);
   const timeline = buildWeekdayTimeline(activeWeekday, series, sessions);
+  const isPastItem = (item: WeekdayTimelineItem) =>
+    item.type === 'single' ? isPastNZ(item.session.date) : isSeriesFullyPast(item);
+  // How many items the default (collapsed) view hides — the toggle only
+  // renders when there is actually something behind it; a button that
+  // visibly does nothing is confusing (plan §14.1's forgiving-UI intent).
+  const hiddenPastCount = timeline.filter(isPastItem).length;
+  const visibleTimeline = pastOpen ? timeline : timeline.filter((item) => !isPastItem(item));
+  const heading = `${years.slice().reverse().join(' & ')} Programme`;
 
   return (
     <div className="stack">
       <div className="card">
-        <h1>{year} Programme</h1>
+        <h1>{heading}</h1>
         <button type="button" className="button button-secondary" onClick={jumpToToday}>
           Jump to today
         </button>
@@ -120,13 +145,32 @@ export function ProgrammeScreen() {
 
       <div role="tabpanel" id={`weekday-panel-${activeWeekday}`} aria-labelledby={`weekday-tab-${activeWeekday}`} className="stack">
         {weekdayDoc && <WeekdayInfo weekday={weekdayDoc} />}
+
+        {hiddenPastCount > 0 && (
+          <div className="card">
+            <button
+              type="button"
+              className="button button-link"
+              aria-expanded={pastOpen}
+              onClick={() => setPastOpen((open) => !open)}
+            >
+              {pastOpen ? 'Hide earlier sessions' : 'Show earlier sessions'}
+            </button>
+          </div>
+        )}
+
         {timeline.length === 0 && (
           <div className="card">
             <p className="muted">No sessions scheduled for this weekday.</p>
           </div>
         )}
-        {timeline.map((item) => (
-          <TimelineItemView key={item.type === 'series' ? item.series.id : item.session.id} item={item} year={year} />
+        {timeline.length > 0 && visibleTimeline.length === 0 && (
+          <div className="card">
+            <p className="muted">No upcoming sessions for this weekday.</p>
+          </div>
+        )}
+        {visibleTimeline.map((item) => (
+          <TimelineItemView key={item.type === 'series' ? `${item.year}:${item.series.id}` : item.session.id} item={item} />
         ))}
       </div>
     </div>
@@ -151,14 +195,14 @@ function WeekdayInfo({ weekday }: { weekday: WeekdayProgramme }) {
   );
 }
 
-function TimelineItemView({ item, year }: { item: WeekdayTimelineItem; year: number }) {
+function TimelineItemView({ item }: { item: WeekdayTimelineItem }) {
   if (item.type === 'series') {
-    return <SeriesCard series={item.series} sessions={item.sessions} year={year} />;
+    return <SeriesCard series={item.series} sessions={item.sessions} />;
   }
-  return <SingleRow session={item.session} year={year} />;
+  return <SingleRow session={item.session} />;
 }
 
-function SeriesCard({ series, sessions, year }: { series: Series; sessions: Session[]; year: number }) {
+function SeriesCard({ series, sessions }: { series: Series; sessions: Tagged<Session>[] }) {
   return (
     <div className="card">
       <h3>{series.name}</h3>
@@ -177,7 +221,7 @@ function SeriesCard({ series, sessions, year }: { series: Series; sessions: Sess
       <ul className="session-date-list">
         {sessions.map((session) => (
           <li key={session.id} id={`session-row-${session.id}`}>
-            <Link to={`/session/${year}/${session.id}`} className={isPastNZ(session.date) ? 'session-past' : undefined}>
+            <Link to={`/session/${session.year}/${session.id}`} className={isPastNZ(session.date) ? 'session-past' : undefined}>
               {formatDateNZ(session.date)}
             </Link>
           </li>
@@ -187,12 +231,12 @@ function SeriesCard({ series, sessions, year }: { series: Series; sessions: Sess
   );
 }
 
-function SingleRow({ session, year }: { session: Session; year: number }) {
+function SingleRow({ session }: { session: Tagged<Session> }) {
   const isNoBridge = session.kind === 'noBridge';
   return (
     <div className={`card single-row${isNoBridge ? ' single-row-nobridge' : ''}`} id={`session-row-${session.id}`}>
       <Link
-        to={`/session/${year}/${session.id}`}
+        to={`/session/${session.year}/${session.id}`}
         className={isPastNZ(session.date) || isNoBridge ? 'session-past' : undefined}
       >
         {formatDateNZ(session.date)} &mdash; {isNoBridge ? 'No bridge' : session.title}

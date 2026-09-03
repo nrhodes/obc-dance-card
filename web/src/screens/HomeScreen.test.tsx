@@ -2,8 +2,8 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
-import type { Entry, Member, Series, Session, Team, WeekdayProgramme } from '@obc/shared';
-import type { ProgrammeContextValue } from '../programme/ProgrammeContext';
+import type { Entry, Member, Programme, Series, Session, Team, WeekdayProgramme } from '@obc/shared';
+import type { ProgrammeContextValue, ProgrammeYearData } from '../programme/ProgrammeContext';
 import { HomeScreen } from './HomeScreen';
 
 const useProgrammeMock = vi.fn<() => ProgrammeContextValue>();
@@ -134,15 +134,21 @@ function entry(overrides: Partial<Entry>): Entry {
   };
 }
 
+/** Mirrors `ProgrammeProvider`'s merged, year-tagged shape (plan §21 B3). */
 function setProgramme(sessionsList: Session[] = [session()], seriesList: Series[] = [series()], weekdaysList: WeekdayProgramme[] = [weekday()]) {
+  const year = 2099;
+  const programmeDoc: Programme = { id: String(year), year, status: 'published', createdAt: '', updatedAt: '' };
+  const byYear: ProgrammeYearData[] = [{ year, programme: programmeDoc, weekdays: weekdaysList, series: seriesList, sessions: sessionsList }];
   useProgrammeMock.mockReturnValue({
-    year: 2099,
-    programme: { id: '2099', year: 2099, status: 'published', createdAt: '', updatedAt: '' },
-    weekdays: weekdaysList,
-    series: seriesList,
-    sessions: sessionsList,
     loading: false,
     error: null,
+    years: [year],
+    byYear,
+    weekdays: weekdaysList.map((w) => ({ ...w, year })),
+    series: seriesList.map((s) => ({ ...s, year })),
+    sessions: sessionsList.map((s) => ({ ...s, year })),
+    year,
+    programme: programmeDoc,
   });
 }
 

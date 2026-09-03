@@ -3,7 +3,8 @@
 **Read first:** `docs/implementation-plan.md`. It is the contract: settled decisions (§2),
 implementer rules (§3), data model (§5), invariants (§7), security design (§8), the full
 callable API (§9), rules spec (§10), visitors (§12), teams (§12A), phases + definition of
-done (§16), verification (§17). Only §20 is open. Do not re-litigate anything else.
+done (§16), verification (§17). Only §20 (open items) and §21 (backlog of unscheduled
+enhancements) are open. Do not re-litigate anything else.
 
 ## Commands
 

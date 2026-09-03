@@ -1,23 +1,37 @@
-import { useContext } from 'react';
+import { useContext, useMemo } from 'react';
 import { ProgrammeContext, type ProgrammeContextValue } from './ProgrammeContext';
 
 /**
- * Reads the shared programme subscription from `ProgrammeProvider`.
+ * Reads the shared programme subscription from `ProgrammeProvider` (plan
+ * §21 B3: multiple published years can be loaded at once — current, next,
+ * and one back).
  *
- * `year` is accepted (per the task spec's `useProgramme(year)` signature) so
- * a screen reading a specific year — e.g. the session page's `/session/:year/:sessionId`
- * route — can state which year it expects; the provider only ever tracks the
- * single *currently published* year (there is exactly one "current
- * programme" at a time, plan §5.4), so when `year` doesn't match nothing in
- * `sessions`/`series`/`weekdays` will match it either and the caller's own
- * "not found" handling covers that case naturally — no separate subscription
- * is needed for this phase's read-only screens.
+ * - `useProgramme()` — the merged, chronological, year-tagged view across
+ *   every loaded published year. This is what the programme browser and "My
+ *   Dance Card" want.
+ * - `useProgramme(year)` — that one year's slice, still year-tagged, so a
+ *   caller like the session page (`/session/:year/:sessionId`) can pin
+ *   itself to the year in its route. If `year` isn't among the currently
+ *   loaded published years, the subcollection arrays come back empty (never
+ *   an error) and the caller's own "not found" handling applies — `years`,
+ *   `loading`, and `error` stay truthful to the underlying subscriptions
+ *   either way.
  */
 export function useProgramme(year?: number): ProgrammeContextValue {
   const ctx = useContext(ProgrammeContext);
   if (!ctx) {
     throw new Error('useProgramme must be used within a ProgrammeProvider');
   }
-  void year;
-  return ctx;
+  return useMemo(() => {
+    if (year == null) return ctx;
+    const yearData = ctx.byYear.find((y) => y.year === year);
+    return {
+      ...ctx,
+      weekdays: yearData ? yearData.weekdays.map((w) => ({ ...w, year })) : [],
+      series: yearData ? yearData.series.map((s) => ({ ...s, year })) : [],
+      sessions: yearData ? yearData.sessions.map((s) => ({ ...s, year })) : [],
+      year,
+      programme: yearData?.programme ?? null,
+    };
+  }, [ctx, year]);
 }

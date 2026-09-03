@@ -3,8 +3,8 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Entry, Invite, Member, Series, Session, Team, Visitor, WeekdayProgramme } from '@obc/shared';
-import type { ProgrammeContextValue } from '../programme/ProgrammeContext';
+import type { Entry, Invite, Member, Programme, Series, Session, Team, Visitor, WeekdayProgramme } from '@obc/shared';
+import type { ProgrammeContextValue, ProgrammeYearData } from '../programme/ProgrammeContext';
 import { SessionScreen } from './SessionScreen';
 
 const useProgrammeMock = vi.fn<() => ProgrammeContextValue>();
@@ -275,15 +275,24 @@ function renderAt(path: string, ui: ReactElement) {
   );
 }
 
+// `useProgramme` is fully mocked here (not `ProgrammeProvider` + a real
+// `useProgramme(year)`), so this stands in for whatever the hook would
+// return for the route's year — mirrors `ProgrammeProvider`'s merged,
+// year-tagged shape (plan §21 B3) so the mock stays structurally honest.
 function setProgramme(sessionsList: Session[], seriesList: Series[] = [series()], weekdaysList: WeekdayProgramme[] = [weekday()]) {
+  const year = 2027;
+  const programmeDoc: Programme = { id: String(year), year, status: 'published', createdAt: '', updatedAt: '' };
+  const byYear: ProgrammeYearData[] = [{ year, programme: programmeDoc, weekdays: weekdaysList, series: seriesList, sessions: sessionsList }];
   useProgrammeMock.mockReturnValue({
-    year: 2027,
-    programme: { id: '2027', year: 2027, status: 'published', createdAt: '', updatedAt: '' },
-    weekdays: weekdaysList,
-    series: seriesList,
-    sessions: sessionsList,
     loading: false,
     error: null,
+    years: [year],
+    byYear,
+    weekdays: weekdaysList.map((w) => ({ ...w, year })),
+    series: seriesList.map((s) => ({ ...s, year })),
+    sessions: sessionsList.map((s) => ({ ...s, year })),
+    year,
+    programme: programmeDoc,
   });
 }
 
