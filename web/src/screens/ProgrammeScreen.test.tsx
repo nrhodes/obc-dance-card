@@ -2,7 +2,7 @@ import type { ReactElement } from 'react';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ProgrammeContextValue } from '../programme/ProgrammeContext';
 import type { Series, Session, WeekdayProgramme } from '@obc/shared';
 import { ProgrammeScreen } from './ProgrammeScreen';
@@ -78,6 +78,24 @@ function renderWithRouter(ui: ReactElement) {
 }
 
 describe('ProgrammeScreen', () => {
+  // The screen opens on *today's* weekday (`defaultProgrammeWeekday`), so
+  // without a fixed clock these tests quietly depend on the day CI runs:
+  // the mock programme below runs Monday and Friday, and on a Friday it is
+  // the Friday tab that comes up selected, not Monday. That failed `main`
+  // once a week and passed the other six days.
+  //
+  // Freezing to a known Monday also makes the assertions mean what they say
+  // — "the current weekday is preselected" — rather than passing by accident
+  // because today happened not to be in the programme at all.
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date('2027-01-11T09:00:00+13:00')); // Monday, NZDT
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('shows the empty state when there is no published programme', () => {
     useProgrammeMock.mockReturnValue({ year: null, programme: null, weekdays: [], series: [], sessions: [], loading: false, error: null });
     renderWithRouter(<ProgrammeScreen />);
@@ -123,7 +141,7 @@ describe('ProgrammeScreen', () => {
       loading: false,
       error: null,
     });
-    const user = userEvent.setup();
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     renderWithRouter(<ProgrammeScreen />);
 
     expect(screen.queryByText('Friday Pairs')).toBeNull();
