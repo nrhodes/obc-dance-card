@@ -376,7 +376,16 @@ td {
 }
 
 .session-past {
-  opacity: 0.55;
+  /* De-emphasise past sessions with a darker grey, not `opacity`.
+     Opacity blends the text into whatever is behind it: at 0.55 the link
+     colour (--color-primary #1b3a57) over --color-secondary-bg (#eef2f6)
+     computes to #7a8d9f, which is 3.04:1 — below the 4.5:1 this file
+     commits to at the top, and axe fails /programme on it. These are the
+     rows a member squints at to check whether they played that week, and
+     the club's members are in their 70s-90s (plan §1).
+     --color-muted on the same background is 6.72:1.
+     Opacity also dims the focus ring; a colour change leaves it intact. */
+  color: var(--color-muted);
 }
 
 .single-row-nobridge {
