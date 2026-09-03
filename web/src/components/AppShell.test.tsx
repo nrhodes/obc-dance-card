@@ -3,7 +3,7 @@
  * deliverable 7: "Admin section in AppShell... The acting-as banner sits
  * above the main content").
  */
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
@@ -81,15 +81,19 @@ describe('AppShell', () => {
     memberFixture = member({ role: 'member' });
     actingAsFixture = null;
     renderShell();
-    expect(screen.queryByRole('link', { name: 'Admin: Members' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Admin/ })).toBeNull();
 
     memberFixture = member({ role: 'admin' });
     renderShell();
-    expect(screen.getByRole('link', { name: 'Admin: Members' })).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'Admin: Programme' })).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'Admin: Broadcast' })).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'Admin: Audit log' })).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'Admin: Integrity' })).toBeTruthy();
+    const adminButton = screen.getByRole('button', { name: /Admin/ });
+    expect(adminButton.getAttribute('aria-expanded')).toBe('false');
+    // The five admin destinations are behind the disclosure, not in the flat nav.
+    expect(screen.queryByRole('link', { name: 'Members' })).toBeNull();
+    fireEvent.click(adminButton);
+    expect(adminButton.getAttribute('aria-expanded')).toBe('true');
+    for (const name of ['Members', 'Programme', 'Broadcast', 'Audit log', 'Integrity']) {
+      expect(screen.getAllByRole('link', { name }).length).toBeGreaterThan(0);
+    }
   });
 
   it('shows the acting-as banner with a Stop button when acting on behalf of a member', async () => {

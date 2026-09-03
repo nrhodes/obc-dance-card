@@ -485,3 +485,29 @@ td {
   background: var(--color-secondary-bg);
   border-color: var(--color-primary);
 }
+
+/* Admin disclosure in the nav (admin-only; member nav stays flat) */
+.admin-menu {
+  position: relative;
+  display: inline-flex;
+}
+.admin-menu > button.active {
+  text-decoration: underline;
+}
+.admin-menu-list {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  min-width: 12rem;
+  background: var(--color-primary);
+  border: 1px solid var(--color-primary-contrast);
+  border-radius: 8px;
+  padding: var(--space-1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+.admin-menu-list a {
+  padding: 0 var(--space-2);
+}

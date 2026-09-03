@@ -1,4 +1,5 @@
-import { NavLink, Outlet } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
+import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../auth/useAuth';
 import { useInvites } from '../invites/useInvites';
 import { useNotifications } from '../notifications/useNotifications';
@@ -16,6 +17,32 @@ export function AppShell() {
   const { toast, dismissToast } = usePushForeground();
   const { needsRefresh, reload } = usePwaUpdate();
   const isAdmin = member?.role === 'admin';
+  const [adminOpen, setAdminOpen] = useState(false);
+  const adminMenuRef = useRef<HTMLDivElement | null>(null);
+  const location = useLocation();
+
+  // The admin links live in a disclosure so the always-visible member nav
+  // stays one row (plan §14.1 keeps *member* destinations un-hidden; admins
+  // are comfortable with a menu). Close it on navigation, Escape, or an
+  // outside click/focus.
+  useEffect(() => {
+    setAdminOpen(false);
+  }, [location.pathname]);
+  useEffect(() => {
+    if (!adminOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setAdminOpen(false);
+    };
+    const onDown = (e: MouseEvent) => {
+      if (adminMenuRef.current && !adminMenuRef.current.contains(e.target as Node)) setAdminOpen(false);
+    };
+    document.addEventListener('keydown', onKey);
+    document.addEventListener('mousedown', onDown);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.removeEventListener('mousedown', onDown);
+    };
+  }, [adminOpen]);
 
   // Shared-device safety (plan §8.1): sign out on next load after 30 days of
   // no activity on this device (task deliverable C).
@@ -54,11 +81,28 @@ export function AppShell() {
           </NavLink>
           <NavLink to="/profile">Profile</NavLink>
           <NavLink to="/help">Help</NavLink>
-          {isAdmin && <NavLink to="/admin/members">Admin: Members</NavLink>}
-          {isAdmin && <NavLink to="/admin/programme">Admin: Programme</NavLink>}
-          {isAdmin && <NavLink to="/admin/broadcast">Admin: Broadcast</NavLink>}
-          {isAdmin && <NavLink to="/admin/audit">Admin: Audit log</NavLink>}
-          {isAdmin && <NavLink to="/admin/integrity">Admin: Integrity</NavLink>}
+          {isAdmin && (
+            <div className="admin-menu" ref={adminMenuRef}>
+              <button
+                type="button"
+                aria-expanded={adminOpen}
+                aria-haspopup="true"
+                className={location.pathname.startsWith('/admin') ? 'active' : undefined}
+                onClick={() => setAdminOpen((o) => !o)}
+              >
+                Admin <span aria-hidden="true">{adminOpen ? '▴' : '▾'}</span>
+              </button>
+              {adminOpen && (
+                <div className="admin-menu-list">
+                  <NavLink to="/admin/members">Members</NavLink>
+                  <NavLink to="/admin/programme">Programme</NavLink>
+                  <NavLink to="/admin/broadcast">Broadcast</NavLink>
+                  <NavLink to="/admin/audit">Audit log</NavLink>
+                  <NavLink to="/admin/integrity">Integrity</NavLink>
+                </div>
+              )}
+            </div>
+          )}
           <button type="button" onClick={() => void signOut()}>
             Sign out
           </button>
