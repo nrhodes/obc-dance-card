@@ -36,6 +36,7 @@ export type {
   ListAuditLogInput,
   MarkNotificationsReadInput,
   MarkPasswordSetInput,
+  SetPasswordInput,
   PingInput,
   PublishProgrammeInput,
   ReactivateMemberInput,

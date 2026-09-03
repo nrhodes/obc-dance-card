@@ -44,6 +44,9 @@ export const VerifyLoginCodeInputSchema = z.object({
 });
 export type VerifyLoginCodeInput = z.infer<typeof VerifyLoginCodeInputSchema>;
 
+export const SetPasswordInputSchema = z.object({ password: z.string().min(8).max(200) }).strict();
+export type SetPasswordInput = z.infer<typeof SetPasswordInputSchema>;
+
 export const MarkPasswordSetInputSchema = z.object({}).strict();
 export type MarkPasswordSetInput = z.infer<typeof MarkPasswordSetInputSchema>;
 

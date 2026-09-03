@@ -129,3 +129,16 @@ export function parseOptionalInt(value: string, field: string): number | null {
 export function isActiveStatus(status: Entry['status']): boolean {
   return status !== 'cancelled';
 }
+
+
+/**
+ * The account password policy (plan §8.1: min 8 chars, ≥1 letter, ≥1 number).
+ * Shared so the web form and the `setPassword` callable enforce identical
+ * rules. Returns an error message, or null when the password is acceptable.
+ */
+export function passwordStrengthError(password: string): string | null {
+  if (password.length < 8) return 'Password must be at least 8 characters.';
+  if (!/[A-Za-z]/.test(password)) return 'Password must include at least one letter.';
+  if (!/[0-9]/.test(password)) return 'Password must include at least one number.';
+  return null;
+}

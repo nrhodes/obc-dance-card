@@ -1,18 +1,15 @@
 /**
- * Set / remove password (plan §8.2, §9.2 `markPasswordSet` / `removePassword`).
- *
- * Setting a password requires a "recently signed in" ID token; when Firebase
- * rejects `updatePassword` with `auth/requires-recent-login` we run the
- * emailed-code flow inline (reusing `EmailCodeStep`) and retry automatically
- * once it succeeds.
+ * Set / remove password (plan §8.2, §9.2). Setting a password calls the
+ * server-side `setPassword` callable, which uses the member's current session
+ * — no Firebase "recent login" re-auth, so the member is never bounced to a
+ * sign-in screen just to add an optional password. Removing rotates the
+ * password to an unknowable value server-side without ending the session.
  */
 import { useState } from 'react';
-import { signInWithCustomToken, updatePassword } from 'firebase/auth';
-import { auth, toAppError } from '../firebase';
-import { markPasswordSet, removePassword } from '../api';
+import { passwordStrengthError } from '@obc/shared';
+import { toAppError } from '../firebase';
+import { setPassword, removePassword } from '../api';
 import { mapGenericError } from '../auth/errors';
-import { validatePasswordStrength } from '../auth/passwordStrength';
-import { EmailCodeStep } from '../auth/EmailCodeStep';
 
 export interface PasswordSectionProps {
   hasPassword: boolean;
@@ -27,22 +24,17 @@ export function PasswordSection({ hasPassword, email }: PasswordSectionProps) {
 }
 
 function SetPassword({ email }: { email: string }) {
-  const [password, setPassword] = useState('');
+  void email;
+  const [password, setPassword_] = useState('');
   const [confirm, setConfirm] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [needsReauth, setNeedsReauth] = useState(false);
-
-  async function attemptSetPassword(pw: string) {
-    await updatePassword(auth.currentUser!, pw);
-    await markPasswordSet({});
-  }
 
   async function handleSubmit() {
     setError(null);
     setSuccess(false);
-    const strengthError = validatePasswordStrength(password);
+    const strengthError = passwordStrengthError(password);
     if (strengthError) {
       setError(strengthError);
       return;
@@ -53,52 +45,17 @@ function SetPassword({ email }: { email: string }) {
     }
     setSubmitting(true);
     try {
-      await attemptSetPassword(password);
+      // Server-side: uses the current session, so there is no "sign in again"
+      // detour (plan §8.2 / accessibility for elderly members).
+      await setPassword({ password });
       setSuccess(true);
-      setPassword('');
-      setConfirm('');
-    } catch (err) {
-      const appErr = toAppError(err);
-      if (appErr.code === 'auth/requires-recent-login') {
-        setNeedsReauth(true);
-      } else {
-        setError(mapGenericError(appErr));
-      }
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  async function handleReauthVerified(token: string) {
-    await signInWithCustomToken(auth, token);
-    setNeedsReauth(false);
-    setSubmitting(true);
-    setError(null);
-    try {
-      await attemptSetPassword(password);
-      setSuccess(true);
-      setPassword('');
+      setPassword_('');
       setConfirm('');
     } catch (err) {
       setError(mapGenericError(toAppError(err)));
     } finally {
       setSubmitting(false);
     }
-  }
-
-  if (needsReauth) {
-    return (
-      <div>
-        <h2>Set a password</h2>
-        <p>For your security, please sign in again first.</p>
-        <EmailCodeStep
-          email={email}
-          onVerified={handleReauthVerified}
-          onUseDifferentEmail={() => setNeedsReauth(false)}
-          useDifferentEmailLabel="Cancel"
-        />
-      </div>
-    );
   }
 
   return (
@@ -124,7 +81,7 @@ function SetPassword({ email }: { email: string }) {
           type="password"
           autoComplete="new-password"
           value={password}
-          onChange={(e) => setPassword(e.target.value)}
+          onChange={(e) => setPassword_(e.target.value)}
         />
       </div>
       <div className="field">
@@ -140,7 +97,7 @@ function SetPassword({ email }: { email: string }) {
       <button
         type="button"
         className="button button-primary"
-        disabled={submitting || password.length === 0}
+        disabled={submitting}
         onClick={() => void handleSubmit()}
       >
         {submitting ? 'Saving…' : 'Set password'}

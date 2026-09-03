@@ -20,7 +20,7 @@ export const ping = onCall(callableOptions, (req) => {
 // Phase 1 — auth + members
 export { requestLoginCode, verifyLoginCode } from './auth/emailCode.js';
 export { beforeUserCreated, beforeSignIn } from './auth/blocking.js';
-export { markPasswordSet, removePassword } from './auth/password.js';
+export { setPassword, markPasswordSet, removePassword } from './auth/password.js';
 export { updateMyContact, updateMyPrefs, registerDevice, unregisterDevice } from './members/profile.js';
 export { importMembers } from './admin/importMembers.js';
 

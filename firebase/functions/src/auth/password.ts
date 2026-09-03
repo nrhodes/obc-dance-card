@@ -9,15 +9,50 @@ import { HttpsError, onCall, type CallableRequest } from 'firebase-functions/v2/
 import {
   MarkPasswordSetInputSchema,
   RemovePasswordInputSchema,
+  SetPasswordInputSchema,
   paths,
+  passwordStrengthError,
   type MarkPasswordSetInput,
   type RemovePasswordInput,
+  type SetPasswordInput,
 } from '@obc/shared';
 import { auth, db } from '../lib/admin.js';
 import { callableOptions } from '../lib/callable.js';
 import { requireMember } from '../lib/context.js';
 import { createNotification } from '../notifications/create.js';
 import { parseInput } from '../lib/parseInput.js';
+
+/**
+ * Set (or replace) the member's password, server-side, using a valid session
+ * — no Firebase "recent login" requirement, so the member is never bounced to
+ * a re-authentication screen (plan §8.2; UX fix for elderly members). Strength
+ * is enforced with the shared policy.
+ */
+export async function setPasswordHandler(req: CallableRequest<SetPasswordInput>): Promise<{ ok: true }> {
+  const { password } = parseInput(SetPasswordInputSchema, req.data);
+  const caller = await requireMember(req);
+
+  const strengthError = passwordStrengthError(password);
+  if (strengthError) {
+    throw new HttpsError('invalid-argument', strengthError);
+  }
+
+  await auth.updateUser(caller.uid, { password });
+  await db
+    .doc(paths.memberPrivate(caller.uid))
+    .set({ hasPassword: true, updatedAt: new Date().toISOString() }, { merge: true });
+
+  await createNotification(
+    caller.uid,
+    'security',
+    'Password set',
+    'A password was set on your Orewa Bridge Club account. If this was not you, contact the club.',
+  );
+
+  return { ok: true };
+}
+
+export const setPassword = onCall(callableOptions, setPasswordHandler);
 
 export async function markPasswordSetHandler(
   req: CallableRequest<MarkPasswordSetInput>,
@@ -64,7 +99,9 @@ export async function removePasswordHandler(
     .doc(paths.memberPrivate(caller.uid))
     .set({ hasPassword: false, updatedAt: new Date().toISOString() }, { merge: true });
 
-  await auth.revokeRefreshTokens(caller.uid);
+  // Intentionally NOT revoking refresh tokens: the current session is
+  // legitimate and signing in by code does not depend on the password.
+  // Rotating the password above already stops it working for future sign-ins.
 
   await createNotification(
     caller.uid,

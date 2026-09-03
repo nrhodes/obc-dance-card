@@ -10,6 +10,8 @@ export default tseslint.config(
       // would (and silently did, pre-Phase-1a).
       '**/dist/**',
       'firebase/functions/lib/**',
+      'firebase/functions-deploy/**',
+      'firebase/web-dist/**',
       '**/node_modules/**',
       '**/*.config.js',
       '**/*.config.ts',

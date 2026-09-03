@@ -47,6 +47,7 @@ import type {
   ListAuditLogResult,
   MarkNotificationsReadInput,
   MarkPasswordSetInput,
+  SetPasswordInput,
   PublishProgrammeInput,
   PublishProgrammeResult,
   ReactivateMemberInput,
@@ -89,6 +90,7 @@ import { callable } from './firebase';
 
 export const requestLoginCode = callable<RequestLoginCodeInput, RequestLoginCodeResult>('requestLoginCode');
 export const verifyLoginCode = callable<VerifyLoginCodeInput, VerifyLoginCodeResult>('verifyLoginCode');
+export const setPassword = callable<SetPasswordInput, { ok: true }>('setPassword');
 export const markPasswordSet = callable<MarkPasswordSetInput, { ok: true }>('markPasswordSet');
 export const removePassword = callable<RemovePasswordInput, { ok: true }>('removePassword');
 export const updateMyContact = callable<UpdateMyContactInput, { ok: true }>('updateMyContact');
