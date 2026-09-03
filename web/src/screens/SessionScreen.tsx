@@ -17,12 +17,14 @@ import { useEffectiveMember } from '../admin/useEffectiveMember';
 import { useProgramme } from '../programme/useProgramme';
 import { useMembersDirectory } from '../members/useMembersDirectory';
 import { useVisitors } from '../visitors/useVisitors';
+import { useInvites } from '../invites/useInvites';
 import { useTeams } from '../teams/useTeams';
 import { formatDateNZ, formatTimeOfDay } from '../lib/format';
 import { buildSessionRoster, describeOwnEntry, noticeboardLabels, teamMemberName, type SoloRow } from '../lib/roster';
 import { buildTeamSessionView } from '../lib/team';
 import { deriveSessionActions, describeCancelConsequence, type OwnEntryActionState } from '../lib/sessionActions';
 import { filterPickableMembers } from '../lib/memberPicker';
+import { findPendingInvite } from '../lib/sessionInvite';
 import { mapActionError } from '../lib/actionErrors';
 import { SubscriptionError } from '../components/SubscriptionError';
 import {
@@ -30,8 +32,10 @@ import {
   claimLookingForPartner,
   clearSoloStatus,
   clearSubstitute,
+  cancelInvite,
   createVisitor,
   inviteToTeam,
+  respondToInvite,
   sendInvite,
   setSoloStatus,
   setSubstitute,
@@ -66,6 +70,7 @@ export function SessionScreen() {
   const { effectiveMemberId, onBehalfOfMemberId, actingAsName } = useEffectiveMember();
   const { members, byId, nameOf } = useMembersDirectory();
   const { visitors } = useVisitors();
+  const { incoming: incomingInvites, outgoing: outgoingInvites } = useInvites();
   const teamsCtx = useTeams();
   const effectiveMember = effectiveMemberId
     ? (byId.get(effectiveMemberId) ?? (member && effectiveMemberId === member.id ? member : null))
@@ -140,6 +145,8 @@ export function SessionScreen() {
   const [removeSubOpen, setRemoveSubOpen] = useState(false);
   const [removeSubBusy, setRemoveSubBusy] = useState(false);
   const [removeSubError, setRemoveSubError] = useState<string | null>(null);
+  const [inviteResponseError, setInviteResponseError] = useState<string | null>(null);
+  const [inviteResponseBusy, setInviteResponseBusy] = useState(false);
 
   if (programmeLoading || !entriesLoaded || teamsCtx.loading) {
     return (
@@ -177,6 +184,12 @@ export function SessionScreen() {
 
   const locked = weekdayDoc ? new Date() >= sessionCutoff(session.date, weekdayDoc.startTime) : false;
   const ownEntry = effectiveMemberId ? entries.find((e) => e.memberId === effectiveMemberId) : undefined;
+  // A pending invite you sent/received for this session (plan §9.2). `useInvites`
+  // is the signed-in user's own invites, so this only applies to your own view,
+  // not while an admin is acting on behalf of someone else.
+  const pendingOutgoing = !onBehalfOfMemberId && session ? findPendingInvite(outgoingInvites, session.id) : null;
+  const pendingIncoming = !onBehalfOfMemberId && session ? findPendingInvite(incomingInvites, session.id) : null;
+  const hasPendingInvite = !ownEntry && (pendingOutgoing !== null || pendingIncoming !== null);
   const ownSummary = ownEntry ? describeOwnEntry(ownEntry, seriesTeams) : null;
 
   const roster = buildSessionRoster(entries, nameOf);
@@ -434,7 +447,40 @@ export function SessionScreen() {
     return isTeamsSeries ? `Add ${row.name} to my team` : `Play with ${row.name}`;
   }
 
-  function inviteLabelFor(row: SoloRow): string | null {
+  async function handleCancelOutgoingInvite() {
+    if (!pendingOutgoing) return;
+    clearAllErrors();
+    setInviteResponseError(null);
+    setInviteResponseBusy(true);
+    try {
+      await cancelInvite({ inviteId: pendingOutgoing.id });
+      setNotice('Invitation cancelled.');
+    } catch (err) {
+      setInviteResponseError(mapActionError(err as AppError));
+    } finally {
+      setInviteResponseBusy(false);
+    }
+  }
+
+  async function handleRespondIncomingInvite(accept: boolean) {
+    if (!pendingIncoming) return;
+    clearAllErrors();
+    setInviteResponseBusy(true);
+    try {
+      const res = await respondToInvite({ inviteId: pendingIncoming.id, accept });
+      if (accept && res.repeatPartnerWarning) {
+        setNotice(`You've accepted. Note: you've already played with ${nameOf(pendingIncoming.fromMemberId)} in this individual series.`);
+      } else {
+        setNotice(accept ? 'Invitation accepted.' : 'Invitation declined.');
+      }
+    } catch (err) {
+      setInviteResponseError(mapActionError(err as AppError));
+    } finally {
+      setInviteResponseBusy(false);
+    }
+  }
+
+    function inviteLabelFor(row: SoloRow): string | null {
     if (!actions || !actions.inviteableMemberIds.includes(row.memberId)) return null;
     return `Invite ${row.name}`;
   }
@@ -580,7 +626,72 @@ export function SessionScreen() {
         </div>
       )}
 
-      {actions && actions.state.kind !== 'teamsFormat' && (
+      {hasPendingInvite && (
+        <div className="card">
+          {pendingOutgoing && (
+            <>
+              <h2>Waiting for a reply</h2>
+              <p>
+                You've invited <strong>{nameOf(pendingOutgoing.toMemberId)}</strong> to play
+                {pendingOutgoing.scope === 'series'
+                  ? ` this whole series (${pendingOutgoing.sessionIds.length} sessions)`
+                  : ' this session'}
+                . They'll appear here once they accept.
+              </p>
+              {inviteResponseError && (
+                <div className="alert alert-error" role="alert">
+                  {inviteResponseError}
+                </div>
+              )}
+              <button
+                type="button"
+                className="button button-secondary"
+                disabled={inviteResponseBusy}
+                onClick={() => void handleCancelOutgoingInvite()}
+              >
+                {inviteResponseBusy ? 'Working…' : 'Cancel invitation'}
+              </button>
+            </>
+          )}
+          {pendingIncoming && !pendingOutgoing && (
+            <>
+              <h2>You've been invited</h2>
+              <p>
+                <strong>{nameOf(pendingIncoming.fromMemberId)}</strong> has invited you to play
+                {pendingIncoming.scope === 'series'
+                  ? ` this whole series (${pendingIncoming.sessionIds.length} sessions)`
+                  : ' this session'}
+                .
+              </p>
+              {inviteResponseError && (
+                <div className="alert alert-error" role="alert">
+                  {inviteResponseError}
+                </div>
+              )}
+              <div className="button-row">
+                <button
+                  type="button"
+                  className="button button-primary"
+                  disabled={inviteResponseBusy}
+                  onClick={() => void handleRespondIncomingInvite(true)}
+                >
+                  Accept
+                </button>
+                <button
+                  type="button"
+                  className="button button-secondary"
+                  disabled={inviteResponseBusy}
+                  onClick={() => void handleRespondIncomingInvite(false)}
+                >
+                  Decline
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {actions && actions.state.kind !== 'teamsFormat' && !hasPendingInvite && (
         <div className="card">
           <h2>Actions</h2>
           <ActionsPanel

@@ -2,8 +2,8 @@ import type { ReactElement } from 'react';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { Entry, Member, Series, Session, Team, Visitor, WeekdayProgramme } from '@obc/shared';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { Entry, Invite, Member, Series, Session, Team, Visitor, WeekdayProgramme } from '@obc/shared';
 import type { ProgrammeContextValue } from '../programme/ProgrammeContext';
 import { SessionScreen } from './SessionScreen';
 
@@ -62,6 +62,13 @@ vi.mock('../visitors/useVisitors', () => ({
   useVisitors: () => ({ visitors: visitorsFixture, loading: false }),
 }));
 
+type InvitesValue = { incoming: Invite[]; outgoing: Invite[]; resolved: Invite[]; error: { code: string } | null };
+const emptyInvites = (): InvitesValue => ({ incoming: [], outgoing: [], resolved: [], error: null });
+const useInvitesMock = vi.fn(emptyInvites);
+vi.mock('../invites/useInvites', () => ({
+  useInvites: () => useInvitesMock(),
+}));
+
 vi.mock('../teams/useTeams', () => ({
   useTeams: () => ({
     teams: teamsForSeriesFixture,
@@ -76,6 +83,8 @@ vi.mock('../teams/useTeams', () => ({
 vi.mock('../firebase', () => ({ db: {} }));
 
 const sendInviteMock = vi.fn();
+const cancelInviteMock = vi.fn((..._args: unknown[]) => Promise.resolve({} as unknown));
+const respondToInviteMock = vi.fn((..._args: unknown[]) => Promise.resolve({ repeatPartnerWarning: false } as unknown));
 const claimLookingForPartnerMock = vi.fn();
 const setSoloStatusMock = vi.fn();
 const clearSoloStatusMock = vi.fn();
@@ -97,6 +106,8 @@ const clearTeamSessionSubstituteMock = vi.fn();
 
 vi.mock('../api', () => ({
   sendInvite: (...args: unknown[]) => sendInviteMock(...args),
+  cancelInvite: (...args: unknown[]) => cancelInviteMock(...args),
+  respondToInvite: (...args: unknown[]) => respondToInviteMock(...args),
   claimLookingForPartner: (...args: unknown[]) => claimLookingForPartnerMock(...args),
   setSoloStatus: (...args: unknown[]) => setSoloStatusMock(...args),
   clearSoloStatus: (...args: unknown[]) => clearSoloStatusMock(...args),
@@ -288,6 +299,10 @@ const teamsSession = session({
 });
 
 describe('SessionScreen', () => {
+  beforeEach(() => {
+    useInvitesMock.mockReturnValue(emptyInvites());
+  });
+
   it('shows a plain "No bridge" page for a noBridge session', () => {
     setProgramme([
       session({ id: 'nb1', seriesId: null, kind: 'noBridge', title: 'Good Friday', partnerRequired: false }),
@@ -297,7 +312,29 @@ describe('SessionScreen', () => {
     expect(screen.getByText('No bridge on this date.')).toBeTruthy();
   });
 
-  it('shows "Nobody has signed up yet" for an empty roster', () => {
+  it('shows a pending-invite panel (not the Actions) when you have an outgoing invite for the session', () => {
+    setProgramme([session()]);
+    entriesFixture = [];
+    useInvitesMock.mockReturnValue({
+      incoming: [],
+      outgoing: [
+        {
+          id: 'inv-1', scope: 'session' as const, year: 2027,
+          sessionIds: ['monday-marion-taylor-pairs-2027-01-11'], seriesId: 'monday-marion-taylor-pairs',
+          teamId: null, fromMemberId: 'member-a', toMemberId: 'member-b', status: 'pending',
+          createdBy: 'member-a', expiresAt: '2099-01-01T00:00:00.000Z', createdAt: 'now', updatedAt: 'now',
+        } as Invite,
+      ],
+      resolved: [], error: null,
+    });
+    renderAt('/session/2027/monday-marion-taylor-pairs-2027-01-11', <SessionScreen />);
+    expect(screen.getByText('Waiting for a reply')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Cancel invitation' })).toBeTruthy();
+    // The Actions block is suppressed while an invite is pending.
+    expect(screen.queryByRole('button', { name: 'Invite a partner' })).toBeNull();
+  });
+
+    it('shows "Nobody has signed up yet" for an empty roster', () => {
     setProgramme([session()]);
     entriesFixture = [];
     renderAt('/session/2027/monday-marion-taylor-pairs-2027-01-11', <SessionScreen />);
