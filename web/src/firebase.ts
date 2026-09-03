@@ -9,6 +9,7 @@
  */
 import { initializeApp } from 'firebase/app';
 import { FirebaseError } from 'firebase/app';
+import { initializeAppCheck, ReCaptchaEnterpriseProvider } from 'firebase/app-check';
 import { connectAuthEmulator, getAuth } from 'firebase/auth';
 import { connectFirestoreEmulator, getFirestore } from 'firebase/firestore';
 import { connectFunctionsEmulator, getFunctions, httpsCallable } from 'firebase/functions';
@@ -37,6 +38,18 @@ const region = env.VITE_FUNCTIONS_REGION || 'australia-southeast1';
 const useEmulators = env.VITE_USE_EMULATORS === 'true';
 
 export const app = initializeApp(firebaseConfig);
+
+// App Check (plan §8.1, §18): attach a reCAPTCHA Enterprise attestation token
+// to every Firestore/Functions request. Only active when a site key is
+// configured (production); the emulator and tests run without it. Must be
+// initialised before any Firestore/Functions traffic.
+const appCheckSiteKey = env.VITE_FIREBASE_APPCHECK_SITE_KEY;
+if (appCheckSiteKey && !useEmulators) {
+  initializeAppCheck(app, {
+    provider: new ReCaptchaEnterpriseProvider(appCheckSiteKey),
+    isTokenAutoRefreshEnabled: true,
+  });
+}
 export const auth = getAuth(app);
 // Firestore offline persistence is intentionally NOT enabled here — see
 // module docstring.
