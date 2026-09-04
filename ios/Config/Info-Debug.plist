@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Debug-only Info.plist additions. Xcode merges this with its generated
+  Info.plist (GENERATE_INFOPLIST_FILE stays YES), and it is referenced only
+  from the Debug build configuration — a Release build never sees it.
+
+  The single key here lets a Debug build on a *physical* device talk to the
+  Firebase emulator over Wi-Fi. App Transport Security exempts `localhost`
+  but blocks cleartext HTTP to a LAN address such as 192.168.x.x, and the
+  Auth and Functions emulators speak plain HTTP. `NSAllowsLocalNetworking`
+  is the narrow exception Apple provides for exactly this: it covers
+  unroutable/local addresses only, never the public internet, and never
+  weakens TLS to the real Firebase project.
+-->
+<plist version="1.0">
+<dict>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
+</dict>
+</plist>
