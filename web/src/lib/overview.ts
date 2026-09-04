@@ -213,15 +213,30 @@ export interface YearMonthOverview {
   weeks: MonthWeek[];
 }
 
-/** Every month (Jan-Dec) of `year`, each as `buildMonthGrid` would build it alone. */
+/**
+ * A month spans at most 6 distinct Mon–Fri weeks; the year view pads every
+ * month to exactly this many rows (with all-blank weeks) so the twelve
+ * mini-month cards are the same height and their week rows line up across
+ * columns.
+ */
+const YEAR_VIEW_WEEK_ROWS = 6;
+
+const BLANK_WEEK: MonthWeek = [null, null, null, null, null];
+
+/**
+ * Every month (Jan-Dec) of `year`, each as `buildMonthGrid` would build it
+ * alone, padded to a uniform `YEAR_VIEW_WEEK_ROWS` rows (year view only —
+ * the full Month view renders exactly the real weeks).
+ */
 export function buildYearOverview(
   year: number,
   sessions: readonly Session[],
   entries: readonly Entry[],
   today: IsoDate = todayNZ(),
 ): YearMonthOverview[] {
-  return Array.from({ length: 12 }, (_, i) => ({
-    month: i + 1,
-    weeks: buildMonthGrid(year, i + 1, sessions, entries, today),
-  }));
+  return Array.from({ length: 12 }, (_, i) => {
+    const weeks = [...buildMonthGrid(year, i + 1, sessions, entries, today)];
+    while (weeks.length < YEAR_VIEW_WEEK_ROWS) weeks.push(BLANK_WEEK);
+    return { month: i + 1, weeks };
+  });
 }

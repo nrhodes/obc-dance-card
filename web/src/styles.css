@@ -728,6 +728,13 @@ td {
   margin-bottom: 0;
 }
 
+/* The month name sits flush at the top of its mini-card — the browser's
+   default h3 margins read as a broken layout in a grid of compact cards. */
+.year-month-card h3 {
+  margin: 0 0 var(--space-1);
+  font-size: 1.05rem;
+}
+
 .calendar-legend {
   margin-top: var(--space-2);
 }
