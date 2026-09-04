@@ -27,12 +27,12 @@
     "papaparse": "^5.4.1"
   },
   "devDependencies": {
-    "@firebase/rules-unit-testing": "^4.0.1",
+    "@firebase/rules-unit-testing": "^5.0.2",
     "@types/node": "^20.17.10",
     "@types/nodemailer": "^8.0.1",
     "@types/papaparse": "^5.3.15",
     "esbuild": "^0.28.2",
-    "firebase": "^11.1.0",
+    "firebase": "^12.18.0",
     "firebase-functions-test": "^3.4.0",
     "tsx": "^4.23.13",
     "typescript": "^5.7.2",

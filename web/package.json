@@ -18,7 +18,7 @@
   "dependencies": {
     "@obc/shared": "*",
     "clsx": "^2.1.1",
-    "firebase": "^11.10.0",
+    "firebase": "^12.18.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-router-dom": "^6.30.6"
