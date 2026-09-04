@@ -42,6 +42,30 @@ struct CreateVisitorResult: Decodable {
     let warnings: [String]
 }
 
+/// `setBulkSoloStatus` (plan §21 B2).
+struct BulkSoloStatusSkip: Decodable, Hashable {
+    let sessionId: String
+    let date: String
+    /// Only `"booked"` today — a real pairing/team commitment is never overwritten.
+    let reason: String
+}
+
+struct SetBulkSoloStatusResult: Decodable {
+    /// Entries created/changed (or flipped to `cancelled` by `clear`).
+    let updated: Int
+    let skipped: [BulkSoloStatusSkip]
+}
+
+/// The iCal feed (plan §21 B1). `url` is nil when the member has never
+/// created one; otherwise both forms are present.
+struct IcalFeedResult: Decodable, Equatable {
+    /// `https://…/ical/{token}.ics`
+    let url: String?
+    /// Same URL with scheme `webcal:` — what Apple Calendar subscribes to.
+    let webcalUrl: String?
+    let createdAt: String?
+}
+
 // MARK: - Callables
 
 enum Api {
@@ -148,6 +172,45 @@ enum Api {
     /// has no on-behalf form server-side (plan §9.2 schema note).
     static func clearSoloStatus(year: Int, sessionId: String) async throws {
         try await Callable.call("clearSoloStatus", ["year": year, "sessionId": sessionId])
+    }
+
+    /// Marks every matching session `available`/`unavailable`, or clears
+    /// either, across all published years (plan §21 B2). The server expands
+    /// the weekday/date filter, skips booked sessions (reported back), and
+    /// caps at 200 matches with `failed-precondition` — narrow the range.
+    static func setBulkSoloStatus(
+        status: BulkAvailabilityStatus,
+        weekdays: [Weekday],
+        fromDate: String?,
+        toDate: String?
+    ) async throws -> SetBulkSoloStatusResult {
+        try await Callable.call("setBulkSoloStatus", [
+            "status": status.rawValue,
+            "filter": payload([
+                "weekdays": weekdays.map(\.rawValue),
+                "fromDate": fromDate,
+                "toDate": toDate,
+            ]),
+        ], as: SetBulkSoloStatusResult.self)
+    }
+
+    // ------------------------------------------------------ iCal feed (B1)
+
+    static func getIcalFeed() async throws -> IcalFeedResult {
+        try await Callable.call("getIcalFeed", [:], as: IcalFeedResult.self)
+    }
+
+    static func createIcalFeed() async throws -> IcalFeedResult {
+        try await Callable.call("createIcalFeed", [:], as: IcalFeedResult.self)
+    }
+
+    /// Rotates the token: the old URL stops working immediately.
+    static func rotateIcalFeed() async throws -> IcalFeedResult {
+        try await Callable.call("rotateIcalFeed", [:], as: IcalFeedResult.self)
+    }
+
+    static func removeIcalFeed() async throws {
+        try await Callable.call("removeIcalFeed", [:])
     }
 
     @discardableResult

@@ -35,7 +35,7 @@ final class SessionEntriesModel: ObservableObject {
                 Task { @MainActor in
                     guard let self else { return }
                     if let err {
-                        print("subscription_failed session_entries \((err as NSError).code)")
+                        logSubscriptionFailure("session_entries", err)
                         self.entries = []
                         self.error = SubscriptionError(code: "\((err as NSError).code)", resource: "who's playing")
                     } else {
@@ -101,8 +101,10 @@ struct SessionView: View {
     // MARK: - Derived state
 
     private var session: Session? { programme.session(id: sessionId) }
-    private var seriesDoc: Series? { programme.series(id: session?.seriesId) }
-    private var weekdayDoc: WeekdayProgramme? { session.flatMap { programme.weekday($0.weekday) } }
+    // Year-qualified (plan §21 B3): `seriesId` and weekday ids repeat across
+    // published years; the route's `year` is the session's own.
+    private var seriesDoc: Series? { programme.series(id: session?.seriesId, year: year) }
+    private var weekdayDoc: WeekdayProgramme? { session.flatMap { programme.weekday($0.weekday, year: year) } }
     private var isTeamsSeries: Bool { seriesDoc?.format == .teams }
     private var selfId: String { auth.memberId ?? "" }
 
@@ -374,7 +376,14 @@ struct SessionView: View {
             Button("Invite a partner") { sheet = .invitePartner(initialMemberId: nil) }
             Button("I'm looking for a partner") { sheet = .solo(.lookingForPartner) }
             Button("I'm available") { sheet = .solo(.available) }
+            Button("I'm unavailable") { confirmUnavailable() }
             Button("Play with a visitor") { sheet = .playWithVisitor }
+
+        case .unavailable:
+            // Plan §21 B2: a "don't offer me this session" marker. Clearing it
+            // is the same `clearSoloStatus` as removing a noticeboard listing.
+            Text("You've marked yourself unavailable for this session.")
+            Button("I'm available again") { Task { await removeSolo() } }
 
         case let .solo(status, _):
             let other: SoloStatus = status == .lookingForPartner ? .available : .lookingForPartner
@@ -552,6 +561,19 @@ struct SessionView: View {
             }
         } else {
             sheet = .invitePartner(initialMemberId: row.memberId)
+        }
+    }
+
+    private func confirmUnavailable() {
+        confirm = SessionConfirm(
+            title: "Mark yourself unavailable?",
+            message: "Don't show me as free and don't let others invite me to this session — you can undo this any time.",
+            confirmLabel: "I'm unavailable",
+            destructive: false
+        ) {
+            _ = await run("You're marked as unavailable for this session.") {
+                try await Api.setSoloStatus(year: year, sessionId: sessionId, status: .unavailable, note: nil)
+            }
         }
     }
 

@@ -34,8 +34,10 @@ enum DeepLink: Equatable, Hashable {
     }
 }
 
+/// The five tabs. Invites and notifications share `inbox` (see `InboxView`)
+/// so the bar never folds anything under "More".
 enum Tab: Hashable {
-    case card, programme, invites, notifications, profile
+    case card, calendar, programme, inbox, profile
 }
 
 /// Navigation destinations pushed onto a tab's stack.
@@ -49,9 +51,11 @@ enum Route: Hashable {
 @MainActor
 final class Router: ObservableObject {
     @Published var selectedTab: Tab = .card
+    @Published var inboxSegment: InboxSegment = .invites
     @Published var cardPath = NavigationPath()
+    @Published var calendarPath = NavigationPath()
     @Published var programmePath = NavigationPath()
-    @Published var notificationsPath = NavigationPath()
+    @Published var inboxPath = NavigationPath()
     @Published var profilePath = NavigationPath()
 
     func open(_ link: DeepLink) {
@@ -60,20 +64,24 @@ final class Router: ObservableObject {
             selectedTab = .card
             cardPath.append(Route.session(year: year, sessionId: sessionId))
         case .invites:
-            selectedTab = .invites
+            selectedTab = .inbox
+            inboxSegment = .invites
         case .notifications:
-            selectedTab = .notifications
+            selectedTab = .inbox
+            inboxSegment = .alerts
         }
     }
 
-    /// Opens a session from anywhere that already knows the ids (the card,
-    /// the programme, the notifications feed) on the tab it was tapped from.
+    /// Opens a session from anywhere that already knows the ids, on the tab
+    /// it was tapped from.
     func openSession(year: Int, sessionId: String, from tab: Tab) {
         let route = Route.session(year: year, sessionId: sessionId)
         switch tab {
+        case .calendar: calendarPath.append(route)
         case .programme: programmePath.append(route)
-        case .notifications: notificationsPath.append(route)
-        default: cardPath.append(route)
+        case .inbox: inboxPath.append(route)
+        case .profile: profilePath.append(route)
+        case .card: cardPath.append(route)
         }
     }
 }

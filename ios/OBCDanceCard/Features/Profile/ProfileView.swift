@@ -38,6 +38,8 @@ struct ProfileView: View {
                             .foregroundStyle(.secondary)
                     }
 
+                    CalendarFeedSection()
+
                     NotificationPrefsSection(initialPrefs: memberPrivate.notificationPrefs)
 
                     PushSection()

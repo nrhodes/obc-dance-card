@@ -85,7 +85,24 @@ final class ProgrammeTimelineTests: XCTestCase {
         ]
         let items = ProgrammeTimeline.build(weekday: .monday, series: [seriesA, seriesB], sessions: sessions)
         XCTAssertEqual(items.map(\.anchorDate), ["2027-01-11", "2027-02-01", "2027-03-01"])
-        XCTAssertEqual(items.map(\.id), ["series:s-a", "single:single-1", "series:s-b"])
+        XCTAssertEqual(items.map(\.id), ["series:2027:s-a", "single:single-1", "series:2027:s-b"])
+    }
+
+    /// Plan §21 B3: the same `seriesId` in two published years is two series,
+    /// each with only its own year's sessions.
+    func testTheSameSeriesIdInTwoYearsIsTwoItems() {
+        let old = Fx.series(id: "s-a", name: "A (2026)", year: 2026)
+        let new = Fx.series(id: "s-a", name: "A (2027)", year: 2027)
+        let sessions = [
+            Fx.session(id: "s-a-2026", date: "2026-11-02", seriesId: "s-a"),
+            Fx.session(id: "s-a-2027", date: "2027-01-11", seriesId: "s-a"),
+        ]
+        let items = ProgrammeTimeline.build(weekday: .monday, series: [new, old], sessions: sessions)
+        XCTAssertEqual(items.map(\.id), ["series:2026:s-a", "series:2027:s-a"])
+        for item in items {
+            guard case let .series(s, ordered, _) = item else { return XCTFail("expected series items") }
+            XCTAssertEqual(ordered.map(\.year), [s.year])
+        }
     }
 
     func testASeriesAnchorsOnItsFirstSessionAndKeepsThemInDateOrder() {

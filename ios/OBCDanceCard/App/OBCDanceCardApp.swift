@@ -35,7 +35,9 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         didFailToRegisterForRemoteNotificationsWithError error: Error
     ) {
         // Push simply stays off; nothing else in the app depends on it.
+        #if DEBUG
         print("apns_registration_failed \((error as NSError).code)")
+        #endif
     }
 }
 
@@ -54,6 +56,7 @@ struct OBCDanceCardApp: App {
     @StateObject private var notifications = NotificationsStore()
     @StateObject private var teams = TeamsStore()
     @StateObject private var visitors = VisitorsStore()
+    @StateObject private var myEntries = MyEntriesStore()
 
     @Environment(\.scenePhase) private var scenePhase
 
@@ -70,6 +73,7 @@ struct OBCDanceCardApp: App {
                 .environmentObject(notifications)
                 .environmentObject(teams)
                 .environmentObject(visitors)
+                .environmentObject(myEntries)
                 .task { start() }
                 .onChange(of: auth.memberId) { _, memberId in
                     bindMemberScopedStores(to: memberId)
@@ -112,6 +116,7 @@ struct OBCDanceCardApp: App {
         invites.start(uid: memberId)
         notifications.start(uid: memberId)
         visitors.start(uid: memberId)
+        myEntries.start(uid: memberId)
     }
 }
 
@@ -138,8 +143,14 @@ struct RootView: View {
             }
 
             if appLock.isLocked && auth.status == .signedIn {
+                // No transition, no animation: iOS takes the app-switcher
+                // snapshot as the app resigns active, and a cover that fades
+                // in can be captured mid-fade with the card still visible —
+                // defeating the lock's one purpose. It must be there in the
+                // very first frame.
                 AppLockView(lock: appLock)
-                    .transition(.opacity)
+                    .transition(.identity)
+                    .transaction { $0.animation = nil }
                     .zIndex(1)
             }
         }

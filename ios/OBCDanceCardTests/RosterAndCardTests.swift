@@ -102,6 +102,20 @@ final class RosterTests: XCTestCase {
         XCTAssertEqual(Roster.buildSoloRows(entries: entries, status: .available, nameOf: Fx.nameOf).count, 1)
     }
 
+    /// An `unavailable` entry is the member's private "don't offer me this"
+    /// marker — it never appears under either noticeboard heading.
+    func testUnavailableEntriesNeverAppearOnTheNoticeboard() {
+        let entries = [
+            Fx.entry(id: "e1", memberId: "member-b", status: .unavailable),
+            Fx.entry(id: "e2", memberId: "member-c", status: .available),
+        ]
+        XCTAssertTrue(Roster.buildSoloRows(entries: entries, status: .lookingForPartner, nameOf: Fx.nameOf).isEmpty)
+        XCTAssertEqual(
+            Roster.buildSoloRows(entries: entries, status: .available, nameOf: Fx.nameOf).map(\.name),
+            ["Amy Lee"]
+        )
+    }
+
     func testNoticeboardLabelsReadDifferentlyForTeams() {
         XCTAssertEqual(Roster.noticeboardLabels(format: .teams).lfp, "Looking for a team")
         XCTAssertEqual(Roster.noticeboardLabels(format: .teams).available, "Available for a team")
@@ -158,6 +172,10 @@ final class RosterTests: XCTestCase {
         XCTAssertEqual(
             Roster.describeOwnEntry(Fx.entry(status: .available), teams: []),
             "You're marked as available."
+        )
+        XCTAssertEqual(
+            Roster.describeOwnEntry(Fx.entry(status: .unavailable), teams: []),
+            "You've marked yourself unavailable for this session."
         )
         XCTAssertNil(Roster.describeOwnEntry(Fx.entry(status: .cancelled), teams: []))
     }
@@ -228,6 +246,40 @@ final class CardLogicTests: XCTestCase {
         XCTAssertEqual(groups[0].groups.count, 1)
         XCTAssertEqual(groups[0].groups[0].title, "Marion Taylor Pairs")
         XCTAssertEqual(groups[0].groups[0].rows.map(\.date), ["2027-01-11", "2027-01-18"])
+    }
+
+    /// Plan §21 B3: the same `seriesId` exists in two published years. Each
+    /// entry must group under, and be titled by, *its own* year's series.
+    func testSeriesIdsAreResolvedWithinTheEntrysOwnYear() {
+        let entries = [
+            Fx.entry(id: "e1", sessionId: "\(Fx.seriesId)-2026-11-02", date: "2026-11-02", status: .lookingForPartner),
+            Fx.entry(id: "e2", sessionId: Fx.sessionId, date: "2027-01-11", status: .lookingForPartner),
+        ]
+        let groups = CardLogic.groupEntries(
+            entries: entries,
+            sessions: [
+                Fx.session(id: "\(Fx.seriesId)-2026-11-02", date: "2026-11-02", title: "Old Name"),
+                Fx.session(),
+            ],
+            series: [Fx.series(name: "New Name", year: 2027), Fx.series(name: "Old Name", year: 2026)],
+            weekdays: [Fx.weekday(year: 2027), Fx.weekday(label: "Monday (2026)", year: 2026)]
+        )
+        let flat = groups.flatMap(\.groups)
+        XCTAssertEqual(flat.count, 2, "same seriesId in two years must not merge")
+        XCTAssertEqual(Set(flat.map(\.title)), ["Old Name", "New Name"])
+        XCTAssertEqual(flat.map { $0.rows.map(\.date) }.sorted { $0[0] < $1[0] },
+                       [["2026-11-02"], ["2027-01-11"]])
+    }
+
+    /// As on the web, an `unavailable` marker is not a card line — the card
+    /// lists what you're playing or seeking, and the Calendar shows the rest.
+    func testUnavailableEntriesAreNotCardRows() {
+        let groups = CardLogic.groupEntries(
+            entries: [Fx.entry(status: .unavailable)],
+            sessions: [Fx.session()], series: [Fx.series()], weekdays: [Fx.weekday()]
+        )
+        XCTAssertTrue(groups.isEmpty)
+        XCTAssertTrue(CardLogic.pastRows(entries: [Fx.entry(status: .unavailable)], sessions: [], series: []).isEmpty)
     }
 
     func testCancelledEntriesAreDropped() {

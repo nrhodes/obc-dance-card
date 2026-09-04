@@ -2,104 +2,60 @@
 //  CardView.swift
 //  My Dance Card — the Swift counterpart of `web/src/screens/HomeScreen.tsx`.
 //
-//  Subscribes once to every entry belonging to the signed-in member
-//  (`entries where memberId == uid`, ordered by `date` — the existing
-//  `entries(memberId, date)` composite index), then splits that one list into
-//  "upcoming" (grouped by weekday → series, plan §5.4) and a collapsed "Past"
-//  client-side. One subscription is plenty at club scale and reuses the same
-//  index for both halves rather than running two range queries.
+//  Reads the shared `MyEntriesStore` (plan §21 B2/B4 — one live `entries`
+//  listener shared with the Calendar), then splits that list into "upcoming"
+//  (grouped by weekday → series, year-qualified per plan §21 B3) and a
+//  collapsed "Past" client-side.
 //
 
 import FirebaseFirestore
 import SwiftUI
 
+/// The card only needs the teams its own entries point at — not the
+/// club-wide `TeamsStore` — because a past entry may belong to a team that
+/// has since disbanded and dropped out of that store's query.
 @MainActor
-final class CardModel: ObservableObject {
-    @Published private(set) var entries: [Entry] = []
+final class CardTeamsModel: ObservableObject {
     @Published private(set) var teams: [Team] = []
-    @Published private(set) var loaded = false
-    @Published private(set) var error: SubscriptionError?
 
-    /// Firestore caps an `in` query at 30 values; the card never legitimately
-    /// spans more teams than a member could join in a season.
+    /// Firestore caps an `in` query at 30 values; the card never spans more
+    /// teams than a member could join in a season.
     private static let maxTeamIds = 10
 
-    private var entriesListener: ListenerRegistration?
-    private var teamsListener: ListenerRegistration?
-    private var currentUid: String?
-    private var currentTeamIds: [String] = []
+    private var listener: ListenerRegistration?
+    private var currentIds: [String] = []
 
-    func start(uid: String?) {
-        guard uid != currentUid else { return }
-        stop()
-        currentUid = uid
-        guard let uid else {
-            entries = []
-            loaded = true
-            return
-        }
-        loaded = false
-
-        entriesListener = FirebaseService.db.collection(Paths.entries)
-            .whereField("memberId", isEqualTo: uid)
-            .order(by: "date")
+    func refresh(entries: [Entry]) {
+        let ids = Array(Set(entries.compactMap(\.teamId))).sorted().prefix(Self.maxTeamIds).map { $0 }
+        guard ids != currentIds else { return }
+        currentIds = ids
+        listener?.remove()
+        listener = nil
+        guard !ids.isEmpty else { teams = []; return }
+        listener = FirebaseService.db.collection(Paths.teams)
+            .whereField(FieldPath.documentID(), in: ids)
             .addSnapshotListener { [weak self] snap, err in
                 Task { @MainActor in
                     guard let self else { return }
-                    if let err {
-                        print("subscription_failed home_entries \((err as NSError).code)")
-                        self.entries = []
-                        self.error = SubscriptionError(code: "\((err as NSError).code)", resource: "your dance card")
-                    } else {
-                        self.entries = snap?.documents.compactMap { try? $0.data(as: Entry.self) } ?? []
-                        self.error = nil
-                        self.refreshTeams()
-                    }
-                    self.loaded = true
+                    self.teams = err == nil ? (snap?.documents.compactMap { try? $0.data(as: Team.self) } ?? []) : []
                 }
             }
     }
 
     func stop() {
-        entriesListener?.remove()
-        entriesListener = nil
-        teamsListener?.remove()
-        teamsListener = nil
-        currentUid = nil
-        currentTeamIds = []
-    }
-
-    /// The card only needs the teams its own entries point at — not the
-    /// club-wide `TeamsStore` — because a past entry may belong to a team
-    /// that has since disbanded and dropped out of that store's query.
-    private func refreshTeams() {
-        let ids = Array(Set(entries.compactMap(\.teamId))).sorted().prefix(Self.maxTeamIds).map { $0 }
-        guard ids != currentTeamIds else { return }
-        currentTeamIds = ids
-        teamsListener?.remove()
-        teamsListener = nil
-        guard !ids.isEmpty else {
-            teams = []
-            return
-        }
-        teamsListener = FirebaseService.db.collection(Paths.teams)
-            .whereField(FieldPath.documentID(), in: ids)
-            .addSnapshotListener { [weak self] snap, err in
-                Task { @MainActor in
-                    guard let self else { return }
-                    self.teams = err == nil
-                        ? (snap?.documents.compactMap { try? $0.data(as: Team.self) } ?? [])
-                        : []
-                }
-            }
+        listener?.remove()
+        listener = nil
+        currentIds = []
+        teams = []
     }
 }
 
 struct CardView: View {
     @EnvironmentObject private var auth: AuthModel
     @EnvironmentObject private var programme: ProgrammeStore
+    @EnvironmentObject private var myEntries: MyEntriesStore
     @EnvironmentObject private var router: Router
-    @StateObject private var model = CardModel()
+    @StateObject private var teamsModel = CardTeamsModel()
 
     @State private var pastOpen = false
 
@@ -109,28 +65,28 @@ struct CardView: View {
 
     private var upcoming: [CardWeekdayGroup] {
         CardLogic.groupEntries(
-            entries: model.entries.filter { $0.date >= today },
+            entries: myEntries.entries.filter { $0.date >= today },
             sessions: programme.sessions,
             series: programme.series,
             weekdays: programme.weekdays,
-            teams: model.teams
+            teams: teamsModel.teams
         )
     }
 
     private var past: [CardRow] {
         Array(CardLogic.pastRows(
-            entries: model.entries.filter { $0.date < today },
+            entries: myEntries.entries.filter { $0.date < today },
             sessions: programme.sessions,
             series: programme.series,
-            teams: model.teams
+            teams: teamsModel.teams
         ).prefix(Self.pastLimit))
     }
 
-    private var loading: Bool { programme.loading || !model.loaded }
+    private var loading: Bool { programme.loading || myEntries.loading }
 
     var body: some View {
         List {
-            if let error = model.error {
+            if let error = myEntries.error {
                 Section { Text(error.message).foregroundStyle(.secondary) }
             }
 
@@ -172,8 +128,8 @@ struct CardView: View {
         }
         .navigationTitle(auth.member.map { "Hello, \($0.firstName)" } ?? "My card")
         .navigationBarTitleDisplayMode(.large)
-        .onAppear { model.start(uid: auth.memberId) }
-        .onChange(of: auth.memberId) { _, uid in model.start(uid: uid) }
+        .onAppear { teamsModel.refresh(entries: myEntries.entries) }
+        .onChange(of: myEntries.entries) { _, entries in teamsModel.refresh(entries: entries) }
     }
 
     @ViewBuilder

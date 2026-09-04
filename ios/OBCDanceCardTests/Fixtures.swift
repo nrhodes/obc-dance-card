@@ -15,14 +15,16 @@ enum Fx {
 
     static func weekday(
         startTime: String = "13:00",
-        label: String = "Monday Afternoon"
+        label: String = "Monday Afternoon",
+        year: Int = 2027
     ) -> WeekdayProgramme {
         WeekdayProgramme(
             id: "monday",
             weekday: .monday,
             label: label,
             startTime: startTime,
-            seatedByTime: "12:45"
+            seatedByTime: "12:45",
+            year: year
         )
     }
 
@@ -54,7 +56,8 @@ enum Fx {
         order: Int = 0,
         sessionIds: [String] = [],
         teamMin: Int = 4,
-        teamMax: Int = 6
+        teamMax: Int = 6,
+        year: Int = 2027
     ) -> Series {
         Series(
             id: id,
@@ -65,7 +68,8 @@ enum Fx {
             order: order,
             sessionIds: sessionIds,
             teamMin: teamMin,
-            teamMax: teamMax
+            teamMax: teamMax,
+            year: year
         )
     }
 

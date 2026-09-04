@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Capabilities the app signs with. `aps-environment` is what lets APNs
+  register this build for push (plan §11, §14.2); without it, registration
+  fails silently and every device token request is declined. "development"
+  is correct here: Xcode rewrites it to "production" when exporting an App
+  Store / TestFlight archive. The Push Notifications capability must also be
+  enabled on the App ID in the Apple Developer portal — a console step.
+-->
+<plist version="1.0">
+<dict>
+	<key>aps-environment</key>
+	<string>development</string>
+</dict>
+</plist>

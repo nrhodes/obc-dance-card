@@ -49,6 +49,9 @@ enum OwnEntryActionState: Equatable {
     case teamsFormat(hasOwnEntry: Bool, teamId: String?, role: TeamsRole)
     case noEntryOpen
     case solo(status: SoloStatus, note: String?)
+    /// Plan §21 B2: a solo `unavailable` marker — "don't offer me this
+    /// session". The only action is to clear it.
+    case unavailable
     case confirmed(partner: PartnerRef, partnerSubstitute: PartnerRef?, substituteOption: SubstituteOption)
     case substituted(partner: PartnerRef?, substitute: PartnerRef?)
     case sub(isSubstituteFor: String)
@@ -175,6 +178,12 @@ enum SessionActions {
         if entry.status == .lookingForPartner || entry.status == .available {
             let status: SoloStatus = entry.status == .lookingForPartner ? .lookingForPartner : .available
             return SessionActionsResult(state: .solo(status: status, note: entry.note))
+        }
+
+        // A solo `unavailable` marker must not fall through to the
+        // `confirmed` branch, which would render it as a real booking.
+        if entry.status == .unavailable {
+            return SessionActionsResult(state: .unavailable)
         }
 
         if let coveredFor = entry.isSubstituteFor {

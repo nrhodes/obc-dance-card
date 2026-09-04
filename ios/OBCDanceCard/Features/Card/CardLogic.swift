@@ -78,10 +78,18 @@ enum CardLogic {
 
     /// The title for one entry's session: the session's own title, or its
     /// series name as a fallback. Mirrors `cardSessionTitle`.
+    /// A series lookup is year-qualified from the *entry's own date*:
+    /// `seriesId` can collide across published years (plan §21 B3). A
+    /// series carrying no year tag (`year == 0`, e.g. a single-year fixture)
+    /// always matches, preserving the pre-B3 behaviour.
+    private static func seriesDoc(for entry: Entry, in series: [Series]) -> Series? {
+        guard let seriesId = entry.seriesId else { return nil }
+        return series.first { $0.id == seriesId && ($0.year == 0 || $0.year == entry.year) }
+    }
+
     static func sessionTitle(_ entry: Entry, sessions: [Session], series: [Series]) -> String {
         if let session = sessions.first(where: { $0.id == entry.sessionId }) { return session.title }
-        if let seriesId = entry.seriesId,
-           let s = series.first(where: { $0.id == seriesId }) { return s.name }
+        if let s = seriesDoc(for: entry, in: series) { return s.name }
         return "Session"
     }
 
@@ -114,10 +122,13 @@ enum CardLogic {
         for wd in Weekday.allCases {
             guard let list = byWeekday[wd], !list.isEmpty else { continue }
 
+            // The grouping key is year-qualified from the entry's own date —
+            // two entries in different years' identically-slugged series
+            // must never land in one group (plan §21 B3).
             var bySeries: [String: [Entry]] = [:]
             var order: [String] = []
             for e in list {
-                let key = e.seriesId ?? "single:\(e.sessionId)"
+                let key = e.seriesId.map { "\(e.year):\($0)" } ?? "single:\(e.sessionId)"
                 if bySeries[key] == nil { order.append(key) }
                 bySeries[key, default: []].append(e)
             }
@@ -126,7 +137,7 @@ enum CardLogic {
             for key in order {
                 let sorted = (bySeries[key] ?? []).sorted { $0.date < $1.date }
                 guard let first = sorted.first else { continue }
-                let seriesDoc = key.hasPrefix("single:") ? nil : series.first(where: { $0.id == key })
+                let seriesDoc = seriesDoc(for: first, in: series)
                 let title = seriesDoc?.name ?? sessionTitle(first, sessions: sessions, series: series)
                 groups.append(CardGroup(
                     key: key,

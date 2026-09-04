@@ -288,6 +288,7 @@
 				DEVELOPMENT_TEAM = "";
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				CODE_SIGN_ENTITLEMENTS = Config/OBCDanceCard.entitlements;
 				INFOPLIST_FILE = Config/Info-Debug.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Dance Card";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "Unlock your dance card with Face ID instead of signing in again.";
@@ -318,6 +319,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_PREVIEWS = YES;
+				CODE_SIGN_ENTITLEMENTS = Config/OBCDanceCard.entitlements;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "Dance Card";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "Unlock your dance card with Face ID instead of signing in again.";

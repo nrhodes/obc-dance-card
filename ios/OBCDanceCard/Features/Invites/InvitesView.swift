@@ -140,7 +140,12 @@ struct InvitesView: View {
         if invite.kind == .captaincy {
             return "\(from) wants you to be captain of \(teamName)"
         }
-        let seriesName = invite.seriesId.flatMap { id in programme.series.first { $0.id == id }?.name }
+        // Year from the invite's own first session (plan §21 B3): `seriesId`
+        // repeats across years, so a bare id lookup could name the wrong year's series.
+        let year = invite.sessionIds.first.flatMap { programme.session(id: $0)?.year }
+        let seriesName = invite.seriesId.flatMap { id in
+            programme.series.first { $0.id == id && (year == nil || $0.year == year) }?.name
+        }
         return "Team invite from \(from) — \(teamName)" + (seriesName.map { " (\($0))" } ?? "")
     }
 
