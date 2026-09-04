@@ -33,7 +33,17 @@ jobs:
         run: npm test
 
       - name: Dependency audit (prod deps, high+)
-        run: npm audit --omit=dev --audit-level=high
+        # The registry's audit endpoint is flaky (503s and 400s seen
+        # 2026-09-04); retry transient failures rather than fail the build.
+        # A real vulnerability finding fails on every attempt, so the gate
+        # is not weakened.
+        run: |
+          for i in 1 2 3; do
+            npm audit --omit=dev --audit-level=high && exit 0
+            echo "npm audit attempt $i failed; retrying in 20s" >&2
+            sleep 20
+          done
+          exit 1
 
   secret-scan:
     runs-on: ubuntu-latest
