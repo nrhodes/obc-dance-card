@@ -102,6 +102,18 @@ a {
   color: var(--color-primary);
 }
 
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .skip-link {
   position: absolute;
   left: -9999px;
@@ -401,6 +413,17 @@ td {
   letter-spacing: 0.04em;
   text-transform: uppercase;
   cursor: default;
+}
+
+/* Real tel:/mailto: links in the members directory (plan task: "tapping the
+   phone number should start a call on mobile") — full tap-target height so
+   they're easy to hit, and block-level so the link itself (not just its
+   text) fills the cell. */
+.contact-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--tap-target);
+  padding: var(--space-1) 0;
 }
 
 .session-date-list {

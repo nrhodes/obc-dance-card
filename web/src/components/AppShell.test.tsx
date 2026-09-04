@@ -87,11 +87,15 @@ describe('AppShell', () => {
     renderShell();
     const adminButton = screen.getByRole('button', { name: /Admin/ });
     expect(adminButton.getAttribute('aria-expanded')).toBe('false');
-    // The five admin destinations are behind the disclosure, not in the flat nav.
-    expect(screen.queryByRole('link', { name: 'Members' })).toBeNull();
+    // The five admin destinations are behind the disclosure, not in the flat
+    // nav — distinct from the always-visible member-facing "Members" link
+    // (`/members`), so assert on the admin-only href rather than the link's
+    // visible name (both links happen to be named "Members").
+    expect(document.querySelector('a[href="/admin/members"]')).toBeNull();
     fireEvent.click(adminButton);
     expect(adminButton.getAttribute('aria-expanded')).toBe('true');
-    for (const name of ['Members', 'Programme', 'Broadcast', 'Audit log', 'Integrity']) {
+    expect(document.querySelector('a[href="/admin/members"]')).not.toBeNull();
+    for (const name of ['Programme', 'Broadcast', 'Audit log', 'Integrity']) {
       expect(screen.getAllByRole('link', { name }).length).toBeGreaterThan(0);
     }
   });

@@ -81,6 +81,7 @@ export async function provisionMember(
       member.lastName !== row.lastName ||
       member.phone !== row.phone ||
       member.grade !== row.grade ||
+      member.email !== row.emailLower ||
       wasInactive;
 
     if (!opts.dryRun) {
@@ -88,7 +89,19 @@ export async function provisionMember(
       await writeDoc(
         opts.writer,
         memberRef,
-        { firstName: row.firstName, lastName: row.lastName, phone: row.phone, grade: row.grade, active: true, updatedAt: now },
+        {
+          firstName: row.firstName,
+          lastName: row.lastName,
+          phone: row.phone,
+          grade: row.grade,
+          // Kept in sync with memberPrivate.emailLower on every import pass —
+          // matching is by emailLower (see file header), so this is always
+          // the address that was just matched on; it also backfills members
+          // created before `email` existed on the doc.
+          email: row.emailLower,
+          active: true,
+          updatedAt: now,
+        },
         true,
       );
       if (wasInactive) {
@@ -118,6 +131,7 @@ export async function provisionMember(
     firstName: row.firstName,
     lastName: row.lastName,
     phone: row.phone,
+    email: row.emailLower,
     grade: row.grade,
     role: row.role ?? 'member',
     active: true,

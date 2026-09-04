@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { FieldValue } from 'firebase-admin/firestore';
 import type { ImportMembersInput } from '@obc/shared';
 import { paths } from '@obc/shared';
 import { auth, db } from '../lib/admin.js';
@@ -67,6 +68,7 @@ describe('importMembers', () => {
       firstName: 'Happy',
       lastName: 'Path',
       phone: '021 000 0002',
+      email,
       grade: 'Intermediate',
       role: 'member',
       active: true,
@@ -74,6 +76,24 @@ describe('importMembers', () => {
 
     const privateSnap = await db.doc(paths.memberPrivate(authUser.uid)).get();
     expect(privateSnap.data()).toMatchObject({ emailLower: email, hasPassword: false, devices: [] });
+  });
+
+  it('re-import backfills/keeps members.email in sync with memberPrivate.emailLower', async () => {
+    const email = 'sync-email-1@example.org';
+    const uid = await makeMember(email, { role: 'member', active: true, firstName: 'Sync', lastName: 'Member' });
+
+    // Simulate a pre-backfill member doc that predates the `email` field.
+    await db.doc(paths.member(uid)).update({ email: FieldValue.delete() });
+    expect((await db.doc(paths.member(uid)).get()).data()?.email).toBeUndefined();
+
+    const report = await importMembersHandler(
+      await adminReq({ csv: csv([['Sync', 'Member', email, '021', 'Open']]) }),
+    );
+    expect(report.errors).toEqual([]);
+    expect(report.updated).toBe(1); // missing email counts as a change
+
+    const memberAfter = (await db.doc(paths.member(uid)).get()).data();
+    expect(memberAfter?.email).toBe(email);
   });
 
   it('duplicate email within the file is a row error for every occurrence; other rows still import', async () => {

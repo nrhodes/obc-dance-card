@@ -74,6 +74,10 @@ test.describe('accessibility (axe)', () => {
     await assertNoSeriousViolations(page, '/calendar (Set availability… dialog)');
     await page.keyboard.press('Escape');
 
+    await page.getByLabel('Main').getByRole('link', { name: 'Members' }).click();
+    await expect(page.getByRole('heading', { name: 'Members' })).toBeVisible();
+    await assertNoSeriousViolations(page, '/members');
+
     await page.getByLabel('Main').getByRole('link', { name: 'Invites' }).click();
     await expect(page.getByRole('heading', { name: 'Invites' })).toBeVisible();
     await assertNoSeriousViolations(page, '/invites');
@@ -162,5 +166,13 @@ test.describe('accessibility (axe)', () => {
     await page.waitForTimeout(50);
     const overflowYear = await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 2);
     expect(overflowYear, 'Calendar Year view overflows horizontally at 320px/200% zoom').toBe(true);
+
+    await page.getByLabel('Main').getByRole('link', { name: 'Members' }).click();
+    await expect(page.getByRole('heading', { name: 'Members' })).toBeVisible();
+    await page.waitForTimeout(50);
+    const overflowMembers = await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth + 2,
+    );
+    expect(overflowMembers, 'Members page overflows horizontally at 320px/200% zoom').toBe(true);
   });
 });

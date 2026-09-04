@@ -18,10 +18,15 @@ authorises, and writes inside a transaction. See `firestore.rules`.
 
 `memberId` **is the Firebase Auth uid**. Created only by the `importMembers`
 callable. Public-to-members profile: `firstName`, `lastName`, `phone`,
-`grade`, `role` (`member`/`admin`), `active`, `lastImportId?`. No email, no
-tokens — those live in `memberPrivate`. Any active member may read any other
-*active* member (booklet parity: name, grade, phone); a member always reads
-their own doc regardless.
+`email?`, `grade`, `role` (`member`/`admin`), `active`, `lastImportId?`.
+`email` (amended 2026-09-05) is denormalised from `memberPrivate.emailLower`
+by `provisionMember` on every create/update, for the members directory —
+optional, since docs created before this field existed lack it until
+`firebase/scripts/backfill-member-emails.ts` runs. Device tokens still live
+only in `memberPrivate`. Any active member may read any other *active*
+member (name, grade, phone, email — full contact directory, was booklet
+parity phones-only with emails private); a member always reads their own doc
+regardless.
 
 Members are never hard-deleted; leaving the club sets `active: false`.
 `eraseMember` scrubs PII entirely (NZ Privacy Act) after 30+ days inactive.
@@ -29,9 +34,11 @@ Members are never hard-deleted; leaving the club sets `active: false`.
 ### `memberPrivate/{memberId}` — owner + admin only
 
 `emailLower` (the login identity), `notificationPrefs`, `devices` (push
-tokens, max 10), `hasPassword`, `lastLoginAt?`. Split out from `members` so
-that email addresses and device tokens are never exposed to other members.
-Also carries `icalToken?`/`icalTokenCreatedAt?` (plan §21 B1) — the
+tokens, max 10), `hasPassword`, `lastLoginAt?`. Remains owner+admin-only for
+login identity, notification prefs, devices, and iCal token — it is *not*
+where the member-visible `email` on the public `members` doc comes from
+reading; `provisionMember` writes that copy directly, `memberPrivate` stays
+the source of truth. Also carries `icalToken?`/`icalTokenCreatedAt?` (plan §21 B1) — the
 plaintext iCal subscription token, so its owner can redisplay the URL; the
 hash-keyed lookup the unauthenticated feed endpoint actually reads is the
 separate server-only `icalTokens/{sha256hex(token)}` collection below.
