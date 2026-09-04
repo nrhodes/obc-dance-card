@@ -83,6 +83,17 @@ describe('notifications collection rules', () => {
     await assertFails(updateDoc(doc(clientAs(env, 'alice'), 'notifications/n1'), { read: 'yes' }));
   });
 
+  it('owner may not set readAt to anything but a string or null (audit L1)', async () => {
+    await assertFails(updateDoc(doc(clientAs(env, 'alice'), 'notifications/n1'), { read: true, readAt: 12345 }));
+    await assertFails(
+      updateDoc(doc(clientAs(env, 'alice'), 'notifications/n1'), { read: true, readAt: { smuggled: 'payload' } }),
+    );
+    await assertSucceeds(updateDoc(doc(clientAs(env, 'alice'), 'notifications/n1'), { read: true, readAt: null }));
+    await assertSucceeds(
+      updateDoc(doc(clientAs(env, 'alice'), 'notifications/n1'), { read: true, readAt: '2026-09-05T00:00:00.000Z' }),
+    );
+  });
+
   it('another member may not update the owner\'s notification', async () => {
     await assertFails(updateDoc(doc(clientAs(env, 'bob'), 'notifications/n1'), { read: true }));
   });

@@ -69,10 +69,22 @@ export async function makeMember(email: string, opts: MakeMemberOptions = {}): P
 }
 
 /** A minimal fake `CallableRequest` for calling an exported `xxxHandler` directly. */
-export function fakeCallableRequest<T>(data: T, opts: { uid?: string; ip?: string } = {}): CallableRequest<T> {
+export function fakeCallableRequest<T>(
+  data: T,
+  opts: { uid?: string; ip?: string; authTimeSeconds?: number } = {},
+): CallableRequest<T> {
   return {
     data,
-    auth: opts.uid ? { uid: opts.uid, token: {} as never } : undefined,
+    auth: opts.uid
+      ? {
+          uid: opts.uid,
+          // Defaults to "now" (fresh sign-in) so every existing test that
+          // doesn't care about recency keeps behaving as before; pass
+          // `authTimeSeconds` explicitly to simulate a stale session (e.g.
+          // for the setPassword recent-login check, audit M1).
+          token: { auth_time: opts.authTimeSeconds ?? Math.floor(Date.now() / 1000) } as never,
+        }
+      : undefined,
     rawRequest: { headers: {}, ip: opts.ip ?? '203.0.113.1' } as never,
   } as unknown as CallableRequest<T>;
 }

@@ -1,15 +1,24 @@
 /**
  * Set / remove password (plan §8.2, §9.2). Setting a password calls the
- * server-side `setPassword` callable, which uses the member's current session
- * — no Firebase "recent login" re-auth, so the member is never bounced to a
- * sign-in screen just to add an optional password. Removing rotates the
- * password to an unknowable value server-side without ending the session.
+ * server-side `setPassword` callable, which requires the member to have
+ * signed in recently (audit M1). Unlike Firebase's own client-side
+ * `updatePassword`/`requires-recent-login` mechanism, the member is NEVER
+ * navigated away to a sign-in screen to satisfy that: when the server
+ * rejects with `details.reason === RECENT_LOGIN_REQUIRED_REASON`, this
+ * component stays on the same section, keeps the password the member
+ * already typed, and runs the emailed-code flow inline (reusing
+ * `EmailCodeStep`) — then automatically retries `setPassword` once the
+ * member verifies the code. Removing a password rotates it to an
+ * unknowable value server-side without ending the session (risk-reducing,
+ * so no freshness check).
  */
 import { useState } from 'react';
-import { passwordStrengthError } from '@obc/shared';
-import { toAppError } from '../firebase';
+import { passwordStrengthError, RECENT_LOGIN_REQUIRED_REASON } from '@obc/shared';
+import { signInWithCustomToken } from 'firebase/auth';
+import { auth, toAppError, type AppError } from '../firebase';
 import { setPassword, removePassword } from '../api';
 import { mapGenericError } from '../auth/errors';
+import { EmailCodeStep } from '../auth/EmailCodeStep';
 
 export interface PasswordSectionProps {
   hasPassword: boolean;
@@ -23,13 +32,25 @@ export function PasswordSection({ hasPassword, email }: PasswordSectionProps) {
   return <SetPassword email={email} />;
 }
 
+/** True when `details` is the shape `setPassword` sends for a stale session. */
+function isRecentLoginRequired(err: AppError): boolean {
+  return (
+    err.code === 'failed-precondition' &&
+    typeof err.details === 'object' &&
+    err.details !== null &&
+    (err.details as { reason?: unknown }).reason === RECENT_LOGIN_REQUIRED_REASON
+  );
+}
+
 function SetPassword({ email }: { email: string }) {
-  void email;
   const [password, setPassword_] = useState('');
   const [confirm, setConfirm] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  // Inline re-auth step (audit M1): shown instead of the form, never a
+  // navigation. `password`/`confirm` above are untouched while this is up.
+  const [needsReauth, setNeedsReauth] = useState(false);
 
   async function handleSubmit() {
     setError(null);
@@ -45,17 +66,65 @@ function SetPassword({ email }: { email: string }) {
     }
     setSubmitting(true);
     try {
-      // Server-side: uses the current session, so there is no "sign in again"
-      // detour (plan §8.2 / accessibility for elderly members).
       await setPassword({ password });
       setSuccess(true);
       setPassword_('');
       setConfirm('');
     } catch (err) {
+      const appErr = toAppError(err);
+      if (isRecentLoginRequired(appErr)) {
+        setNeedsReauth(true);
+      } else {
+        setError(mapGenericError(appErr));
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  // Called once the inline code step verifies. Signing in with the fresh
+  // custom token gives the session a fresh `auth_time`, so the retry below
+  // clears the server's recent-login check.
+  async function handleReauthVerified(token: string) {
+    setSubmitting(true);
+    setError(null);
+    try {
+      await signInWithCustomToken(auth, token);
+      await setPassword({ password });
+      setNeedsReauth(false);
+      setSuccess(true);
+      setPassword_('');
+      setConfirm('');
+    } catch (err) {
+      // Whatever went wrong here isn't the "please re-auth" case again (we
+      // just did that) — surface it as a normal error back on the form
+      // rather than looping on the code step.
+      setNeedsReauth(false);
       setError(mapGenericError(toAppError(err)));
     } finally {
       setSubmitting(false);
     }
+  }
+
+  if (needsReauth) {
+    return (
+      <div>
+        <h2>Set a password (optional)</h2>
+        <p role="status" aria-live="polite">
+          To keep your account safe, we&apos;ve emailed you a 6-digit code. Enter it here to finish setting your
+          password.
+        </p>
+        <EmailCodeStep
+          email={email}
+          introText={`We've emailed a 6-digit code to ${email}. It's valid for 10 minutes.`}
+          onVerified={handleReauthVerified}
+          onUseDifferentEmail={() => setNeedsReauth(false)}
+          useDifferentEmailLabel="Cancel"
+          verifyLabel="Confirm"
+          verifyingLabel="Confirming…"
+        />
+      </div>
+    );
   }
 
   return (

@@ -367,11 +367,19 @@ re-validates inside its transaction before commit; the nightly sweep runs both.
    `{ token }`.
 5. Client `signInWithCustomToken(token)`. Persistence: default local.
 
-**Password:** Client `signInWithEmailAndPassword`. To *set* a password: user must have
-signed in within the last 5 minutes (Firebase requires recent auth); client calls
-`updatePassword`; on `auth/requires-recent-login` the UI runs the code flow first,
-then retries. After success, client calls `markPasswordSet()` (callable) which sets
-`memberPrivate.hasPassword = true`. Remove password: `removePassword()` callable
+**Password:** Client `signInWithEmailAndPassword`. To *set* a password
+(amended 2026-09-05, audit M1 — supersedes the original client-side
+`updatePassword`/`requires-recent-login` design, whose re-auth *navigation*
+confused members): the client calls the server-side `setPassword` callable,
+which requires the session's `auth_time` to be within the last **10 minutes**
+(server-enforced; 10 not 5 so a member who just signed in is never re-prompted).
+On a stale session it rejects with `failed-precondition` +
+`details.reason = 'recent-login-required'`; the Profile UI then — without ever
+leaving the password section, and keeping the typed password — requests a login
+code to the member's own email, takes the 6 digits inline, signs in with the
+custom token (refreshing `auth_time`), and retries automatically. `setPassword`
+also sets `memberPrivate.hasPassword = true` and sends a `security`
+notification. Remove password: `removePassword()` callable
 uses Admin SDK `updateUser(uid, { password: <random 64 bytes> })`? — **No.** Firebase
 cannot unset a password; instead the callable rotates it to an unknowable random
 value and sets `hasPassword=false`. Document this in the UI as "Remove password".
