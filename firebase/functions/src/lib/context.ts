@@ -58,5 +58,11 @@ export async function resolveActingMember(caller: Caller, onBehalfOfMemberId?: s
   if (!member) {
     throw new HttpsError('not-found', 'Target member not found.');
   }
+  // Audit L2: acting on behalf of a deactivated member would silently undo
+  // the deactivation cascade's guarantees (their future entries were
+  // cancelled). Reactivate first, then act.
+  if (member.active !== true) {
+    throw new HttpsError('failed-precondition', 'That member is not active. Reactivate them first.');
+  }
   return { memberId: onBehalfOfMemberId, member, onBehalfBy: caller.uid };
 }

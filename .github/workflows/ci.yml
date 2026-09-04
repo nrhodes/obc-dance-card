@@ -6,13 +6,18 @@ on:
   pull_request:
   workflow_dispatch:
 
+# Audit L8: least privilege for the workflow token — no job here needs more
+# than read access (gitleaks-action only reads history with GITHUB_TOKEN).
+permissions:
+  contents: read
+
 jobs:
   build-test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 22
           cache: npm
@@ -48,12 +53,12 @@ jobs:
   secret-scan:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
 
       - name: Gitleaks
-        uses: gitleaks/gitleaks-action@v3
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -63,21 +68,21 @@ jobs:
     # setup, so running them separately just pays that setup cost twice.
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 22
           cache: npm
 
       - name: Set up Java (Firestore emulator)
-        uses: actions/setup-java@v6
+        uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c # v6
         with:
           distribution: temurin
           java-version: 21
 
       - name: Cache Firebase emulator binaries
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: ~/.cache/firebase/emulators
           key: firebase-emulators-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
@@ -108,7 +113,7 @@ jobs:
     # re-run these tests, or the drift ships silently.
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Xcode version
         run: xcodebuild -version
@@ -116,7 +121,7 @@ jobs:
       # Pin the package checkout somewhere stable so it can be cached —
       # by default SwiftPM clones inside DerivedData, which is not.
       - name: Cache SwiftPM checkouts
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: ios/.spm
           key: spm-${{ runner.os }}-${{ hashFiles('ios/OBCDanceCard.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
@@ -153,7 +158,7 @@ jobs:
       # nothing is listening, so the steps below are the *only* difference
       # between a normal PR run and an on-demand one. Same posture as
       # `e2e-test`: deterministic checks always, full-stack on request.
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         if: github.event_name == 'workflow_dispatch'
         with:
           node-version: 22
@@ -161,7 +166,7 @@ jobs:
 
       - name: Set up Java (Firestore emulator)
         if: github.event_name == 'workflow_dispatch'
-        uses: actions/setup-java@v6
+        uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c # v6
         with:
           distribution: temurin
           java-version: 21
@@ -215,14 +220,24 @@ jobs:
             -clonedSourcePackagesDirPath .spm \
             -resultBundlePath OBCDanceCard.xcresult
 
+      - name: Scrub login codes from emulator log
+        # Audit L3: the emulator's console email provider prints full login
+        # emails (6-digit codes) to stdout. Codes belong only to synthetic
+        # demo-obc accounts, but mask them anyway before uploading.
+        if: failure()
+        run: |
+          if [ -f firebase-emulators.out ]; then
+            sed -E 's/[0-9]{6}/[6-digit masked]/g' firebase-emulators.out > firebase-emulators-scrubbed.out
+          fi
+
       - name: Upload debug artifacts on failure
         if: failure()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: ios-debug
           path: |
             ios/OBCDanceCard.xcresult
-            firebase-emulators.out
+            firebase-emulators-scrubbed.out
           retention-days: 7
 
   e2e-test:
@@ -234,15 +249,15 @@ jobs:
     # manual sequence this mirrors.
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 22
           cache: npm
 
       - name: Set up Java (Firestore emulator)
-        uses: actions/setup-java@v6
+        uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c # v6
         with:
           distribution: temurin
           java-version: 21
@@ -254,7 +269,7 @@ jobs:
         run: npm run build
 
       - name: Cache Playwright browsers
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: ~/.cache/ms-playwright
           key: ${{ runner.os }}-playwright-${{ hashFiles('package-lock.json') }}
@@ -293,13 +308,23 @@ jobs:
           LOGIN_CODE_PEPPER: ci-dev-pepper
         run: npm run test:e2e -w web
 
+      - name: Scrub login codes from emulator log
+        # Audit L3: the emulator's console email provider prints full login
+        # emails (6-digit codes) to stdout. Codes belong only to synthetic
+        # demo-obc accounts, but mask them anyway before uploading.
+        if: failure()
+        run: |
+          if [ -f firebase-emulators.out ]; then
+            sed -E 's/[0-9]{6}/[6-digit masked]/g' firebase-emulators.out > firebase-emulators-scrubbed.out
+          fi
+
       - name: Upload debug artifacts on failure
         if: failure()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: e2e-debug
           path: |
             web/test-results/
             web/playwright-report/
-            firebase-emulators.out
+            firebase-emulators-scrubbed.out
           retention-days: 7

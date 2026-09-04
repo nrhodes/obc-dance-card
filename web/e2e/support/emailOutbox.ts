@@ -6,6 +6,10 @@
  */
 const FIRESTORE_EMULATOR_URL = process.env.FIRESTORE_EMULATOR_URL ?? 'http://127.0.0.1:8080';
 const PROJECT_ID = process.env.OBC_PROJECT_ID ?? 'demo-obc';
+// Audit L9 — same hard guard as firebase/seed/seed.ts: emulator projects only.
+if (!PROJECT_ID.startsWith('demo-')) {
+  throw new Error(`emailOutbox helpers refuse project "${PROJECT_ID}" — only demo-* (emulator) projects are allowed.`);
+}
 
 export interface OutboxDoc {
   to: string;

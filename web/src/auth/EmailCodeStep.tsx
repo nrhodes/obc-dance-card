@@ -13,6 +13,10 @@ export interface EmailCodeStepProps {
   onVerified: (token: string) => void | Promise<void>;
   onUseDifferentEmail: () => void;
   useDifferentEmailLabel?: string;
+  /** The verify button's label — "Sign in" for the sign-in flow; e.g. "Confirm" when re-authenticating inline (set-password, audit M1). */
+  verifyLabel?: string;
+  /** The verify button's in-progress label, paired with `verifyLabel`. */
+  verifyingLabel?: string;
 }
 
 export function EmailCodeStep({
@@ -21,6 +25,8 @@ export function EmailCodeStep({
   onVerified,
   onUseDifferentEmail,
   useDifferentEmailLabel = 'Use a different email',
+  verifyLabel = 'Sign in',
+  verifyingLabel = 'Signing in…',
 }: EmailCodeStepProps) {
   const { state, sendCode, verify } = useEmailCodeFlow();
   const [code, setCode] = useState('');
@@ -93,7 +99,7 @@ export function EmailCodeStep({
         disabled={!canSubmit}
         onClick={() => void handleVerify()}
       >
-        {state.phase === 'verifying' ? 'Signing in…' : 'Sign in'}
+        {state.phase === 'verifying' ? verifyingLabel : verifyLabel}
       </button>
       <button
         type="button"

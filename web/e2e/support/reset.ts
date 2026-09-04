@@ -7,6 +7,12 @@
  */
 const FIRESTORE_EMULATOR_URL = process.env.FIRESTORE_EMULATOR_URL ?? 'http://127.0.0.1:8080';
 const PROJECT_ID = process.env.OBC_PROJECT_ID ?? 'demo-obc';
+// Audit L9 — same hard guard as firebase/seed/seed.ts: these helpers delete
+// collections wholesale and must never point anywhere but an emulator, even
+// though the `Bearer owner` credential would be rejected by production anyway.
+if (!PROJECT_ID.startsWith('demo-')) {
+  throw new Error(`reset helpers refuse project "${PROJECT_ID}" — only demo-* (emulator) projects are allowed.`);
+}
 const BASE = `${FIRESTORE_EMULATOR_URL}/v1/projects/${PROJECT_ID}/databases/(default)/documents`;
 const H = { Authorization: 'Bearer owner', 'Content-Type': 'application/json' };
 

@@ -66,6 +66,25 @@ if (useEmulators) {
 export interface AppError {
   code: string;
   message: string;
+  /**
+   * The `details` payload from a callable's `HttpsError` third argument, when
+   * present (e.g. `{ reason: 'recent-login-required' }` from `setPassword` —
+   * audit M1). Server-controlled and structured, unlike `message`, which is
+   * plan §8.3 display-safe copy — details are for dispatching client
+   * behaviour, not for showing to the member directly.
+   */
+  details?: unknown;
+}
+
+/** Excludes `FirebaseError` — that must go through the real conversion below (prefix-stripping, `details` extraction), not this passthrough. */
+function isAppError(err: unknown): err is AppError {
+  return (
+    typeof err === 'object' &&
+    err !== null &&
+    !(err instanceof FirebaseError) &&
+    typeof (err as { code?: unknown }).code === 'string' &&
+    typeof (err as { message?: unknown }).message === 'string'
+  );
 }
 
 /**
@@ -75,11 +94,24 @@ export interface AppError {
  * can compare against the plain HttpsError codes used throughout the plan
  * (§8.3): `unauthenticated | permission-denied | invalid-argument |
  * failed-precondition | not-found | resource-exhausted`.
+ *
+ * Idempotent: `callable()` below already throws an `AppError` (not the raw
+ * `FirebaseError`), and a lot of call sites defensively run the caught error
+ * through `toAppError` again before mapping it to display copy. Without this
+ * check, that second pass would fall through to the `unknown` fallback and
+ * silently drop `code`/`details` — which is exactly the signal the inline
+ * re-auth flow (audit M1) dispatches on, so this must round-trip cleanly.
  */
 export function toAppError(err: unknown): AppError {
+  if (isAppError(err)) {
+    return err;
+  }
   if (err instanceof FirebaseError) {
     const code = err.code.startsWith('functions/') ? err.code.slice('functions/'.length) : err.code;
-    return { code, message: err.message };
+    // Callable errors carry the HttpsError third arg as `.details` (not part
+    // of the base `FirebaseError` type, hence the narrow cast).
+    const details = (err as FirebaseError & { details?: unknown }).details;
+    return details === undefined ? { code, message: err.message } : { code, message: err.message, details };
   }
   if (err instanceof Error) {
     return { code: 'unknown', message: err.message };

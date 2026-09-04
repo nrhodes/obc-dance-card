@@ -47,6 +47,15 @@ export type VerifyLoginCodeInput = z.infer<typeof VerifyLoginCodeInputSchema>;
 export const SetPasswordInputSchema = z.object({ password: z.string().min(8).max(200) }).strict();
 export type SetPasswordInput = z.infer<typeof SetPasswordInputSchema>;
 
+/**
+ * `details.reason` on the `failed-precondition` HttpsError `setPassword`
+ * throws when the caller's session isn't recent enough (audit M1 — plan
+ * §8.2). Shared between server and client so both agree on the literal
+ * without duplicating it: the server throws with this reason, the client's
+ * inline re-auth step (never navigates away) dispatches on it.
+ */
+export const RECENT_LOGIN_REQUIRED_REASON = 'recent-login-required' as const;
+
 export const MarkPasswordSetInputSchema = z.object({}).strict();
 export type MarkPasswordSetInput = z.infer<typeof MarkPasswordSetInputSchema>;
 

@@ -8,6 +8,7 @@ import { randomBytes } from 'node:crypto';
 import { HttpsError, onCall, type CallableRequest } from 'firebase-functions/v2/https';
 import {
   MarkPasswordSetInputSchema,
+  RECENT_LOGIN_REQUIRED_REASON,
   RemovePasswordInputSchema,
   SetPasswordInputSchema,
   paths,
@@ -23,14 +24,39 @@ import { createNotification } from '../notifications/create.js';
 import { parseInput } from '../lib/parseInput.js';
 
 /**
- * Set (or replace) the member's password, server-side, using a valid session
- * — no Firebase "recent login" requirement, so the member is never bounced to
- * a re-authentication screen (plan §8.2; UX fix for elderly members). Strength
- * is enforced with the shared policy.
+ * A caller must have signed in within this window to set a password (audit
+ * M1 — plan §8.2 originally required "recent login" via Firebase's own
+ * `updatePassword`/`requires-recent-login` mechanism, which bounced the
+ * member to a re-auth screen; that navigation-away was the real UX problem,
+ * not the freshness check itself). Enforced server-side against the ID
+ * token's `auth_time` claim so it can't be spoofed by the client.
+ *
+ * 10 minutes, not the plan's original 5: a member who has *just* signed in
+ * and goes straight to Profile to set a password must not be re-prompted —
+ * that would recreate the exact confusion this fix removes. Set server-side
+ * with `setPasswordHandler`; the client never sees or controls this value.
+ */
+const RECENT_LOGIN_WINDOW_SECONDS = 10 * 60;
+
+/**
+ * Set (or replace) the member's password, server-side, using the member's
+ * current session. Requires a recent sign-in (see `RECENT_LOGIN_WINDOW_SECONDS`
+ * above) — enforced here, not by client-side `updatePassword`, so the
+ * re-authentication (when needed) happens inline in the same screen instead
+ * of navigating the member away (plan §8.2; audit M1). Strength is enforced
+ * with the shared policy.
  */
 export async function setPasswordHandler(req: CallableRequest<SetPasswordInput>): Promise<{ ok: true }> {
   const { password } = parseInput(SetPasswordInputSchema, req.data);
   const caller = await requireMember(req);
+
+  const authTime = req.auth?.token.auth_time;
+  const nowSeconds = Date.now() / 1000;
+  if (typeof authTime !== 'number' || nowSeconds - authTime > RECENT_LOGIN_WINDOW_SECONDS) {
+    throw new HttpsError('failed-precondition', "For your security, please confirm it's you first.", {
+      reason: RECENT_LOGIN_REQUIRED_REASON,
+    });
+  }
 
   const strengthError = passwordStrengthError(password);
   if (strengthError) {

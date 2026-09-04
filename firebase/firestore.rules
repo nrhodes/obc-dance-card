@@ -118,7 +118,13 @@ service cloud.firestore {
       allow update: if isActiveMember()
         && resource.data.memberId == request.auth.uid
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read', 'readAt'])
-        && request.resource.data.read is bool;
+        && request.resource.data.read is bool
+        // Audit L1: without a type check the owner could stash arbitrary
+        // payloads (up to the 1 MB doc cap) in their own readAt field.
+        // (`readAt` may be absent entirely — flipping `read` alone is fine.)
+        && (!('readAt' in request.resource.data)
+            || request.resource.data.readAt is string
+            || request.resource.data.readAt == null);
 
       allow create, delete: if false;
     }
