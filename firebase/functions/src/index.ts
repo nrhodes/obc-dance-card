@@ -61,7 +61,7 @@ export { sendSessionReminders, sendDailyDigest, purgeExpired } from './notificat
 
 // Phase 6 — admin extras + integrity
 export { setMemberRole, deactivateMember, reactivateMember, eraseMember } from './admin/members.js';
-export { updateSeries, updateSession } from './admin/programmeEdit.js';
+export { updateSeries, updateSession, updateWeekday } from './admin/programmeEdit.js';
 export { broadcast, listAuditLog } from './admin/misc.js';
 // The deployed callable name is `runPairingSweep` (plan §9.2's canonical
 // name); `sweep.ts` names its `onCall` wrapper `runPairingSweepCallable` to

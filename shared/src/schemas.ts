@@ -187,6 +187,31 @@ export const UpdateSessionInputSchema = z
   .strict();
 export type UpdateSessionInput = z.infer<typeof UpdateSessionInputSchema>;
 
+/** `HH:MM`, 24h clock — same shape `validate.ts#assertTimeOfDay` enforces on CSV import. */
+const timeOfDay = z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, 'expected HH:MM (24h)');
+
+export const UpdateWeekdayPatchSchema = z
+  .object({
+    label: z.string().trim().min(1).max(200).optional(),
+    startTime: timeOfDay.optional(),
+    seatedByTime: timeOfDay.optional(),
+    /** `null` clears the steward. */
+    partnerStewardMemberId: id.nullable().optional(),
+    /** `null` clears the notes. */
+    notes: z.string().trim().max(500).nullable().optional(),
+  })
+  .strict();
+export type UpdateWeekdayPatch = z.infer<typeof UpdateWeekdayPatchSchema>;
+
+export const UpdateWeekdayInputSchema = z
+  .object({
+    year: z.number().int().min(2000).max(2100),
+    weekday,
+    patch: UpdateWeekdayPatchSchema,
+  })
+  .strict();
+export type UpdateWeekdayInput = z.infer<typeof UpdateWeekdayInputSchema>;
+
 /* ---------------------------------- invites -------------------------------- */
 
 export const SendInviteInputSchema = z

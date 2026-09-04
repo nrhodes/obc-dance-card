@@ -4,23 +4,27 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ProgrammeContextValue, ProgrammeYearData } from '../programme/ProgrammeContext';
-import type { Programme, Series, Session, WeekdayProgramme } from '@obc/shared';
+import type { Member, Programme, Series, Session, WeekdayProgramme } from '@obc/shared';
+import type { MembersDirectoryContextValue } from '../members/MembersDirectoryContext';
 import { ProgrammeScreen } from './ProgrammeScreen';
 
 const useProgrammeMock = vi.fn<() => ProgrammeContextValue>();
+
+const defaultMembersDirectory = (): MembersDirectoryContextValue => ({
+  members: [],
+  byId: new Map(),
+  nameOf: (id: string) => `Member ${id}`,
+  loading: false,
+  error: null,
+});
+const useMembersDirectoryMock = vi.fn<() => MembersDirectoryContextValue>(defaultMembersDirectory);
 
 vi.mock('../programme/useProgramme', () => ({
   useProgramme: () => useProgrammeMock(),
 }));
 
 vi.mock('../members/useMembersDirectory', () => ({
-  useMembersDirectory: () => ({
-    members: [],
-    byId: new Map(),
-    nameOf: (id: string) => `Member ${id}`,
-    loading: false,
-    error: null,
-  }),
+  useMembersDirectory: () => useMembersDirectoryMock(),
 }));
 
 function weekday(overrides: Partial<WeekdayProgramme> = {}): WeekdayProgramme {
@@ -69,6 +73,21 @@ function session(overrides: Partial<Session> = {}): Session {
     format: 'Pairs',
     createdAt: '2027-01-01T00:00:00.000Z',
     updatedAt: '2027-01-01T00:00:00.000Z',
+    ...overrides,
+  };
+}
+
+function member(overrides: Partial<Member> = {}): Member {
+  return {
+    id: 'steward-1',
+    firstName: 'Joan',
+    lastName: 'Smith',
+    phone: '',
+    grade: 'Open',
+    role: 'member',
+    active: true,
+    createdAt: '',
+    updatedAt: '',
     ...overrides,
   };
 }
@@ -125,6 +144,7 @@ describe('ProgrammeScreen', () => {
   beforeEach(() => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     vi.setSystemTime(new Date('2027-01-11T09:00:00+13:00')); // Monday, NZDT
+    useMembersDirectoryMock.mockReturnValue(defaultMembersDirectory());
   });
 
   afterEach(() => {
@@ -327,6 +347,48 @@ describe('ProgrammeScreen', () => {
       renderWithRouter(<ProgrammeScreen />);
 
       expect(screen.queryByRole('button', { name: /earlier sessions/ })).toBeNull();
+    });
+  });
+
+  describe('partner steward line', () => {
+    it('shows the steward name with a tel: link when the directory has a phone', () => {
+      useMembersDirectoryMock.mockReturnValue({
+        members: [member()],
+        byId: new Map([['steward-1', member({ phone: '021 123 4567' })]]),
+        nameOf: () => 'Joan Smith',
+        loading: false,
+        error: null,
+      });
+      useProgrammeMock.mockReturnValue(
+        mockContext([
+          { year: 2027, weekdays: [weekday({ partnerStewardMemberId: 'steward-1' })], series: [], sessions: [] },
+        ]),
+      );
+      renderWithRouter(<ProgrammeScreen />);
+
+      expect(screen.getByText('Partner steward:')).toBeTruthy();
+      expect(screen.getByText(/Joan Smith/)).toBeTruthy();
+      const link = screen.getByRole('link', { name: /Call Joan Smith/ });
+      expect(link.getAttribute('href')).toBe('tel:021 123 4567');
+    });
+
+    it('shows the steward name with no link when the directory has no phone', () => {
+      useMembersDirectoryMock.mockReturnValue({
+        members: [member({ phone: '' })],
+        byId: new Map([['steward-1', member({ phone: '' })]]),
+        nameOf: () => 'Joan Smith',
+        loading: false,
+        error: null,
+      });
+      useProgrammeMock.mockReturnValue(
+        mockContext([
+          { year: 2027, weekdays: [weekday({ partnerStewardMemberId: 'steward-1' })], series: [], sessions: [] },
+        ]),
+      );
+      renderWithRouter(<ProgrammeScreen />);
+
+      expect(screen.getByText(/Joan Smith/)).toBeTruthy();
+      expect(screen.queryByRole('link', { name: /Call/ })).toBeNull();
     });
   });
 });

@@ -17,6 +17,11 @@
  * shows 0 violations -> Admin: Broadcast -> sends a broadcast -> Susan's
  * Notifications (second context) shows it.
  *
+ * Also, while the Programme editor is already open: edits Monday's partner
+ * steward (`updateWeekday`, plan §9.2/§21 B6) from the seeded
+ * `admin@example.org` to Susan Clark, and confirms the editor's Weekdays
+ * card shows the updated name with no reload.
+ *
  * Requires the emulators + seed + dev server already running (see
  * `web/README.md`); relies on the seed's fixed, published 2027 programme,
  * and is a cold-cycle test: it assumes a freshly seeded emulator (broadcast
@@ -107,6 +112,18 @@ test('admin acts on behalf of a member, audits it, checks integrity, and broadca
     await adminPage.getByRole('button', { name: /Campbell Cave Pairs \(Pairs, Scr\)/ }).click();
     const campbellCaveRow = adminPage.getByRole('row', { name: /15 Feb 2027/ });
     await expect(campbellCaveRow.getByText('1 looking')).toBeVisible();
+
+    // ---- Admin: Programme editor — edit a weekday's partner steward (updateWeekday) ----
+    const weekdaysCard = adminPage.locator('.card', { has: adminPage.getByRole('heading', { name: 'Weekdays' }) });
+    const mondayRow = weekdaysCard.getByRole('row', { name: /^monday/ });
+    await expect(mondayRow.getByText('Admin User')).toBeVisible();
+    await mondayRow.getByRole('button', { name: 'Edit' }).click();
+    const weekdayDialog = adminPage.getByRole('dialog', { name: /Edit Monday/ });
+    await expect(weekdayDialog).toBeVisible();
+    await weekdayDialog.getByLabel('Partner steward').selectOption({ label: `Clark, Susan` });
+    await weekdayDialog.getByRole('button', { name: 'Save changes' }).click();
+    await expect(adminPage.getByText('Monday Afternoon updated.')).toBeVisible();
+    await expect(mondayRow.getByText(MEMBER_NAME)).toBeVisible();
 
     // ---- Stop acting ----
     await adminPage.getByRole('button', { name: 'Stop' }).click();

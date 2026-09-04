@@ -178,16 +178,27 @@ export function ProgrammeScreen() {
 }
 
 function WeekdayInfo({ weekday }: { weekday: WeekdayProgramme }) {
-  const { nameOf } = useMembersDirectory();
+  const { nameOf, byId } = useMembersDirectory();
+  const stewardId = weekday.partnerStewardMemberId;
+  const steward = stewardId ? byId.get(stewardId) : undefined;
   return (
     <div className="card">
       <h2>{weekday.label}</h2>
       <p>
         Starts {formatTimeOfDay(weekday.startTime)} &middot; seated by {formatTimeOfDay(weekday.seatedByTime)}
       </p>
-      {weekday.partnerStewardMemberId && (
+      {stewardId && (
         <p>
-          <strong>Partner steward:</strong> {nameOf(weekday.partnerStewardMemberId)}
+          <strong>Partner steward:</strong> {nameOf(stewardId)}
+          {steward?.phone && (
+            <>
+              {' '}
+              &middot;{' '}
+              <a className="contact-link" href={`tel:${steward.phone}`} aria-label={`Call ${nameOf(stewardId)}, ${steward.phone}`}>
+                {steward.phone}
+              </a>
+            </>
+          )}
         </p>
       )}
       {weekday.notes && <p className="muted">{weekday.notes}</p>}
