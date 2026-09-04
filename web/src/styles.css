@@ -576,7 +576,7 @@ td {
 }
 
 .day-status-none {
-  background: transparent;
+  background: var(--color-bg);
   color: var(--color-muted);
 }
 
@@ -639,13 +639,15 @@ td {
   gap: 4px;
 }
 
+/* No `background`/`color` here: every cell also carries a `.day-status-*`
+   class, which supplies both (the whole cell is the colour swatch). A
+   same-specificity background on `.month-cell` would win by source order
+   and silently strip the status colours — that bug shipped once. */
 .month-cell {
   min-height: var(--tap-target);
   min-width: var(--tap-target);
   border: 2px solid var(--color-border);
   border-radius: 8px;
-  background: var(--color-bg);
-  color: var(--color-text);
   display: flex;
   flex-direction: column;
   align-items: center;
