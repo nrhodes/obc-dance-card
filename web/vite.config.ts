@@ -1,5 +1,7 @@
-/// <reference types="vitest/config" />
-import { defineConfig } from 'vite';
+// `defineConfig` comes from `vitest/config`, not `vite`: the `test` block
+// below is Vitest's, and Vite's own `UserConfigExport` type has no `test`
+// key — importing from 'vite' fails the build under Vitest 3+.
+import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 

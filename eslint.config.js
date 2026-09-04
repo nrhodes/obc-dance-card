@@ -50,4 +50,31 @@ export default tseslint.config(
       ],
     },
   },
+  {
+    // `web/tsconfig.app.json` has to list "node" in `types` because a handful
+    // of *tests* under `src/` read files off disk (styles.test.ts,
+    // csp.test.ts, templates.test.ts, push/checkSw.test.ts). Vitest 2 pulled
+    // those types in implicitly; Vitest 4 does not, so they are now declared.
+    //
+    // The cost is that node builtins become resolvable from *any* web file,
+    // including browser source that ships to members. This puts that guard
+    // back explicitly, and only where it belongs: tests may use them, the app
+    // may not.
+    files: ['web/src/**/*.{ts,tsx}'],
+    ignores: ['web/src/**/*.test.{ts,tsx}', 'web/src/setupTests.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['node:*'],
+              message:
+                'Node builtins do not exist in the browser bundle. If this is a test, name it *.test.ts.',
+            },
+          ],
+        },
+      ],
+    },
+  },
 );

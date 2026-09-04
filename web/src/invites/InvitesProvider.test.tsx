@@ -64,7 +64,12 @@ describe('InvitesProvider subscription error path', () => {
 
     // Every subscription_failed log carries only a name + the error code —
     // never a raw error object, invite id, or member id.
-    const subscriptionFailedCalls = errorSpy.mock.calls.filter((args) => args[0] === 'subscription_failed');
+    // Vitest 4's `vi.spyOn` return type no longer infers the argument tuple
+    // through `ReturnType<...>`, so annotate rather than leave it implicitly
+    // `any` (the repo builds with noImplicitAny).
+    const subscriptionFailedCalls = errorSpy.mock.calls.filter(
+      (args: unknown[]) => args[0] === 'subscription_failed',
+    );
     expect(subscriptionFailedCalls.length).toBeGreaterThan(0);
     for (const call of subscriptionFailedCalls) {
       expect(call).toEqual(['subscription_failed', expect.any(String), 'permission-denied']);
