@@ -48,7 +48,7 @@ struct ProgrammeView: View {
                 content
             }
         }
-        .navigationTitle(programme.year.map { "\($0) Programme" } ?? "Programme")
+        .navigationTitle(programme.year.map { "\(String($0)) Programme" } ?? "Programme")
         .onAppear(perform: correctInitialWeekday)
         .onChange(of: presentWeekdays) { _, _ in correctInitialWeekday() }
     }
