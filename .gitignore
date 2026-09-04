@@ -69,7 +69,6 @@ web/public/templates/members.csv
 ios/**/Pods/
 ios/**/*.xcuserstate
 ios/**/xcuserdata/
-ios/**/GoogleService-Info.plist
 ios/**/DerivedData/
 # SwiftPM checkouts, pinned out of DerivedData so CI can cache them.
 ios/.spm/

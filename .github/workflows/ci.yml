@@ -121,10 +121,10 @@ jobs:
             -scheme "OBCDanceCard (Emulator)" \
             -clonedSourcePackagesDirPath .spm
 
-      # CI runs the *emulator* scheme: a runner has no GoogleService-Info.plist,
-      # and that scheme is the one that starts without it (it synthesises
-      # demo-obc options). The default 'OBCDanceCard' scheme is the real
-      # backend, as for the web app, and needs the plist.
+      # CI runs the *emulator* scheme on purpose: the default 'OBCDanceCard'
+      # scheme talks to the real project (the committed plist points at
+      # production, as web/.env.production does), and CI must never touch it.
+      # The Emulator scheme ignores the plist and synthesises demo-obc.
       # Simulator names and OS versions move with the runner image, so pick a
       # concrete available device by id rather than hard-coding "iPhone 17".
       - name: Pick a simulator

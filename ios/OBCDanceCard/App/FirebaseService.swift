@@ -66,14 +66,15 @@ enum FirebaseService {
         if let options = AppEnvironment.firebaseOptions() {
             FirebaseApp.configure(options: options)
         } else {
-            // No GoogleService-Info.plist and not in emulator mode. Rather
-            // than crash inside the SDK later, fail here with a message that
-            // says what to do (the plist is gitignored — see
-            // ios/GoogleService-Info.plist.example).
+            // No GoogleService-Info.plist and not in emulator mode — only
+            // possible if the committed plist was removed. Rather than crash
+            // inside the SDK later, fail here with a message that says what
+            // to do.
             fatalError(
                 "Firebase is not configured. The 'OBCDanceCard' scheme talks to the real "
-                + "project and needs ios/OBCDanceCard/GoogleService-Info.plist from the "
-                + "Firebase console (see GoogleService-Info.plist.example). To use the local "
+                + "project and needs ios/OBCDanceCard/GoogleService-Info.plist (committed; "
+                + "restore it with `git checkout -- ios/OBCDanceCard/GoogleService-Info.plist`, "
+                + "or export one with `firebase apps:sdkconfig IOS`). To use the local "
                 + "emulator instead, select the 'OBCDanceCard (Emulator)' scheme."
             )
         }
