@@ -133,6 +133,8 @@ struct RootView: View {
                 MainTabView()
             case .notActive:
                 NotActiveView()
+            case .unavailable:
+                UnavailableView()
             }
 
             if appLock.isLocked && auth.status == .signedIn {
@@ -142,6 +144,35 @@ struct RootView: View {
             }
         }
         .animation(.default, value: auth.status)
+    }
+}
+
+/// Shown when the member doc can't be read for a reason that isn't
+/// membership: the project is refusing this build (App Check) or is
+/// unreachable. Deliberately not the "membership isn't active" copy — that
+/// sentence must only ever be true.
+struct UnavailableView: View {
+    @EnvironmentObject private var auth: AuthModel
+
+    var body: some View {
+        VStack(spacing: 20) {
+            Image(systemName: "wifi.exclamationmark")
+                .font(.system(size: 44))
+                .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
+            Text("Can't reach the club's server")
+                .font(.title2.weight(.semibold))
+                .multilineTextAlignment(.center)
+            Text("Check your connection and try again. If this keeps happening, contact the club.")
+                .multilineTextAlignment(.center)
+                .foregroundStyle(.secondary)
+            Button("Try again") { auth.retry() }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+            Button("Sign out") { Task { await auth.signOut() } }
+                .buttonStyle(.bordered)
+        }
+        .padding()
     }
 }
 
