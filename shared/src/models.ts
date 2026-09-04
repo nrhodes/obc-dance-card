@@ -15,6 +15,7 @@ import type {
   InviteKind,
   InviteScope,
   InviteStatus,
+  MemberCohort,
   MemberGrade,
   MemberRole,
   NotificationChannel,
@@ -51,6 +52,14 @@ export interface Member extends Timestamps {
   email?: string;
   grade: MemberGrade;
   role: MemberRole;
+  /**
+   * App-Store-review cohort partition (decided 2026-09-05, plan §8.1):
+   * `'club'` for every real member, `'review'` only for fake accounts
+   * `provision-review-cohort.ts` creates. Required on every new write;
+   * treated as always-present after `backfill-cohort.ts` runs once against
+   * an existing project. Never settable by an import — see `MEMBER_COHORTS`.
+   */
+  cohort: MemberCohort;
   /** False once a member leaves the club; row is kept, never hard-deleted. */
   active: boolean;
   /** Set when this member was created/updated by a CSV import. */
@@ -248,6 +257,13 @@ export interface Entry extends Timestamps {
   weekday: Weekday;
   seriesId: Id | null;
   memberId: Id;
+  /**
+   * Denormalised copy of `memberId`'s `Member.cohort`, stamped server-side at
+   * write time (plan §8.1, decided 2026-09-05) — never trust a client value.
+   * Exists purely so `firestore.rules` can prove a non-owning read is
+   * cohort-scoped without an extra lookup (see the `entries` rule).
+   */
+  cohort: MemberCohort;
   status: EntryStatus;
   /** The other half of a member/visitor pairing; null while solo or on a team. */
   partner: PartnerRef | null;
@@ -347,6 +363,14 @@ export interface Team extends Timestamps {
   /** Default "<Captain surname> team". */
   name: string;
   captainMemberId: Id;
+  /**
+   * Denormalised copy of the captain's `Member.cohort`, stamped server-side
+   * at creation (plan §8.1, decided 2026-09-05) — same rationale as
+   * `Entry.cohort`. A captaincy transfer never changes a team's cohort:
+   * `transferCaptaincy` only offers the captaincy to an existing
+   * same-cohort roster member, so the invariant holds without re-stamping.
+   */
+  cohort: MemberCohort;
   /** Includes the captain; members or visitors. */
   members: TeamMemberEntry[];
   status: TeamStatus;

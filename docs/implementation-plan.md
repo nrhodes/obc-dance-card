@@ -62,7 +62,8 @@ and must never leak the roster.
 | Member data | CSV import from NZ Bridge export (name, email, phone, grade). Re-import syncs; absent members are deactivated, never deleted. |
 | Grades | `Open`, `Intermediate`, `Junior`, `Unknown`. Eligibility notes displayed, not enforced. |
 | Time zone | All date logic in **`Pacific/Auckland`**. Cloud Functions run in UTC — never call `new Date().toISOString().slice(0,10)` for "today"; use the shared `todayNZ()` helper. |
-| Visibility | Active members can see: the published programme, every session roster (names), the noticeboard, and other members' **name, grade, phone, email** (amended 2026-09-05: full contact directory, Neil's sign-off; was booklet-parity phones-only with emails private). **Device tokens remain private** (owner + admin only, `memberPrivate`). |
+| Visibility | Active members can see: the published programme, every session roster (names), the noticeboard, and other members' **name, grade, phone, email** (amended 2026-09-05: full contact directory, Neil's sign-off; was booklet-parity phones-only with emails private). **Device tokens remain private** (owner + admin only, `memberPrivate`). **All of this visibility is additionally scoped to the caller's own review cohort** (decided 2026-09-05, §8.1) — see the Cohort row below. |
+| Cohort | App-Store-review partition (decided 2026-09-05, §8.1): every `Member`/`Entry`/`Team` carries `cohort: 'club' \| 'review'`. `'review'` is a small set of fake, non-admin accounts (`provision-review-cohort.ts`) an Apple reviewer signs in as (password auth) to exercise the real, shared programme/schedule without ever seeing — or being seen by — a real member's PII, entries, or teams. Enforced both directions by `firestore.rules` (§10) and by a precondition on every cross-member callable (`sendInvite`, `respondToInvite`, `claimLookingForPartner`, `inviteToTeam`, `transferCaptaincy`, a member `setSubstitute`/`addTeamSessionSubstitute`). Programme data (sessions/series/weekdays) is shared across cohorts — no PII, and a reviewer should exercise the real schedule. |
 
 ## 3. Rules for the implementer
 
@@ -123,9 +124,16 @@ the code must match. `Timestamps` = `{ createdAt, updatedAt }` ISO strings.
 `memberId` **is the Firebase Auth uid.** Created only by `importMembers`.
 
 ```
-id, firstName, lastName, phone, email?, grade, role ('member'|'admin'), active (bool),
+id, firstName, lastName, phone, email?, grade, role ('member'|'admin'),
+cohort ('club'|'review'), active (bool),
 lastImportId?, + Timestamps
 ```
+
+`cohort` (added 2026-09-05, §2 Cohort / §8.1): `'club'` for every real member,
+`'review'` only for the fake accounts `provision-review-cohort.ts` creates. Required
+on every new write; `backfill-cohort.ts` stamps `'club'` onto every doc that predates
+the field. `importMembers`/`provisionMember`'s CSV path can NEVER produce `'review'` —
+see `MemberRow.cohort`'s doc comment in `provisionMember.ts`.
 
 `email` (amended 2026-09-05, §2 Visibility): the member's address, denormalised from
 `memberPrivate.emailLower` so the members directory can show it without a
@@ -208,6 +216,7 @@ per session, by construction. Re-signing-up after a cancel updates the same doc.
 
 ```
 id, sessionId, date, weekday, seriesId|null, memberId,
+cohort ('club'|'review'),           // denormalised from memberId's Member.cohort, stamped server-side (§8.1)
 status: 'confirmed' | 'looking_for_partner' | 'available' | 'unavailable' | 'substituted' | 'cancelled',
 partner: PartnerRef | null,
 pairingId: string | null,            // shared by all entries of one pairing (null for team entries)
@@ -250,6 +259,7 @@ channelsSent: ('inapp'|'push'|'email'|'sms')[], read, readAt?, + Timestamps
 
 ```
 id, year, seriesId, name (default "<Captain surname> team"), captainMemberId,
+cohort ('club'|'review'),           // denormalised from the captain's Member.cohort, stamped at creation (§8.1)
 members: Array<{ ref: PartnerRef; joinedAt }>   // includes the captain; members or visitors
 status ('forming'|'active'|'disbanded'),
 + Timestamps
@@ -314,6 +324,11 @@ Let `G(pairingId)` = all non-cancelled entries with that `pairingId`.
 - **I8 Visitors never authenticate.** No Auth user may exist whose email matches a
   visitor's email unless that email is also an active member's (the import may
   later promote a visitor — §12.5).
+- **I10 Cohort partition (added 2026-09-05, §8.1).** Every non-cancelled entry in one
+  `G(pairingId)` shares the same `cohort`. Every non-cancelled entry with `teamId = T.id`
+  has `cohort = T.cohort`. (A club member and a review member may never share a pairing
+  or a team roster — enforced both by this invariant and, earlier, by a precondition on
+  every cross-member callable that would otherwise create one.)
 
 `shared/src/pairing.ts` exports `validatePairingGroup(entries: Entry[]): string[]`
 (I1–I6) and `validateTeamGroup(team: Team, series: Series, entries: Entry[]): string[]`
@@ -354,6 +369,7 @@ re-validates inside its transaction before commit; the nightly sweep runs both.
 | Backups | Data loss | Firestore scheduled daily backups, 30-day retention (ops) |
 | Privacy law (NZ Privacy Act 2020) | Unlawful retention | Purpose statement in-app; `eraseMember` + `deleteVisitor`; auto-purge visitors unused 18 months; audit log retained 2 years |
 | iCal feed | Token theft / scraping / enumeration | 256-bit CSPRNG token, sha256-keyed server-only lookup, owner-readable plaintext (deliberate, §21 B1), uniform 404, per-token + per-IP rate limits, inactive member kills feed, rotate/remove self-service, feed carries only the member's own schedule with display names |
+| App Store reviewer access (decided 2026-09-05, §2 Cohort) | A reviewer sees real member PII / real entries / real teams, or a real member sees the fake reviewer accounts / their entries | Review cohort partition, both directions: `Member`/`Entry`/`Team.cohort`, `firestore.rules` scope every non-owner/non-admin read to `resource.data.cohort == callerCohort()` (§10), every cross-member callable (`sendInvite`, `respondToInvite`, `claimLookingForPartner`, `inviteToTeam`, `transferCaptaincy`, member substitutes) additionally checks cohort match server-side, review accounts are provisioned only by `provision-review-cohort.ts` (never by CSV import), are never admins, and are deactivatable in one command (`--deactivate`) outside a review window |
 
 ### 8.2 Authentication flows
 
@@ -520,9 +536,10 @@ helpers:
   isActiveMember() = request.auth != null && callerDoc().active == true
   isAdmin()        = isActiveMember() && callerDoc().role == 'admin'
   isSelf(id)       = request.auth != null && request.auth.uid == id
+  callerCohort()   = callerDoc().cohort                     // added 2026-09-05, §8.1 review-cohort partition
   programmePublished(year) = get(/databases/$(db)/documents/programmes/$(year)).data.status == 'published'
 
-members/{id}             read:  isAdmin() || (isActiveMember() && (resource.data.active == true || isSelf(id)))
+members/{id}             read:  isAdmin() || (isActiveMember() && resource.data.cohort == callerCohort() && (resource.data.active == true || isSelf(id)))
                          write: false
 memberPrivate/{id}       read:  isSelf(id) && isActiveMember() || isAdmin()
                          write: false
@@ -533,12 +550,14 @@ programmes/{year}        read:  isAdmin() || (isActiveMember() && resource.data.
 programmes/{year}/{sub}/{id}
                          read:  isAdmin() || (isActiveMember() && programmePublished(year))
                          write: false
-entries/{id}             read:  isActiveMember()          // roster visibility; visitor shows displayName only
-                         write: false
-teams/{id}               read:  isActiveMember()
+entries/{id}             read:  isAdmin() || (isActiveMember() && (resource.data.memberId == request.auth.uid || resource.data.cohort == callerCohort()))
+                         write: false          // roster visibility, cohort-scoped (§8.1); visitor shows displayName only;
+                                                // the ownership disjunct keeps a plain memberId==uid "my entries" query
+                                                // provable without a cohort filter (see the query-provability note below)
+teams/{id}               read:  isAdmin() || (isActiveMember() && resource.data.cohort == callerCohort())
                          write: false
 invites/{id}             read:  isAdmin() || (isActiveMember() && request.auth.uid in [resource.data.fromMemberId, resource.data.toMemberId])
-                         write: false
+                         write: false          // invites are already participant-scoped by uid; no cohort field needed
 notifications/{id}       read:  isActiveMember() && resource.data.memberId == request.auth.uid
                          update: same as read && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read','readAt'])
                                  && request.resource.data.read is bool
@@ -549,7 +568,19 @@ auditLog, emailCodes, rateLimits, imports: read/write false   (admins read audit
 
 Rules tests (`firebase/functions/rules-test/`) MUST cover every row above with at
 least: unauthenticated, inactive member, active member (self), active member (other),
-admin. One test file per collection.
+admin. One test file per collection. For `members`/`entries`/`teams`, also cover the
+full cohort matrix (club reads club ✓, review reads review ✓, club cannot read review
+✗, review cannot read club ✗, admin reads both ✓) **including query-level tests**, not
+just `get()`: Firestore requires a security rule to be provable from a `list`/query's
+own `where()` clauses, without inspecting results first — an unfiltered
+`members`/`entries`/`teams` query from a non-admin must fail outright (not silently
+return a filtered set), while the same query with `where('cohort', '==', ownCohort)`
+succeeds, and a `where('memberId', '==', uid)` "my entries" query succeeds with **no**
+cohort filter at all (the `entries` rule's ownership disjunct). Every web query against
+these three collections was audited for this (see `MembersDirectoryProvider`,
+`TeamsProvider`, `SessionScreen`'s roster query, `HomeScreen`'s by-id teams query — each
+now waits for the caller's own `member.cohort` and adds the filter; admin screens and
+`useMyEntries` were left alone, per the reasoning above).
 
 Note the `get()` costs: one document read per request for the caller doc (cached
 within a single rules evaluation) and one for the programme status on programme
@@ -1174,6 +1205,33 @@ robustness item rather than a launch blocker.
    **DeviceCheck**, upload the `.p8`, enter Key ID + Team ID (`9URFEM2LBL`).
 3. Verify on a device with App Attest disabled or by temporarily forcing the
    fallback in a Debug build; keep enforcement on throughout.
+### B9. App-Store-review cohort partition
+
+**Intent.** Apple review needs demo logins that never see real member PII/entries/teams,
+and real members must never see the fake reviewer accounts or their activity. Programme
+data (sessions/series/weekdays) stays shared — no PII, and a reviewer should exercise
+the real schedule, not a synthetic one.
+
+> **Status: implemented 2026-09-05.** `Member`/`Entry`/`Team.cohort` ('club'|'review'),
+> stamped server-side on every write (never client-supplied); `firestore.rules` scope
+> `members`/`entries`/`teams` reads to the caller's own cohort (§10) — `entries` keeps
+> an ownership disjunct so a member's own-entries query stays provable with no cohort
+> filter; every cross-member callable (`sendInvite`, `respondToInvite`,
+> `claimLookingForPartner`, `inviteToTeam`, `transferCaptaincy`, a member `setSubstitute`/
+> `addTeamSessionSubstitute`) additionally rejects a cross-cohort target with a
+> display-safe `failed-precondition` ("That member is not available."), never disclosing
+> that cohorts exist. `broadcast` only notifies cohort `'club'`. New invariant I10 (§7):
+> a pairing group or team roster may never mix cohorts — checked by
+> `validatePairingGroup`/`validateTeamGroup` as belt-and-braces on top of the callable
+> preconditions. `firebase/scripts/provision-review-cohort.ts` creates/updates a small,
+> fixed set of clearly-fake review members (never admins) with a shared password and a
+> `--deactivate` switch for outside review windows; `firebase/scripts/backfill-cohort.ts`
+> stamps `cohort:'club'` onto every pre-existing doc (MUST run, with a functions deploy,
+> before the rules deploy — see `docs/ops-runbook.md`). The emulator seed additionally
+> provisions 2 review members through the identical code path, so both directions are
+> covered end to end by `firebase/functions/src/entries/__tests__/cohort.emu.test.ts`,
+> the cohort rows added to `members.rules.test.ts`/`entries.rules.test.ts`/
+> `teams.rules.test.ts`, and `web/e2e/review-cohort.spec.ts`.
 
 ### Cross-cutting notes for the backlog
 

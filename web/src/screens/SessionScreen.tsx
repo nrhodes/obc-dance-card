@@ -87,9 +87,17 @@ export function SessionScreen() {
   const [entriesError, setEntriesError] = useState<{ code: string } | null>(null);
 
   useEffect(() => {
-    if (!sessionId) return;
+    if (!sessionId || !member?.cohort) return;
     setEntriesLoaded(false);
-    const q = query(collection(db, paths.entries()), where('sessionId', '==', sessionId));
+    // App-Store-review cohort partition (plan §8.1, decided 2026-09-05): the
+    // roster query has no `memberId == uid` ownership filter, so the
+    // `entries` rule requires `resource.data.cohort == callerCohort()` to be
+    // provable — add it explicitly.
+    const q = query(
+      collection(db, paths.entries()),
+      where('sessionId', '==', sessionId),
+      where('cohort', '==', member.cohort),
+    );
     return onSnapshot(
       q,
       (snap) => {
@@ -104,7 +112,7 @@ export function SessionScreen() {
         setEntriesLoaded(true);
       },
     );
-  }, [sessionId]);
+  }, [sessionId, member?.cohort]);
 
   const seriesTeams = seriesDoc ? teamsCtx.teamsForSeries(seriesDoc.id) : [];
   const myTeam = seriesDoc ? teamsCtx.myTeamForSeries(seriesDoc.id) : null;

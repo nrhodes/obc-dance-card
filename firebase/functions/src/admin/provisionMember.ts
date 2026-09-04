@@ -12,6 +12,7 @@ import {
   DEFAULT_NOTIFICATION_PREFS,
   paths,
   type Member,
+  type MemberCohort,
   type MemberGrade,
   type MemberPrivate,
   type MemberRole,
@@ -27,6 +28,14 @@ export interface MemberRow {
   grade: MemberGrade;
   /** Only used by the seed script; CSV rows never set this — new members always start as 'member'. */
   role?: MemberRole;
+  /**
+   * Only ever set by `provision-review-cohort.ts` and the emulator seed's
+   * review-member provisioning — CSV import (`importMembers`) never sets
+   * this, so a real member's row always defaults to `'club'` below. This is
+   * the ONE thing that stands between "imports can never produce a review
+   * member" and this shared code path (plan §8.1, decided 2026-09-05).
+   */
+  cohort?: MemberCohort;
 }
 
 export interface ProvisionOptions {
@@ -99,6 +108,7 @@ export async function provisionMember(
           // the address that was just matched on; it also backfills members
           // created before `email` existed on the doc.
           email: row.emailLower,
+          cohort: row.cohort ?? 'club',
           active: true,
           updatedAt: now,
         },
@@ -134,6 +144,7 @@ export async function provisionMember(
     email: row.emailLower,
     grade: row.grade,
     role: row.role ?? 'member',
+    cohort: row.cohort ?? 'club',
     active: true,
     createdAt: now,
     updatedAt: now,

@@ -26,6 +26,8 @@ export interface SeedMemberOptions {
   lastName?: string;
   phone?: string;
   grade?: string;
+  /** App-Store-review cohort partition (decided 2026-09-05). Defaults to `'club'`. */
+  cohort?: 'club' | 'review';
 }
 
 /**
@@ -47,6 +49,7 @@ export async function seedMember(
       phone: opts.phone ?? '',
       grade: opts.grade ?? 'Open',
       role: opts.role ?? 'member',
+      cohort: opts.cohort ?? 'club',
       active: opts.active ?? true,
       createdAt: 'now',
       updatedAt: 'now',

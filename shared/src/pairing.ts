@@ -85,6 +85,15 @@ export function validatePairingGroup(entries: Entry[]): string[] {
       continue;
     }
 
+    // App-Store-review cohort partition (decided 2026-09-05): every entry in
+    // one pairing group must belong to the same cohort — a club member and a
+    // review member must never be paired together.
+    const cohorts = new Set(nonCancelled.map((e) => e.cohort));
+    if (cohorts.size > 1) {
+      issues.push(`pairing ${pairingId}: entries span more than one cohort`);
+      continue;
+    }
+
     const visitorSides = nonCancelled.filter((e) => e.partner?.kind === 'visitor');
     if (visitorSides.length > 0) {
       // I3: a visitor pairing is one-sided — no other entry shares its pairingId —
@@ -218,6 +227,12 @@ export function validateTeamGroup(team: Team, series: Series, entries: Entry[]):
   const entriesBySession = new Map<Id, Entry[]>();
   for (const e of entries) {
     if (e.teamId !== team.id) continue;
+    // App-Store-review cohort partition (decided 2026-09-05): every entry on
+    // this team's roster — including a session-only substitute — must share
+    // the team's own cohort.
+    if (e.status !== 'cancelled' && e.cohort !== team.cohort) {
+      issues.push(`team ${team.id}: entry ${e.id} has cohort '${e.cohort}', team is '${team.cohort}'`);
+    }
     const bucket = entriesBySession.get(e.sessionId) ?? [];
     bucket.push(e);
     entriesBySession.set(e.sessionId, bucket);

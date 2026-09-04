@@ -72,6 +72,7 @@ function team(overrides: Partial<Team> = {}): Team {
     seriesId: 'monday-campbell-cave-teams',
     name: 'Doe team',
     captainMemberId: 'member-a',
+    cohort: 'club',
     members: [
       { ref: { kind: 'member', memberId: 'member-a', displayName: 'Jane Doe' }, joinedAt: '' },
       { ref: { kind: 'member', memberId: 'member-b', displayName: 'John Smith' }, joinedAt: '' },
@@ -91,6 +92,7 @@ function member(overrides: Partial<Member> = {}): Member {
     phone: '',
     grade: 'Open',
     role: 'member',
+    cohort: 'club',
     active: true,
     createdAt: '',
     updatedAt: '',

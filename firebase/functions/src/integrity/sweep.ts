@@ -238,6 +238,7 @@ async function repairTeam(team: Team, futureSessions: Session[], allEntries: Ent
         weekday: session.weekday,
         seriesId: session.seriesId,
         memberId,
+        cohort: team.cohort,
         status: 'confirmed',
         partner: null,
         pairingId: null,

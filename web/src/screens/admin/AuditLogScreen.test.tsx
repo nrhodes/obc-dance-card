@@ -32,6 +32,7 @@ function member(overrides: Partial<Member> = {}): Member {
     phone: '',
     grade: 'Open',
     role: 'admin',
+    cohort: 'club',
     active: true,
     createdAt: '',
     updatedAt: '',

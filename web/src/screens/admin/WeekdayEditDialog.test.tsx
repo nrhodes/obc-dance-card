@@ -14,8 +14,8 @@ vi.mock('../../api', () => ({
 }));
 
 const members: Member[] = [
-  { id: 'm-bill', firstName: 'Bill', lastName: 'Anderson', phone: '', grade: 'Open', role: 'member', active: true, createdAt: '', updatedAt: '' },
-  { id: 'm-joan', firstName: 'Joan', lastName: 'Zebra', phone: '', grade: 'Open', role: 'member', active: true, createdAt: '', updatedAt: '' },
+  { id: 'm-bill', firstName: 'Bill', lastName: 'Anderson', phone: '', grade: 'Open', role: 'member', cohort: 'club', active: true, createdAt: '', updatedAt: '' },
+  { id: 'm-joan', firstName: 'Joan', lastName: 'Zebra', phone: '', grade: 'Open', role: 'member', cohort: 'club', active: true, createdAt: '', updatedAt: '' },
 ];
 
 vi.mock('../../members/useMembersDirectory', () => ({

@@ -66,6 +66,12 @@ export async function sendInviteHandler(req: CallableRequest<SendInviteInput>): 
   if (!toMember || !toMember.active) {
     throw new HttpsError('failed-precondition', 'That member is not available to invite.');
   }
+  // Review-cohort partition (plan §8.1, decided 2026-09-05): a reviewer must
+  // never invite (or be invited by) a real member — display-safe message,
+  // never disclosing that cohorts exist.
+  if (toMember.cohort !== actor.member.cohort) {
+    throw new HttpsError('failed-precondition', 'That member is not available to invite.');
+  }
 
   await assertRateLimit('invites:send', actor.memberId, INVITE_SEND_LIMIT, INVITE_SEND_WINDOW_SEC);
 
@@ -307,6 +313,12 @@ export async function respondToInviteHandler(
     if (!fromMember || !fromMember.active) {
       throw new HttpsError('failed-precondition', 'The sender is no longer an active member.');
     }
+    // Review-cohort partition (plan §8.1, decided 2026-09-05): defence in
+    // depth — `sendInvite` already enforced this at creation time, but a
+    // cohort could in principle change between then and now.
+    if (fromMember.cohort !== actor.member.cohort) {
+      throw new HttpsError('failed-precondition', 'That member is not available.');
+    }
     const toSnap = await tx.get(db.doc(paths.member(actor.memberId)));
     const toMember = toSnap.data() as Member;
 
@@ -503,6 +515,12 @@ async function respondToTeamInviteHandler(
     const team = await loadTeam(tx, inv.teamId!);
     if (team.status === 'disbanded') {
       throw new HttpsError('failed-precondition', 'This team has been disbanded.');
+    }
+    // Review-cohort partition (plan §8.1, decided 2026-09-05): defence in
+    // depth — `inviteToTeam`/`transferCaptaincy` already enforced this when
+    // the invite was created.
+    if (team.cohort !== actor.member.cohort) {
+      throw new HttpsError('failed-precondition', 'That team is not available.');
     }
     const { series, weekday, programme } = await loadTeamSeries(tx, inv.year, inv.seriesId!);
 

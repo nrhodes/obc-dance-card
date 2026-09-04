@@ -135,6 +135,10 @@ async function main(): Promise<void> {
       email: emailLower,
       grade: 'Unknown',
       role: 'member',
+      // make-admin --create always bootstraps a real club member, never a
+      // review-cohort account (plan §8.1, decided 2026-09-05) — that's
+      // provision-review-cohort.ts's job.
+      cohort: 'club',
       active: true,
       createdAt,
       updatedAt: createdAt,

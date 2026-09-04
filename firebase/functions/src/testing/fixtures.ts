@@ -12,6 +12,7 @@ import {
   validateTeamGroup,
   type Entry,
   type IsoDate,
+  type MemberCohort,
   type MemberGrade,
   type MemberPrivate,
   type MemberRole,
@@ -38,6 +39,8 @@ export interface MakeMemberOptions {
   firstName?: string;
   lastName?: string;
   hasPassword?: boolean;
+  /** App-Store-review cohort partition (decided 2026-09-05). Defaults to `'club'`. */
+  cohort?: MemberCohort;
 }
 
 /** Creates a real emulator Auth user plus matching `members`/`memberPrivate` docs. */
@@ -52,6 +55,7 @@ export async function makeMember(email: string, opts: MakeMemberOptions = {}): P
     email: email.toLowerCase(),
     grade: opts.grade ?? 'Open',
     role: opts.role ?? 'member',
+    cohort: opts.cohort ?? 'club',
     active: opts.active ?? true,
     createdAt: now,
     updatedAt: now,

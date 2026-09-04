@@ -200,8 +200,8 @@ export async function writePair(tx: Transaction, input: WritePairInput): Promise
     updatedAt: now,
   };
 
-  const entryA: Entry = { ...shared, id: entryId(session.id, a.id), memberId: a.id, partner: memberRef(b), createdAt: now };
-  const entryB: Entry = { ...shared, id: entryId(session.id, b.id), memberId: b.id, partner: memberRef(a), createdAt: now };
+  const entryA: Entry = { ...shared, id: entryId(session.id, a.id), memberId: a.id, cohort: a.cohort, partner: memberRef(b), createdAt: now };
+  const entryB: Entry = { ...shared, id: entryId(session.id, b.id), memberId: b.id, cohort: b.cohort, partner: memberRef(a), createdAt: now };
 
   const issues = validatePairingGroup([entryA, entryB]);
   if (issues.length > 0) {

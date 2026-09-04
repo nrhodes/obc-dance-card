@@ -204,6 +204,7 @@ function entry(overrides: Partial<Entry>): Entry {
     weekday: 'monday',
     seriesId: 'monday-marion-taylor-pairs',
     memberId: 'member-a',
+    cohort: 'club',
     status: 'confirmed',
     partner: null,
     pairingId: null,
@@ -227,6 +228,7 @@ function member(overrides: Partial<Member> = {}): Member {
     phone: '',
     grade: 'Open',
     role: 'member',
+    cohort: 'club',
     active: true,
     createdAt: '',
     updatedAt: '',
@@ -254,6 +256,7 @@ function team(overrides: Partial<Team> = {}): Team {
     seriesId: 'monday-campbell-cave-teams',
     name: 'Doe team',
     captainMemberId: 'member-a',
+    cohort: 'club',
     members: [
       { ref: { kind: 'member', memberId: 'member-a', displayName: 'Jane Doe' }, joinedAt: '2027-01-01T00:00:00.000Z' },
       { ref: { kind: 'member', memberId: 'member-b', displayName: 'John Smith' }, joinedAt: '2027-01-01T00:00:00.000Z' },
@@ -310,6 +313,14 @@ const teamsSession = session({
 describe('SessionScreen', () => {
   beforeEach(() => {
     useInvitesMock.mockReturnValue(emptyInvites());
+    // The entries-roster query now waits for the signed-in member's own
+    // cohort (App-Store-review cohort partition, plan §8.1, decided
+    // 2026-09-05) before subscribing — default every test in this describe
+    // block to a signed-in member unless a test overrides it (several below
+    // deliberately set `useAuthMemberMock.mockReturnValue(null)` to exercise
+    // the signed-out/acting-as-nobody path, which still works: the mock call
+    // in the test body runs after this one and wins).
+    useAuthMemberMock.mockReturnValue(member({ id: 'member-a' }));
   });
 
   it('shows a plain "No bridge" page for a noBridge session', () => {
@@ -358,7 +369,9 @@ describe('SessionScreen', () => {
     ];
     renderAt('/session/2027/monday-marion-taylor-pairs-2027-01-11', <SessionScreen />);
     expect(screen.getByText(/Jane Doe/)).toBeTruthy();
-    expect(screen.getByText(/John Smith/)).toBeTruthy();
+    // The signed-in "You: confirmed with John Smith" own-entry summary card
+    // and the roster list both mention John Smith.
+    expect(screen.getAllByText(/John Smith/).length).toBeGreaterThan(0);
   });
 
   it('shows a visitor pairing with the "(visitor)" marker', () => {
@@ -367,8 +380,11 @@ describe('SessionScreen', () => {
       entry({ id: 'e-a', memberId: 'member-a', pairingId: 'p-visitor', partner: { kind: 'visitor', visitorId: 'v1', displayName: 'Bob Visitor' } }),
     ];
     renderAt('/session/2027/monday-marion-taylor-pairs-2027-01-11', <SessionScreen />);
-    expect(screen.getByText(/Bob Visitor/)).toBeTruthy();
-    expect(screen.getByText(/\(visitor\)/)).toBeTruthy();
+    // The signed-in "You: confirmed with Bob Visitor" own-entry summary card
+    // and the roster list both mention "Bob Visitor (visitor)", so assert on
+    // every match rather than a single unique one.
+    expect(screen.getAllByText(/Bob Visitor/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/\(visitor\)/).length).toBeGreaterThan(0);
   });
 
   it('shows a substitution annotation', () => {

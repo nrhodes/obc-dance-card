@@ -59,6 +59,7 @@ function entry(overrides: Partial<Entry>): Entry {
     weekday: 'monday',
     seriesId: 'monday-marion-taylor-pairs',
     memberId: 'member-a',
+    cohort: 'club',
     status: 'confirmed',
     partner: null,
     pairingId: null,
@@ -81,6 +82,7 @@ function team(overrides: Partial<Team> = {}): Team {
     seriesId: 'monday-campbell-cave-teams',
     name: 'Doe team',
     captainMemberId: 'member-a',
+    cohort: 'club',
     members: [
       { ref: { kind: 'member', memberId: 'member-a', displayName: 'Jane Doe' }, joinedAt: '' },
       { ref: { kind: 'member', memberId: 'member-b', displayName: 'John Smith' }, joinedAt: '' },

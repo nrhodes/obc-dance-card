@@ -54,7 +54,7 @@ vi.mock('../../api', () => ({
 }));
 
 const membersFixture: Member[] = [
-  { id: 'm-joan', firstName: 'Joan', lastName: 'Smith', phone: '', grade: 'Open', role: 'member', active: true, createdAt: '', updatedAt: '' },
+  { id: 'm-joan', firstName: 'Joan', lastName: 'Smith', phone: '', grade: 'Open', role: 'member', cohort: 'club', active: true, createdAt: '', updatedAt: '' },
 ];
 
 vi.mock('../../members/useMembersDirectory', () => ({
@@ -145,6 +145,7 @@ function entry(overrides: Partial<Entry> = {}): Entry {
     weekday: 'monday',
     seriesId: 'monday-pairs',
     memberId: 'member-a',
+    cohort: 'club',
     status: 'confirmed',
     partner: null,
     pairingId: null,

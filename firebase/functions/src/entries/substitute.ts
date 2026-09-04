@@ -109,6 +109,11 @@ export async function setSubstituteHandler(req: CallableRequest<SetSubstituteInp
       if (!subMember || !subMember.active) {
         throw new HttpsError('failed-precondition', 'That member is not available.');
       }
+      // Review-cohort partition (plan §8.1, decided 2026-09-05): a substitute
+      // must belong to the same cohort as the pairing they're covering.
+      if (subMember.cohort !== covered.cohort) {
+        throw new HttpsError('failed-precondition', 'That member is not available.');
+      }
       const subExisting = await readEntry(tx, covered.sessionId, subMemberId);
       if (!isFree(subExisting)) {
         throw new HttpsError('failed-precondition', 'That member already has an entry for this session.');
@@ -125,6 +130,7 @@ export async function setSubstituteHandler(req: CallableRequest<SetSubstituteInp
         weekday: covered.weekday,
         seriesId: covered.seriesId,
         memberId: subMemberId,
+        cohort: subMember.cohort,
         status: 'confirmed',
         partner: memberRef(remainingMember),
         pairingId: covered.pairingId,
