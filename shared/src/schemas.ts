@@ -411,6 +411,20 @@ export const MarkNotificationsReadInputSchema = z.object({
 });
 export type MarkNotificationsReadInput = z.infer<typeof MarkNotificationsReadInputSchema>;
 
+/* ------------------------------- ical feed (plan §21 B1) ------------------- */
+
+export const GetIcalFeedInputSchema = z.object({ onBehalfOfMemberId }).strict();
+export type GetIcalFeedInput = z.infer<typeof GetIcalFeedInputSchema>;
+
+export const CreateIcalFeedInputSchema = z.object({ onBehalfOfMemberId }).strict();
+export type CreateIcalFeedInput = z.infer<typeof CreateIcalFeedInputSchema>;
+
+export const RotateIcalFeedInputSchema = z.object({ onBehalfOfMemberId }).strict();
+export type RotateIcalFeedInput = z.infer<typeof RotateIcalFeedInputSchema>;
+
+export const RemoveIcalFeedInputSchema = z.object({ onBehalfOfMemberId }).strict();
+export type RemoveIcalFeedInput = z.infer<typeof RemoveIcalFeedInputSchema>;
+
 /* --------------------------------- admin: misc ------------------------------ */
 
 export const BroadcastInputSchema = z.object({

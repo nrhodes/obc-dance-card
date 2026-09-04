@@ -27,6 +27,13 @@
     ],
     "rewrites": [
       {
+        "source": "/ical/**",
+        "function": {
+          "functionId": "icalFeed",
+          "region": "australia-southeast1"
+        }
+      },
+      {
         "source": "**",
         "destination": "/index.html"
       }

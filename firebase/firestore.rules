@@ -131,6 +131,13 @@ service cloud.firestore {
     match /emailCodes/{id} { allow read, write: if false; }
     match /rateLimits/{id} { allow read, write: if false; }
     match /imports/{id} { allow read, write: if false; }
+    // iCal feed token lookup (plan §21 B1) — read only by the `icalFeed`
+    // HTTP endpoint (Admin SDK, bypasses rules) via `sha256hex(token)`.
+    // Never client-readable, even by the owner or an admin: the whole point
+    // is that a calendar client authorises with the token itself, not with
+    // a Firebase session. The owner's plaintext copy (for redisplay) lives
+    // on `memberPrivate`, already covered by that collection's rule above.
+    match /icalTokens/{id} { allow read, write: if false; }
     // Nightly/admin integrity sweep runs (plan §16 Phase 6) — read only through
     // logs/`runPairingSweep`'s return value, never directly.
     match /integrity/{id} { allow read, write: if false; }

@@ -68,3 +68,8 @@ export { broadcast, listAuditLog } from './admin/misc.js';
 // avoid colliding with the plain, directly-testable `runPairingSweep`
 // function it also exports (see that file's module doc comment).
 export { verifyPairingConsistency, runPairingSweepCallable as runPairingSweep } from './integrity/sweep.js';
+
+// Backlog §21 B1 — iCal subscription feed. `icalFeed` is the app's first
+// unauthenticated HTTP endpoint (onRequest, not onCall); see its module doc.
+export { getIcalFeed, createIcalFeed, rotateIcalFeed, removeIcalFeed } from './ical/tokens.js';
+export { icalFeed } from './ical/feed.js';

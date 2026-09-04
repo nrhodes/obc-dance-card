@@ -89,6 +89,20 @@ export interface MemberPrivate extends Timestamps {
   /** Maintained by the server; never trust a client-supplied value. */
   hasPassword: boolean;
   lastLoginAt?: IsoDateTime;
+  /**
+   * Plan §21 B1: the plaintext iCal subscription feed token, when the member
+   * has one. DEVIATION from the B1 sketch's "store hashed only" — recorded
+   * deliberately: the owner must be able to re-display their subscription
+   * URL (rotating on every view would break existing calendar subscriptions,
+   * exactly like Google Calendar's re-displayable "secret address"). This
+   * doc is already owner+admin read-only via rules and written only by
+   * callables, so the token's confidentiality is no weaker than the
+   * account's. The server-only `icalTokens/{sha256hex(token)}` doc is the
+   * one actually consulted by the unauthenticated feed endpoint — this
+   * plaintext copy exists purely so `getIcalFeed` can redisplay the URL.
+   */
+  icalToken?: string;
+  icalTokenCreatedAt?: IsoDateTime;
 }
 
 export const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
@@ -380,6 +394,22 @@ export interface RateLimit {
   id: Id;
   windowStart: IsoDateTime;
   count: number;
+}
+
+/* -------------------------------------------------------------------------- */
+/* icalTokens/{sha256hex(token)} — server-only, never client-readable        */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Plan §21 B1: the server-only, hash-keyed side of a member's iCal feed
+ * token — O(1) lookup for the unauthenticated `icalFeed` HTTP endpoint. At
+ * most one per member. `id` is `sha256hex(token)`; the plaintext lives only
+ * on `memberPrivate.icalToken` (owner+admin readable, for redisplay).
+ */
+export interface IcalToken {
+  id: Id;
+  memberId: Id;
+  createdAt: IsoDateTime;
 }
 
 /* -------------------------------------------------------------------------- */

@@ -136,8 +136,19 @@ id, emailLower (unique, login identity), notificationPrefs {
   push, email, reminders, matchmakingAlerts, digest ('immediate'|'daily'),
   reminderDaysBefore (int 0..7)
 }, devices: [{ token, platform ('ios'|'web'), label?, lastSeenAt }]  (max 10),
-hasPassword (bool, maintained by server), lastLoginAt?, + Timestamps
+hasPassword (bool, maintained by server), lastLoginAt?,
+icalToken? (plaintext, §21 B1), icalTokenCreatedAt?, + Timestamps
 ```
+
+`icalToken`/`icalTokenCreatedAt` (§21 B1): the plaintext iCal subscription
+token, when the member has one, so `getIcalFeed` can redisplay the
+subscription URL — DEVIATION from that section's sketch ("store hashed
+only"), recorded deliberately: rotating on every view would break existing
+calendar subscriptions, exactly like Google Calendar's re-displayable
+"secret address". This doc is already owner+admin read-only via rules and
+written only by callables, so the token's confidentiality is no weaker than
+the account's. The server-only `icalTokens/{sha256hex(token)}` doc (§5.10) is
+the one the unauthenticated feed endpoint actually consults.
 
 ### 5.3 `visitors/{visitorId}` — sponsor + admin only
 
@@ -248,6 +259,7 @@ auditLog/{id}      at, actorMemberId, action, targetMemberId?, entityRef?, befor
 emailCodes/{id}    emailLower-keyed doc id (sha256 of email): codeHmac, expiresAt, attempts, consumedAt?
 rateLimits/{key}   windowStart, count      (key = `${bucket}:${sha256(subject)}`)
 imports/{importId} kind, actorMemberId, startedAt, finishedAt?, report
+icalTokens/{hash}  sha256hex(token)-keyed doc id: memberId, createdAt (§21 B1 — O(1) feed lookup, at most one per member)
 ```
 
 ## 6. Time and dates
@@ -333,6 +345,7 @@ re-validates inside its transaction before commit; the nightly sweep runs both.
 | Logs | PII in logs | Structured logger wrapper that only accepts ids/enums/numbers |
 | Backups | Data loss | Firestore scheduled daily backups, 30-day retention (ops) |
 | Privacy law (NZ Privacy Act 2020) | Unlawful retention | Purpose statement in-app; `eraseMember` + `deleteVisitor`; auto-purge visitors unused 18 months; audit log retained 2 years |
+| iCal feed | Token theft / scraping / enumeration | 256-bit CSPRNG token, sha256-keyed server-only lookup, owner-readable plaintext (deliberate, §21 B1), uniform 404, per-token + per-IP rate limits, inactive member kills feed, rotate/remove self-service, feed carries only the member's own schedule with display names |
 
 ### 8.2 Authentication flows
 
@@ -443,9 +456,16 @@ export const sendInvite = onCall(opts, async (req) => {
 | `addTeamSessionSubstitute` / `clearTeamSessionSubstitute` | captain | `{teamId, sessionId, ref}` | some team member's entry for S is cancelled; sub free | `teamSessionOnly` entry (member) or note on team (visitor) | if on-behalf | sub (if member) |
 | `claimLookingForPartner` (Teams series) | captain | `{sessionId, posterMemberId}` | poster `lfp`; caller captains a team in this series with space; poster free on all series sessions | add poster to team for the whole series (I9) | if on-behalf | poster: `claimed` |
 | `markNotificationsRead` | member | `{ids[]}` | own | read=true | — | — |
+| `getIcalFeed` (§21 B1) | member | `{onBehalfOfMemberId?}` | — | reads only, never creates | if on-behalf | if on-behalf: `on_behalf_action` |
+| `createIcalFeed` (§21 B1) | member | `{onBehalfOfMemberId?}` | no existing token | mints token; writes `memberPrivate` + `icalTokens` in one transaction | if on-behalf | `security`; if on-behalf also: `on_behalf_action` |
+| `rotateIcalFeed` (§21 B1) | member | `{onBehalfOfMemberId?}` | token exists | new token; old `icalTokens` doc deleted, new one written, `memberPrivate` updated, in one transaction | if on-behalf | `security`; if on-behalf also: `on_behalf_action` |
+| `removeIcalFeed` (§21 B1) | member | `{onBehalfOfMemberId?}` | — (idempotent if none) | deletes `icalTokens` doc + `memberPrivate` fields | if on-behalf | `security`; if on-behalf also: `on_behalf_action` |
 | `broadcast` | admin | `{title, body, weekdays?}` | — | notification per member | `broadcast_sent` | all |
 | `runPairingSweep` | admin | `{repair?: boolean}` | — | same as scheduled sweep | `pairing_repair` | — |
 | `ping` | anyone | — | — | health | — | — |
+
+HTTP (not a callable — plan §21 B1's one deliberate exception to "clients only read Firestore / everything else is a callable"):
+- `icalFeed` — `GET /ical/{token}.ics` (`onRequest`, no App Check, unauthenticated). `text/calendar` feed of the token's member's own schedule, authorised by the URL token instead of Firebase Auth. See §21 B1 for the full design.
 
 Scheduled (Cloud Scheduler, `Pacific/Auckland`):
 - `sendSessionReminders` 08:00 daily — for each member with `reminders=true`, sessions at `today + reminderDaysBefore`.
@@ -812,6 +832,39 @@ SHOULD, not settled decisions, and confirm the open questions before building.
 
 ### B1. iCal subscription feed
 
+> **Status: implemented 2026-09-04.** Built to the settled security design in
+> this section's implementer brief, which superseded the sketch below where
+> the two differed. Deviations and settled open questions, for the record:
+>
+> - **Open question "toggle for unbooked sessions?" settled: no toggle, one
+>   merged feed.** `confirmed`/`substituted` entries appear as normal
+>   `VEVENT`s; `looking_for_partner`/`available` appear too, but as
+>   `STATUS:TENTATIVE` with a "(looking for a partner)"/"(available)" suffix
+>   on `SUMMARY` — a calendar client's own UI already renders `TENTATIVE`
+>   events distinctly, so this reads as "maybe" without needing a second feed
+>   or a per-feed setting. `unavailable`/`cancelled` are never included.
+> - **Open question "separate feed per year or combined?" settled: one
+>   combined feed** — the query is `entries(memberId, date)` with no year
+>   filter (today − 30 days onward), so every published year's sessions
+>   appear together automatically as new years publish.
+> - **Deviation: the token's plaintext is stored, not hashed-only**, on
+>   `memberPrivate.icalToken` (§5.2) — the sketch said "store hashed only".
+>   The owner must be able to redisplay their subscription URL (rotating on
+>   every view would break existing calendar-app subscriptions, exactly like
+>   Google Calendar's re-displayable "secret address"); `memberPrivate` is
+>   already owner+admin read-only via rules and written only by callables, so
+>   this is no weaker than the account's existing confidentiality. The
+>   server-only, sha256-keyed `icalTokens/{hash}` doc (§5.10) is what the
+>   unauthenticated feed endpoint actually looks up — an O(1) lookup that
+>   never round-trips the plaintext token through a query.
+> - Four callables (`getIcalFeed`, `createIcalFeed`, `rotateIcalFeed`,
+>   `removeIcalFeed`, §9.2), one `onRequest` HTTP endpoint (`icalFeed`, mounted
+>   at `/ical/**` by a Hosting rewrite), a pure RFC 5545 builder
+>   (`firebase/functions/src/ical/ics.ts`, unit-tested: escaping, line
+>   folding incl. multibyte, a full-calendar snapshot, TENTATIVE mapping), and
+>   a Profile "Calendar feed" card (`web/src/screens/CalendarFeedCard.tsx`).
+>   See §8.1's new threat-model row for the endpoint's specific controls.
+
 **Intent.** A member can subscribe to their own bridge schedule from Apple Calendar or
 Google Calendar, so booked sessions (and optionally sessions they are still looking to
 fill) appear alongside the rest of their life. Read-only, auto-refreshing.
@@ -834,7 +887,8 @@ fill) appear alongside the rest of their life. Read-only, auto-refreshing.
   else is a callable" — it is an unauthenticated read endpoint, so it must be
   especially careful: token-scoped, no enumeration, minimal data.
 
-**Open.** Include unbooked/available sessions? Separate feed per year or one combined?
+**Open.** Both questions below are settled — see the status note above.
+~~Include unbooked/available sessions?~~ ~~Separate feed per year or one combined?~~
 
 ### B2. Bulk day/weekday availability ("I never play Mondays")
 

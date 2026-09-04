@@ -24,12 +24,14 @@ export type {
   ClearSoloStatusInput,
   ClearSubstituteInput,
   ClearTeamSessionSubstituteInput,
+  CreateIcalFeedInput,
   CreateTeamInput,
   CreateVisitorInput,
   DeactivateMemberInput,
   DeleteVisitorInput,
   DisbandTeamInput,
   EraseMemberInput,
+  GetIcalFeedInput,
   ImportMembersInput,
   ImportProgrammeInput,
   InviteToTeamInput,
@@ -43,10 +45,12 @@ export type {
   ReactivateMemberInput,
   RegisterDeviceInput,
   RemoveFromTeamInput,
+  RemoveIcalFeedInput,
   RemovePasswordInput,
   RemoveVisitorFromTeamInput,
   RequestLoginCodeInput,
   RespondToInviteInput,
+  RotateIcalFeedInput,
   RunPairingSweepInput,
   SendInviteInput,
   SetBulkSoloStatusInput,
@@ -76,6 +80,33 @@ export interface RequestLoginCodeResult {
 export interface VerifyLoginCodeResult {
   /** Firebase custom token for `signInWithCustomToken`. */
   token: string;
+}
+
+/* ------------------------------- ical feed (plan §21 B1) ----------------- */
+
+export interface IcalFeedInfo {
+  /** `https://…/ical/{token}.ics` */
+  url: string;
+  /** Same URL with scheme `webcal:`, for "Open in Apple Calendar". */
+  webcalUrl: string;
+  createdAt: string;
+}
+
+/** `{ url: null }` when the member has never created a feed. */
+export type GetIcalFeedResult = IcalFeedInfo | { url: null };
+
+export interface CreateIcalFeedResult {
+  url: string;
+  webcalUrl: string;
+}
+
+export interface RotateIcalFeedResult {
+  url: string;
+  webcalUrl: string;
+}
+
+export interface RemoveIcalFeedResult {
+  ok: true;
 }
 
 /* ------------------------------- invites -------------------------------- */

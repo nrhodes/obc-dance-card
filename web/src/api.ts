@@ -23,6 +23,8 @@ import type {
   ClearSubstituteResult,
   ClearTeamSessionSubstituteInput,
   ClearTeamSessionSubstituteResult,
+  CreateIcalFeedInput,
+  CreateIcalFeedResult,
   CreateTeamInput,
   CreateTeamResult,
   CreateVisitorInput,
@@ -35,6 +37,8 @@ import type {
   DisbandTeamResult,
   EraseMemberInput,
   EraseMemberResult,
+  GetIcalFeedInput,
+  GetIcalFeedResult,
   ImportMembersInput,
   ImportMembersResult,
   ImportProgrammeInput,
@@ -54,6 +58,8 @@ import type {
   ReactivateMemberResult,
   RemoveFromTeamInput,
   RemoveFromTeamResult,
+  RemoveIcalFeedInput,
+  RemoveIcalFeedResult,
   RemovePasswordInput,
   RemoveVisitorFromTeamInput,
   RemoveVisitorFromTeamResult,
@@ -61,6 +67,8 @@ import type {
   RequestLoginCodeResult,
   RespondToInviteInput,
   RespondToInviteResult,
+  RotateIcalFeedInput,
+  RotateIcalFeedResult,
   RunPairingSweepInput,
   RunPairingSweepResult,
   SendInviteInput,
@@ -113,6 +121,12 @@ export const claimLookingForPartner = callable<ClaimLookingForPartnerInput, Clai
 );
 export const cancelEntry = callable<CancelEntryInput, CancelEntryResult>('cancelEntry');
 export const markNotificationsRead = callable<MarkNotificationsReadInput, { ok: true }>('markNotificationsRead');
+
+// iCal subscription feed (plan §21 B1)
+export const getIcalFeed = callable<GetIcalFeedInput, GetIcalFeedResult>('getIcalFeed');
+export const createIcalFeed = callable<CreateIcalFeedInput, CreateIcalFeedResult>('createIcalFeed');
+export const rotateIcalFeed = callable<RotateIcalFeedInput, RotateIcalFeedResult>('rotateIcalFeed');
+export const removeIcalFeed = callable<RemoveIcalFeedInput, RemoveIcalFeedResult>('removeIcalFeed');
 
 // Visitors (plan §9.2, §12 — Phase 4c task)
 export const createVisitor = callable<CreateVisitorInput, CreateVisitorResult>('createVisitor');

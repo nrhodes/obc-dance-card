@@ -26,6 +26,9 @@ export const paths = {
   imports: () => 'imports',
   import: (importId: Id) => `imports/${importId}`,
 
+  icalTokens: () => 'icalTokens',
+  icalToken: (hash: Id) => `icalTokens/${hash}`,
+
   programmes: () => 'programmes',
   programme: (year: number | string) => `programmes/${year}`,
 

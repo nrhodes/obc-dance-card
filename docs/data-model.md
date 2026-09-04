@@ -31,6 +31,10 @@ Members are never hard-deleted; leaving the club sets `active: false`.
 `emailLower` (the login identity), `notificationPrefs`, `devices` (push
 tokens, max 10), `hasPassword`, `lastLoginAt?`. Split out from `members` so
 that email addresses and device tokens are never exposed to other members.
+Also carries `icalToken?`/`icalTokenCreatedAt?` (plan §21 B1) — the
+plaintext iCal subscription token, so its owner can redisplay the URL; the
+hash-keyed lookup the unauthenticated feed endpoint actually reads is the
+separate server-only `icalTokens/{sha256hex(token)}` collection below.
 
 ### `visitors/{visitorId}` — sponsor + admin only
 
@@ -107,7 +111,7 @@ Per-member feed item; also the fan-out record (`channelsSent`, including
 `inapp`). Owner may flip `read`/`readAt` and nothing else — the one
 client-writable path in the whole schema.
 
-### `auditLog/{logId}`, `emailCodes/{id}`, `rateLimits/{id}`, `imports/{id}` — server-only
+### `auditLog/{logId}`, `emailCodes/{id}`, `rateLimits/{id}`, `imports/{id}`, `icalTokens/{hash}` — server-only
 
 - **`auditLog`** — every admin on-behalf action, role change, deactivation,
   import, publish, broadcast, and automated pairing repair. Admin-readable
@@ -117,6 +121,10 @@ client-writable path in the whole schema.
 - **`rateLimits/{bucket}:{sha256(subject)}`** — fixed-window counters backing
   `assertRateLimit`.
 - **`imports/{importId}`** — a record of one member or programme import run.
+- **`icalTokens/{sha256hex(token)}`** (plan §21 B1) — `{memberId, createdAt}`,
+  at most one per member. The O(1) lookup the unauthenticated `icalFeed` HTTP
+  endpoint reads; never client-readable, not even by the owner or an admin —
+  the token itself, not a Firebase session, is what authorises that request.
 
 None of these four collections are ever readable or writable by a client.
 
