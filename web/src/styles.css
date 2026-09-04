@@ -32,16 +32,24 @@
   /* Calendar day-status palette (plan §21 B4). Each status also carries a
      letter glyph in the markup — colour is never the only signal (WCAG
      1.4.1) — these are the *additional* colour cue for sighted users. */
-  --color-status-booked-bg: var(--color-success-bg);
-  --color-status-booked-text: var(--color-success-text);
-  --color-status-partly-bg: #e0f2f1;
-  --color-status-partly-text: #0f4c4c;
-  --color-status-seeking-bg: #e8eaf6;
-  --color-status-seeking-text: #1a237e;
-  --color-status-unavailable-bg: var(--color-secondary-bg);
-  --color-status-unavailable-text: var(--color-secondary-text);
-  --color-status-open-bg: #ffe8cc;
-  --color-status-open-text: #5c2e00;
+  /* Calendar day-status palette (plan §21 B4). The original pale washes were
+     indistinguishable (worst pair ΔE 1.8 — Neil: "Seeking and Unavailable are
+     too close"). This set is machine-validated, all pairs (any two statuses
+     can neighbour in the grid): normal-vision ΔE ≥ 22.9, CVD-simulated
+     ΔE ≥ 8.7, every bg/text pair ≥ 5.8:1 (AA). Booked and Partly share a hue
+     on purpose — a lightness split ("half-filled" green) survives every kind
+     of colour-blindness; Unavailable is the lone dark cell ("blocked out").
+     If you change any value, re-validate the five backgrounds as a set. */
+  --color-status-booked-bg: #52b788;
+  --color-status-booked-text: #03301c;
+  --color-status-partly-bg: #d8f3dc;
+  --color-status-partly-text: #1b4332;
+  --color-status-seeking-bg: #b197fc;
+  --color-status-seeking-text: #2a1058;
+  --color-status-unavailable-bg: #3f3f46;
+  --color-status-unavailable-text: #f4f4f5;
+  --color-status-open-bg: #ff9838;
+  --color-status-open-text: #4a2500;
 }
 
 * {
@@ -670,6 +678,9 @@ td {
 .month-cell-today {
   outline: 3px solid var(--color-primary);
   outline-offset: -3px;
+  /* Inner light ring so the dark outline still reads on the dark
+     Unavailable cell (the one dark bg in the status palette). */
+  box-shadow: inset 0 0 0 5px var(--color-bg);
 }
 
 .month-cell-day {
