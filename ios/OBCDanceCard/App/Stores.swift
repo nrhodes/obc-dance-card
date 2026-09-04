@@ -399,6 +399,32 @@ final class NotificationsStore: ObservableObject {
         listener = nil
         currentUid = nil
     }
+
+    /// Marks `ids` read locally, right now. The truth is written by the
+    /// `markNotificationsRead` callable, which can take a cold-start's worth
+    /// of seconds to land and come back through the listener; a tap on
+    /// "Mark all read" must not wait for that. The next snapshot overwrites
+    /// this with whatever the server says, so a failed callable is corrected
+    /// by calling `revertRead(ids:)` — or simply by the next real change.
+    func markReadOptimistically(ids: [String]) {
+        let set = Set(ids)
+        notifications = notifications.map { n in
+            guard set.contains(n.id), !n.read else { return n }
+            var m = n
+            m.read = true
+            return m
+        }
+    }
+
+    func revertRead(ids: [String]) {
+        let set = Set(ids)
+        notifications = notifications.map { n in
+            guard set.contains(n.id) else { return n }
+            var m = n
+            m.read = false
+            return m
+        }
+    }
 }
 
 // MARK: - Teams
