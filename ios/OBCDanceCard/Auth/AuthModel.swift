@@ -80,21 +80,48 @@ final class AuthModel: ObservableObject {
             .addSnapshotListener { [weak self] snapshot, error in
                 Task { @MainActor in
                     guard let self else { return }
-                    if error != nil {
-                        // A deactivated member's read of their own doc is
-                        // denied by rules (plan §10) — that arrives here.
+                    if let error {
+                        let ns = error as NSError
+                        // Only a rules denial means "not a member": a
+                        // deactivated member's read of their own doc is
+                        // denied (plan §10). Anything else — offline,
+                        // unavailable, a TLS or App Check problem — is a
+                        // connection failure, and telling someone their
+                        // membership has lapsed because the Wi-Fi dropped
+                        // would be exactly the wrong message. Those keep
+                        // the current state; the listener retries itself.
+                        let denied = ns.domain == FirestoreErrorDomain
+                            && ns.code == FirestoreErrorCode.permissionDenied.rawValue
+                        self.debugReason("member_doc_error \(ns.domain) \(ns.code) treatedAsNotActive=\(denied)")
+                        if denied {
+                            self.member = nil
+                            self.memberDocState = .notActive
+                            self.recomputeStatus()
+                        }
+                        return
+                    }
+                    guard let snapshot, snapshot.exists else {
+                        self.debugReason("member_doc_missing")
                         self.member = nil
                         self.memberDocState = .notActive
                         self.recomputeStatus()
                         return
                     }
-                    guard let snapshot, snapshot.exists,
-                          let decoded = try? snapshot.data(as: Member.self) else {
+                    let decoded: Member
+                    do {
+                        decoded = try snapshot.data(as: Member.self)
+                    } catch {
+                        // A shape this build can't read is a client bug, not
+                        // a membership fact — but there is nothing safe to
+                        // show, so it lands on the same screen. The reason
+                        // (key + expected type) is what fixes it.
+                        self.debugReason("member_doc_decode_failed \(error)")
                         self.member = nil
                         self.memberDocState = .notActive
                         self.recomputeStatus()
                         return
                     }
+                    if !decoded.active { self.debugReason("member_doc_inactive") }
                     self.member = decoded
                     self.memberDocState = decoded.active ? .active : .notActive
                     self.recomputeStatus()
@@ -119,6 +146,14 @@ final class AuthModel: ObservableObject {
         memberListener = nil
         privateListener?.remove()
         privateListener = nil
+    }
+
+    /// DEBUG-only: why the session landed where it did. Codes, keys and
+    /// type names only — never a document's contents (plan §3.7).
+    private func debugReason(_ line: String) {
+        #if DEBUG
+        print("member_state_reason \(line)")
+        #endif
     }
 
     private func recomputeStatus() {
