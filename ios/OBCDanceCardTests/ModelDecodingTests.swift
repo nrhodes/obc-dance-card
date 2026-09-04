@@ -58,11 +58,20 @@ final class ModelDecodingTests: XCTestCase {
     /// `looking_for_partner` is the one snake_cased status; a mismatch here
     /// would make every noticeboard row disappear.
     func testEntryStatusRawValuesMatchTheSharedVocabulary() throws {
-        let statuses = ["confirmed", "looking_for_partner", "available", "substituted", "cancelled"]
+        let statuses = ["confirmed", "looking_for_partner", "available", "unavailable", "substituted", "cancelled"]
         for raw in statuses {
             XCTAssertNotNil(EntryStatus(rawValue: raw), "missing EntryStatus for \(raw)")
         }
         XCTAssertEqual(EntryStatus.lookingForPartner.rawValue, "looking_for_partner")
+    }
+
+    /// Plan §21 B2: `unavailable` is solo (clears with `clearSoloStatus`) but
+    /// not active (never a noticeboard listing).
+    func testUnavailableIsSoloButNotActive() {
+        XCTAssertTrue(EntryStatus.solo.contains(.unavailable))
+        XCTAssertFalse(EntryStatus.active.contains(.unavailable))
+        XCTAssertEqual(SoloStatus(rawValue: "unavailable"), .unavailable)
+        XCTAssertEqual(BulkAvailabilityStatus.clear.rawValue, "clear")
     }
 
     func testEntryToleratesAnAbsentTeamSessionOnlyFlag() throws {
@@ -115,13 +124,38 @@ final class ModelDecodingTests: XCTestCase {
           "devices": [ { "token": "tok", "platform": "ios", "label": "iPhone",
                          "lastSeenAt": "2027-01-01T00:00:00.000Z" } ] }
         """)
+        XCTAssertNil(priv.icalToken)
         XCTAssertEqual(priv.notificationPrefs.digest, .daily)
         XCTAssertEqual(priv.notificationPrefs.reminderDaysBefore, 3)
         XCTAssertFalse(priv.notificationPrefs.push)
         XCTAssertEqual(priv.devices.first?.platform, .ios)
     }
 
+    func testMemberPrivateDecodesTheIcalTokenFields() throws {
+        let priv = try decode(MemberPrivate.self, """
+        { "id": "member-a", "emailLower": "jane@example.org", "devices": [], "hasPassword": true,
+          "icalToken": "abc", "icalTokenCreatedAt": "2027-01-01T00:00:00.000Z" }
+        """)
+        XCTAssertEqual(priv.icalToken, "abc")
+        XCTAssertEqual(priv.icalTokenCreatedAt, "2027-01-01T00:00:00.000Z")
+    }
+
     // MARK: - Programme
+
+    /// `year` is never stored on a series/weekday doc (it's the parent path);
+    /// the store tags it after decoding, so a decode must default it.
+    func testSeriesAndWeekdayYearDefaultToZeroWhenNotStored() throws {
+        let series = try decode(Series.self, """
+        { "id": "s", "weekday": "monday", "name": "N", "scoring": "Scr", "format": "Pairs",
+          "allowSubstitute": true, "order": 0, "sessionIds": [] }
+        """)
+        XCTAssertEqual(series.year, 0)
+        let weekday = try decode(WeekdayProgramme.self, """
+        { "id": "monday", "weekday": "monday", "label": "Monday", "startTime": "13:00",
+          "seatedByTime": "12:45" }
+        """)
+        XCTAssertEqual(weekday.year, 0)
+    }
 
     func testSeriesDefaultsTeamBoundsWhenAbsent() throws {
         let series = try decode(Series.self, """

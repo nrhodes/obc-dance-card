@@ -173,6 +173,7 @@ enum Roster {
         if entry.status == .substituted, let sub = entry.substitute {
             return "You: substituted this week by \(sub.displayName)"
         }
+        if entry.status == .unavailable { return "You've marked yourself unavailable for this session." }
         if entry.status == .lookingForPartner { return "You're looking for a partner." }
         if entry.status == .available { return "You're marked as available." }
         return nil

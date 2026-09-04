@@ -29,7 +29,8 @@ ios/OBCDanceCard/
   App/        entry + AppDelegate, Firebase setup, environment config, stores, router, push
   Shared/     Codable mirrors of shared/src (Models, Enums, Paths) and the typed callable wrappers (Api)
   Auth/       sign-in (emailed code or password), session state, Face ID app lock
-  Features/   Card, Programme, Session (+ team panel), Invites, Notifications, Profile, Common (pickers, tabs)
+  Features/   Card, Calendar (list/month/year + bulk availability), Programme, Session (+ team panel),
+              Invites, Notifications (together as the Inbox tab), Profile (+ calendar feed), Common (pickers, tabs)
   Support/    NZ date helpers, formatting, error mapping
 ios/OBCDanceCardTests/    unit tests for the ported pure logic and the Codable mirrors
 ios/OBCDanceCard/GoogleService-Info.plist   committed — public Firebase config, like web/.env.production
@@ -157,3 +158,11 @@ member seeing an empty screen.
 - An app icon / asset catalog: the target references `AppIcon` and
   `AccentColor` but ships without an `Assets.xcassets`, so it builds with the
   system defaults. Add one before submitting.
+
+## Push entitlement
+
+`Config/OBCDanceCard.entitlements` declares `aps-environment` (Xcode swaps
+`development` for `production` when archiving). The App ID in the Apple
+Developer portal must have the **Push Notifications** capability enabled as
+well — that is a one-time console step, not something the project can do —
+or a TestFlight archive will register for push and never receive any.

@@ -116,6 +116,20 @@ final class SessionActionsTests: XCTestCase {
         XCTAssertEqual(result.state, .solo(status: .available, note: nil))
     }
 
+    /// Plan §21 B2: "unavailable" is a marker, not a listing — it offers no
+    /// roster actions and never reads as a free slot.
+    func testUnavailableIsItsOwnStateWithNoRosterActions() {
+        let roster = SessionRosterView(
+            pairs: [],
+            lookingForPartner: [SoloRow(memberId: "member-b", name: "John Smith", note: nil)],
+            available: []
+        )
+        let result = derive(ownEntry: Fx.entry(status: .unavailable), roster: roster)
+        XCTAssertEqual(result.state, .unavailable)
+        XCTAssertFalse(result.canActOnRoster)
+        XCTAssertTrue(result.claimableMemberIds.isEmpty)
+    }
+
     // MARK: - Confirmed and substitutes
 
     func testConfirmedWithAMemberPartnerCanArrangeASubstitute() {

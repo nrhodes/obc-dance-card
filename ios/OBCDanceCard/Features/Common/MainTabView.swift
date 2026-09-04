@@ -1,9 +1,10 @@
 //
 //  MainTabView.swift
-//  The five member tabs (plan §14.1's member screen list, minus the web-only
-//  admin section): My card, Programme, Invites, Notifications, Profile.
-//  Session, Team, Visitors and the noticeboard are reached from within them,
-//  the same way the web app routes to them.
+//  The five member tabs. The web app's member nav is My card, Programme,
+//  Calendar, Invites, Notifications, Profile (plan §14.1 + §21 B4); an iPhone
+//  tab bar folds a sixth item under "More", so Invites and Notifications
+//  share the Inbox tab (see `InboxView`). Session, Team, Visitors and the
+//  noticeboard are reached from within these, as on the web.
 //
 
 import SwiftUI
@@ -22,27 +23,27 @@ struct MainTabView: View {
             .tabItem { Label("My card", systemImage: "list.bullet.rectangle.portrait") }
             .tag(Tab.card)
 
+            NavigationStack(path: $router.calendarPath) {
+                CalendarView()
+                    .navigationDestination(for: Route.self) { destination($0) }
+            }
+            .tabItem { Label("Calendar", systemImage: "calendar") }
+            .tag(Tab.calendar)
+
             NavigationStack(path: $router.programmePath) {
                 ProgrammeView()
                     .navigationDestination(for: Route.self) { destination($0) }
             }
-            .tabItem { Label("Programme", systemImage: "calendar") }
+            .tabItem { Label("Programme", systemImage: "list.bullet.clipboard") }
             .tag(Tab.programme)
 
-            NavigationStack {
-                InvitesView()
-            }
-            .tabItem { Label("Invites", systemImage: "envelope") }
-            .badge(invites.pendingCount)
-            .tag(Tab.invites)
-
-            NavigationStack(path: $router.notificationsPath) {
-                NotificationsView()
+            NavigationStack(path: $router.inboxPath) {
+                InboxView()
                     .navigationDestination(for: Route.self) { destination($0) }
             }
-            .tabItem { Label("Alerts", systemImage: "bell") }
-            .badge(notifications.unreadCount)
-            .tag(Tab.notifications)
+            .tabItem { Label("Inbox", systemImage: "tray") }
+            .badge(invites.pendingCount + notifications.unreadCount)
+            .tag(Tab.inbox)
 
             NavigationStack(path: $router.profilePath) {
                 ProfileView()

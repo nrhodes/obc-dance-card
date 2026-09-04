@@ -20,9 +20,28 @@ enum WeekdayTimelineItem: Identifiable {
         }
     }
 
+    /// The programme year (plan §21 B3) — from the series' tag or the
+    /// session's own date.
+    var year: Int {
+        switch self {
+        case let .series(series, _, _): return series.year
+        case let .single(session, _): return session.year
+        }
+    }
+
+    /// True when nothing on this item is still to come (NZ today). A series
+    /// counts as past only when *every* session on it is.
+    func isPast(today: String = NZDate.today()) -> Bool {
+        switch self {
+        case let .single(session, _): return session.date < today
+        case let .series(_, sessions, _): return !sessions.isEmpty && sessions.allSatisfy { $0.date < today }
+        }
+    }
+
+    /// Year-qualified: two years' series can share a `seriesId`.
     var id: String {
         switch self {
-        case let .series(series, _, _): return "series:\(series.id)"
+        case let .series(series, _, _): return "series:\(series.year):\(series.id)"
         case let .single(session, _): return "single:\(session.id)"
         }
     }
@@ -34,9 +53,16 @@ enum ProgrammeTimeline {
     static func build(weekday: Weekday, series: [Series], sessions: [Session]) -> [WeekdayTimelineItem] {
         var items: [WeekdayTimelineItem] = []
 
-        let seriesForWeekday = series.filter { $0.weekday == weekday }.sorted { $0.order < $1.order }
+        // A series' sessions attach only when *both* `seriesId` and `year`
+        // match — `seriesId` is `${weekday}-${slug(name)}` and two years'
+        // series can share one (plan §21 B3).
+        let seriesForWeekday = series
+            .filter { $0.weekday == weekday }
+            .sorted { ($0.year, $0.order) < ($1.year, $1.order) }
         for s in seriesForWeekday {
-            let seriesSessions = sessions.filter { $0.seriesId == s.id }.sorted { $0.date < $1.date }
+            let seriesSessions = sessions
+                .filter { $0.seriesId == s.id && $0.year == s.year }
+                .sorted { $0.date < $1.date }
             guard let firstDate = seriesSessions.first?.date else { continue }
             items.append(.series(s, sessions: seriesSessions, anchorDate: firstDate))
         }

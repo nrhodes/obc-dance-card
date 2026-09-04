@@ -226,6 +226,10 @@ struct MemberPrivate: Codable, Identifiable, Hashable {
     /// Maintained by the server; never trust a client-supplied value.
     var hasPassword: Bool
     var lastLoginAt: String?
+    /// Plan §21 B1: the member's iCal feed token, when they have one. The
+    /// app never builds a URL from it — the feed callables return the URL.
+    var icalToken: String?
+    var icalTokenCreatedAt: String?
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -235,6 +239,8 @@ struct MemberPrivate: Codable, Identifiable, Hashable {
         devices = try c.decodeIfPresent([RegisteredDevice].self, forKey: .devices) ?? []
         hasPassword = try c.decodeIfPresent(Bool.self, forKey: .hasPassword) ?? false
         lastLoginAt = try c.decodeIfPresent(String.self, forKey: .lastLoginAt)
+        icalToken = try c.decodeIfPresent(String.self, forKey: .icalToken)
+        icalTokenCreatedAt = try c.decodeIfPresent(String.self, forKey: .icalTokenCreatedAt)
     }
 }
 
@@ -294,6 +300,10 @@ struct WeekdayProgramme: Codable, Identifiable, Hashable {
     var seatedByTime: String
     var partnerStewardMemberId: String?
     var notes: String?
+    /// The programme year this doc belongs to — **not stored**; stamped by
+    /// `ProgrammeStore` on load (plan §21 B3). Weekday doc ids are the
+    /// `Weekday` value and so repeat in every year; this disambiguates.
+    var year: Int = 0
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -304,14 +314,16 @@ struct WeekdayProgramme: Codable, Identifiable, Hashable {
         seatedByTime = try c.decodeIfPresent(String.self, forKey: .seatedByTime) ?? startTime
         partnerStewardMemberId = try c.decodeIfPresent(String.self, forKey: .partnerStewardMemberId)
         notes = try c.decodeIfPresent(String.self, forKey: .notes)
+        year = try c.decodeIfPresent(Int.self, forKey: .year) ?? 0
     }
 
-    init(id: String, weekday: Weekday, label: String, startTime: String, seatedByTime: String) {
+    init(id: String, weekday: Weekday, label: String, startTime: String, seatedByTime: String, year: Int = 0) {
         self.id = id
         self.weekday = weekday
         self.label = label
         self.startTime = startTime
         self.seatedByTime = seatedByTime
+        self.year = year
     }
 }
 
@@ -339,6 +351,10 @@ struct Series: Codable, Identifiable, Hashable {
     /// Teams format only. Defaults 4/6.
     var teamMin: Int
     var teamMax: Int
+    /// The programme year — **not stored**; stamped by `ProgrammeStore` on
+    /// load (plan §21 B3). `seriesId` is `${weekday}-${slug(name)}` and can
+    /// collide across years, so every series lookup must be year-qualified.
+    var year: Int = 0
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -355,6 +371,7 @@ struct Series: Codable, Identifiable, Hashable {
         sessionIds = try c.decodeIfPresent([String].self, forKey: .sessionIds) ?? []
         teamMin = try c.decodeIfPresent(Int.self, forKey: .teamMin) ?? 4
         teamMax = try c.decodeIfPresent(Int.self, forKey: .teamMax) ?? 6
+        year = try c.decodeIfPresent(Int.self, forKey: .year) ?? 0
     }
 
     init(
@@ -368,7 +385,8 @@ struct Series: Codable, Identifiable, Hashable {
         order: Int = 0,
         sessionIds: [String] = [],
         teamMin: Int = 4,
-        teamMax: Int = 6
+        teamMax: Int = 6,
+        year: Int = 0
     ) {
         self.id = id
         self.weekday = weekday
@@ -381,6 +399,7 @@ struct Series: Codable, Identifiable, Hashable {
         self.sessionIds = sessionIds
         self.teamMin = teamMin
         self.teamMax = teamMax
+        self.year = year
     }
 }
 
@@ -403,6 +422,10 @@ struct Session: Codable, Identifiable, Hashable {
     func isBookable(today: String = NZDate.today()) -> Bool {
         kind != .noBridge && date >= today
     }
+
+    /// The programme year, from the session's own date (plan §21 B3: never
+    /// derived from a `seriesId`, which can collide across years).
+    var year: Int { Int(date.prefix(4)) ?? 0 }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)

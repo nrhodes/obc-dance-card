@@ -439,6 +439,9 @@ struct SoloStatusSheet: View {
         case ("team", .available): return "I'm available for a team"
         case (_, .lookingForPartner): return "I'm looking for a partner"
         case (_, .available): return "I'm available"
+        // `unavailable` takes no note and is confirmed with a plain alert
+        // (see SessionView), never this sheet — kept exhaustive.
+        case (_, .unavailable): return "I'm unavailable"
         }
     }
 

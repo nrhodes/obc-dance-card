@@ -74,24 +74,45 @@ enum EntryStatus: String, Codable, Hashable {
     case confirmed
     case lookingForPartner = "looking_for_partner"
     case available
+    /// Plan §21 B2: a solo "don't offer me this session" marker. Never on
+    /// the noticeboard, never alerted on, never a row on the card — but it
+    /// still occupies the member's slot server-side like a booking does.
+    case unavailable
     case substituted
     case cancelled
 
-    /// `ACTIVE_ENTRY_STATUSES`: statuses that occupy a member for a session.
+    /// `ACTIVE_ENTRY_STATUSES`: statuses that occupy a place on the member's
+    /// *card display*. Deliberately excludes `unavailable` (a marker, not a
+    /// booking). Server-side "is this member free" checks use the wider
+    /// "any non-cancelled entry" rule instead.
     static let active: Set<EntryStatus> = [.confirmed, .lookingForPartner, .available, .substituted]
+
+    /// `SOLO_ENTRY_STATUSES`: the three unpaired statuses (I6).
+    static let solo: Set<EntryStatus> = [.lookingForPartner, .available, .unavailable]
 
     /// `NOTICEBOARD_STATUSES`: statuses visible on the public noticeboard.
     static let noticeboard: [EntryStatus] = [.lookingForPartner, .available]
 }
 
-/// The two statuses a member can set on themselves (`setSoloStatus`).
-enum SoloStatus: String, Codable, Hashable {
+/// The statuses a member can set on themselves (`setSoloStatus`).
+enum SoloStatus: String, Codable, Hashable, CaseIterable {
     case lookingForPartner = "looking_for_partner"
     case available
+    case unavailable
 
     var entryStatus: EntryStatus {
-        self == .lookingForPartner ? .lookingForPartner : .available
+        switch self {
+        case .lookingForPartner: return .lookingForPartner
+        case .available: return .available
+        case .unavailable: return .unavailable
+        }
     }
+}
+
+/// `setBulkSoloStatus`'s status argument (plan §21 B2): the two markers, or
+/// `clear` to remove either (entries flip to `cancelled`; never deleted).
+enum BulkAvailabilityStatus: String, Codable, Hashable, CaseIterable {
+    case available, unavailable, clear
 }
 
 /// `INVITE_STATUSES`

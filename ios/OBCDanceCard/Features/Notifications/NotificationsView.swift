@@ -38,7 +38,6 @@ struct NotificationsView: View {
                 }
             }
         }
-        .navigationTitle("Notifications")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button("Mark all read") { Task { await markAllRead() } }
@@ -84,9 +83,9 @@ struct NotificationsView: View {
         // tapped OS notification — a payload with no link does nothing.
         let link = DeepLink.resolve(notification.data)
         if case let .session(year, sessionId) = link {
-            router.openSession(year: year, sessionId: sessionId, from: .notifications)
+            router.openSession(year: year, sessionId: sessionId, from: .inbox)
         } else if case .invites = link {
-            router.selectedTab = .invites
+            router.inboxSegment = .invites
         }
     }
 

@@ -34,149 +34,170 @@ struct SubscriptionError: Equatable {
     }
 }
 
-private func logSubscriptionFailure(_ name: String, _ error: Error) {
-    // Code only — never the query, the path, or any document content.
+func logSubscriptionFailure(_ name: String, _ error: Error) {
+    // DEBUG only, and code only — never the query, the path, or any
+    // document content (plan §3.7).
+    #if DEBUG
     let code = (error as NSError).code
     print("subscription_failed \(name) \(code)")
+    #endif
 }
 
 // MARK: - Programme
 
-/// The latest **published** programme and its weekdays/series/sessions.
-/// Drafts are invisible to members at the rules layer, so there is nothing to
-/// filter client-side.
+/// Every **published** programme year the club currently has, merged into
+/// one year-tagged view (plan §21 B3: the next year's programme is published
+/// before the current one ends, and members book across the boundary).
+///
+/// Subscribes to the newest `maxYears` published `programmes/{year}` docs
+/// and, per year, to that year's weekdays/series/sessions. Drafts are
+/// invisible to members at the rules layer, so nothing is filtered here.
+///
+/// **Id-collision warning:** `seriesId` is `${weekday}-${slug(name)}` and
+/// weekday doc ids are the `Weekday` value — both repeat across years.
+/// Session ids embed the date and are globally unique. So every series /
+/// weekday lookup here is year-qualified, and the merged arrays are kept
+/// newest-year-first so a plain "first match" means "prefer the newest
+/// year's doc".
 @MainActor
 final class ProgrammeStore: ObservableObject {
-    @Published private(set) var programme: Programme?
+    /// Newest first.
+    @Published private(set) var programmes: [Programme] = []
+    /// Every loaded year's docs, each stamped with its `year`, newest year first.
     @Published private(set) var weekdays: [WeekdayProgramme] = []
     @Published private(set) var series: [Series] = []
     @Published private(set) var sessions: [Session] = []
     @Published private(set) var loading = true
     @Published private(set) var error: SubscriptionError?
 
-    var year: Int? { programme?.year }
+    /// How many of the newest published years to load (current + next + one back).
+    static let maxYears = 3
 
-    private var programmeListener: ListenerRegistration?
-    private var subListeners: [ListenerRegistration] = []
-    private var programmeLoaded = false
-    private var subsLoaded = false
+    /// Published years currently loaded, newest first.
+    var years: [Int] { programmes.map(\.year) }
+    /// The newest published year — for headings; nil when nothing is published.
+    var year: Int? { years.first }
+    var programme: Programme? { programmes.first }
+
+    private struct YearData {
+        var weekdays: [WeekdayProgramme] = []
+        var series: [Series] = []
+        var sessions: [Session] = []
+        var weekdaysLoaded = false, seriesLoaded = false, sessionsLoaded = false
+        var loaded: Bool { weekdaysLoaded && seriesLoaded && sessionsLoaded }
+    }
+
+    private var programmesListener: ListenerRegistration?
+    private var yearListeners: [Int: [ListenerRegistration]] = [:]
+    private var yearData: [Int: YearData] = [:]
+    private var programmesLoaded = false
 
     func start() {
-        guard programmeListener == nil else { return }
-        let query = FirebaseService.db.collection(Paths.programmes)
+        guard programmesListener == nil else { return }
+        programmesListener = FirebaseService.db.collection(Paths.programmes)
             .whereField("status", isEqualTo: ProgrammeStatus.published.rawValue)
             .order(by: "year", descending: true)
-            .limit(to: 1)
-
-        programmeListener = query.addSnapshotListener { [weak self] snapshot, error in
-            guard let self else { return }
-            Task { @MainActor in
-                if let error {
-                    logSubscriptionFailure("programme", error)
-                    self.programme = nil
-                    self.error = SubscriptionError(code: "\((error as NSError).code)", resource: "the programme")
-                    self.programmeLoaded = true
-                    self.updateLoading()
-                    return
+            .limit(to: Self.maxYears)
+            .addSnapshotListener { [weak self] snapshot, error in
+                Task { @MainActor in
+                    guard let self else { return }
+                    if let error {
+                        logSubscriptionFailure("programmes", error)
+                        self.programmes = []
+                        self.error = SubscriptionError(code: "\((error as NSError).code)", resource: "the programme")
+                    } else {
+                        self.programmes = snapshot?.documents.compactMap { try? $0.data(as: Programme.self) } ?? []
+                        self.error = nil
+                    }
+                    self.programmesLoaded = true
+                    self.reconcileYearListeners()
+                    self.recompute()
                 }
-                let previousYear = self.programme?.year
-                self.programme = snapshot?.documents.first.flatMap { try? $0.data(as: Programme.self) }
-                self.error = nil
-                self.programmeLoaded = true
-                self.updateLoading()
-                if self.programme?.year != previousYear { self.restartSubcollections() }
             }
-        }
     }
 
     func stop() {
-        programmeListener?.remove()
-        programmeListener = nil
-        subListeners.forEach { $0.remove() }
-        subListeners = []
-        programmeLoaded = false
-        subsLoaded = false
+        programmesListener?.remove()
+        programmesListener = nil
+        yearListeners.values.forEach { $0.forEach { $0.remove() } }
+        yearListeners = [:]
+        yearData = [:]
+        programmesLoaded = false
+        loading = true
     }
 
-    private func updateLoading() {
-        loading = !programmeLoaded || !subsLoaded
-    }
-
-    private func restartSubcollections() {
-        subListeners.forEach { $0.remove() }
-        subListeners = []
-
-        guard let year else {
-            weekdays = []
-            series = []
-            sessions = []
-            subsLoaded = true
-            updateLoading()
-            return
+    /// Subscribe to newly published years, drop years that fell out of the window.
+    private func reconcileYearListeners() {
+        let wanted = Set(years)
+        for (y, ls) in yearListeners where !wanted.contains(y) {
+            ls.forEach { $0.remove() }
+            yearListeners[y] = nil
+            yearData[y] = nil
         }
-
-        subsLoaded = false
-        updateLoading()
-        var weekdaysDone = false, seriesDone = false, sessionsDone = false
-        let markDone = { [weak self] in
-            guard let self else { return }
-            if weekdaysDone && seriesDone && sessionsDone {
-                self.subsLoaded = true
-                self.updateLoading()
-            }
+        for y in wanted where yearListeners[y] == nil {
+            yearData[y] = YearData()
+            let db = FirebaseService.db
+            yearListeners[y] = [
+                db.collection(Paths.weekdays(y)).addSnapshotListener { [weak self] snap, err in
+                    Task { @MainActor in
+                        guard let self, self.yearData[y] != nil else { return }
+                        if let err { logSubscriptionFailure("weekdays", err); self.error = SubscriptionError(code: "\((err as NSError).code)", resource: "the programme") }
+                        else {
+                            self.yearData[y]?.weekdays = (snap?.documents.compactMap { try? $0.data(as: WeekdayProgramme.self) } ?? []).map { var w = $0; w.year = y; return w }
+                        }
+                        self.yearData[y]?.weekdaysLoaded = true
+                        self.recompute()
+                    }
+                },
+                db.collection(Paths.series(y)).addSnapshotListener { [weak self] snap, err in
+                    Task { @MainActor in
+                        guard let self, self.yearData[y] != nil else { return }
+                        if let err { logSubscriptionFailure("series", err); self.error = SubscriptionError(code: "\((err as NSError).code)", resource: "the programme") }
+                        else {
+                            self.yearData[y]?.series = (snap?.documents.compactMap { try? $0.data(as: Series.self) } ?? []).map { var s = $0; s.year = y; return s }
+                        }
+                        self.yearData[y]?.seriesLoaded = true
+                        self.recompute()
+                    }
+                },
+                db.collection(Paths.sessions(y)).addSnapshotListener { [weak self] snap, err in
+                    Task { @MainActor in
+                        guard let self, self.yearData[y] != nil else { return }
+                        if let err { logSubscriptionFailure("sessions", err); self.error = SubscriptionError(code: "\((err as NSError).code)", resource: "the programme") }
+                        else {
+                            self.yearData[y]?.sessions = snap?.documents.compactMap { try? $0.data(as: Session.self) } ?? []
+                        }
+                        self.yearData[y]?.sessionsLoaded = true
+                        self.recompute()
+                    }
+                },
+            ]
         }
-
-        let db = FirebaseService.db
-        subListeners.append(db.collection(Paths.weekdays(year)).addSnapshotListener { [weak self] snap, err in
-            Task { @MainActor in
-                guard let self else { return }
-                if let err {
-                    logSubscriptionFailure("weekdays", err)
-                    self.error = SubscriptionError(code: "\((err as NSError).code)", resource: "the programme")
-                } else {
-                    self.weekdays = snap?.documents.compactMap { try? $0.data(as: WeekdayProgramme.self) } ?? []
-                }
-                weekdaysDone = true
-                markDone()
-            }
-        })
-
-        subListeners.append(db.collection(Paths.series(year)).addSnapshotListener { [weak self] snap, err in
-            Task { @MainActor in
-                guard let self else { return }
-                if let err {
-                    logSubscriptionFailure("series", err)
-                    self.error = SubscriptionError(code: "\((err as NSError).code)", resource: "the programme")
-                } else {
-                    self.series = snap?.documents.compactMap { try? $0.data(as: Series.self) } ?? []
-                }
-                seriesDone = true
-                markDone()
-            }
-        })
-
-        subListeners.append(db.collection(Paths.sessions(year)).addSnapshotListener { [weak self] snap, err in
-            Task { @MainActor in
-                guard let self else { return }
-                if let err {
-                    logSubscriptionFailure("sessions", err)
-                    self.error = SubscriptionError(code: "\((err as NSError).code)", resource: "the programme")
-                } else {
-                    self.sessions = snap?.documents.compactMap { try? $0.data(as: Session.self) } ?? []
-                }
-                sessionsDone = true
-                markDone()
-            }
-        })
     }
 
+    /// Rebuilds the merged, newest-year-first arrays.
+    private func recompute() {
+        let ordered = years.compactMap { y in yearData[y].map { (y, $0) } }
+        weekdays = ordered.flatMap { $0.1.weekdays }
+        series = ordered.flatMap { $0.1.series }
+        sessions = ordered.flatMap { $0.1.sessions }
+        loading = !programmesLoaded || ordered.contains { !$0.1.loaded } || ordered.count != years.count
+    }
+
+    // MARK: Lookups (year-qualified — see the id-collision warning above)
+
+    /// Session ids are globally unique, so no year is needed.
     func session(id: String) -> Session? { sessions.first { $0.id == id } }
-    func series(id: String?) -> Series? {
+
+    /// The series doc for `id` in `year`; with no year, the newest year's.
+    func series(id: String?, year: Int? = nil) -> Series? {
         guard let id else { return nil }
-        return series.first { $0.id == id }
+        return series.first { $0.id == id && (year == nil || $0.year == year) }
     }
-    func weekday(_ weekday: Weekday) -> WeekdayProgramme? {
-        weekdays.first { $0.weekday == weekday }
+
+    /// The weekday doc for `year`; with no year, the newest year's.
+    func weekday(_ weekday: Weekday, year: Int? = nil) -> WeekdayProgramme? {
+        weekdays.first { $0.weekday == weekday && (year == nil || $0.year == year) }
     }
 }
 
@@ -513,6 +534,57 @@ final class VisitorsStore: ObservableObject {
                         self.error = SubscriptionError(code: "\((err as NSError).code)", resource: "your visitors")
                     } else {
                         self.visitors = snap?.documents.compactMap { try? $0.data(as: Visitor.self) } ?? []
+                        self.error = nil
+                    }
+                    self.loading = false
+                }
+            }
+    }
+
+    func stop() {
+        listener?.remove()
+        listener = nil
+        currentUid = nil
+    }
+}
+
+// MARK: - My entries
+
+/// The signed-in member's own entries (`entries where memberId == uid`,
+/// ordered by date — the existing composite index), shared by My Card and
+/// the Calendar so there is one listener, not two. Mirrors the web's
+/// `useMyEntries`.
+@MainActor
+final class MyEntriesStore: ObservableObject {
+    @Published private(set) var entries: [Entry] = []
+    @Published private(set) var loading = true
+    @Published private(set) var error: SubscriptionError?
+
+    private var listener: ListenerRegistration?
+    private var currentUid: String?
+
+    func start(uid: String?) {
+        guard uid != currentUid || listener == nil else { return }
+        stop()
+        currentUid = uid
+        guard let uid else {
+            entries = []
+            loading = false
+            return
+        }
+        loading = true
+        listener = FirebaseService.db.collection(Paths.entries)
+            .whereField("memberId", isEqualTo: uid)
+            .order(by: "date")
+            .addSnapshotListener { [weak self] snap, err in
+                Task { @MainActor in
+                    guard let self else { return }
+                    if let err {
+                        logSubscriptionFailure("my_entries", err)
+                        self.entries = []
+                        self.error = SubscriptionError(code: "\((err as NSError).code)", resource: "your dance card")
+                    } else {
+                        self.entries = snap?.documents.compactMap { try? $0.data(as: Entry.self) } ?? []
                         self.error = nil
                     }
                     self.loading = false
