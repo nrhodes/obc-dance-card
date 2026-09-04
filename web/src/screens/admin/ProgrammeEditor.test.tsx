@@ -8,10 +8,11 @@
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import type { Entry, Programme, Series, Session } from '@obc/shared';
+import type { Entry, Member, Programme, Series, Session, WeekdayProgramme } from '@obc/shared';
 import { ProgrammeEditor } from './ProgrammeEditor';
 
 let programmesFixture: Programme[] = [];
+let weekdaysFixture: WeekdayProgramme[] = [];
 let seriesFixture: Series[] = [];
 let sessionsFixture: Session[] = [];
 let entriesFixture: Entry[] = [];
@@ -32,6 +33,8 @@ vi.mock('firebase/firestore', () => ({
       onNext({ docs: programmesFixture.map((p) => ({ data: () => p })) });
     } else if (path === 'entries') {
       onNext({ docs: entriesFixture.map((e) => ({ data: () => e })) });
+    } else if (path.endsWith('/weekdays')) {
+      onNext({ docs: weekdaysFixture.map((w) => ({ data: () => w })) });
     } else if (path.endsWith('/series')) {
       onNext({ docs: seriesFixture.map((s) => ({ data: () => s })) });
     } else if (path.endsWith('/sessions')) {
@@ -43,13 +46,42 @@ vi.mock('firebase/firestore', () => ({
 
 const updateSeriesMock = vi.fn();
 const updateSessionMock = vi.fn();
+const updateWeekdayMock = vi.fn();
 vi.mock('../../api', () => ({
   updateSeries: (...args: unknown[]) => updateSeriesMock(...args),
   updateSession: (...args: unknown[]) => updateSessionMock(...args),
+  updateWeekday: (...args: unknown[]) => updateWeekdayMock(...args),
+}));
+
+const membersFixture: Member[] = [
+  { id: 'm-joan', firstName: 'Joan', lastName: 'Smith', phone: '', grade: 'Open', role: 'member', active: true, createdAt: '', updatedAt: '' },
+];
+
+vi.mock('../../members/useMembersDirectory', () => ({
+  useMembersDirectory: () => ({
+    members: membersFixture,
+    byId: new Map(membersFixture.map((m) => [m.id, m])),
+    nameOf: (id: string) => membersFixture.find((m) => m.id === id)?.firstName ?? 'A member',
+    loading: false,
+    error: null,
+  }),
 }));
 
 function programme(overrides: Partial<Programme> = {}): Programme {
   return { id: '2027', year: 2027, status: 'published', createdAt: '', updatedAt: '', ...overrides };
+}
+
+function weekday(overrides: Partial<WeekdayProgramme> = {}): WeekdayProgramme {
+  return {
+    id: 'monday',
+    weekday: 'monday',
+    label: 'Monday Afternoon',
+    startTime: '13:00',
+    seatedByTime: '12:45',
+    createdAt: '',
+    updatedAt: '',
+    ...overrides,
+  };
 }
 
 function series(overrides: Partial<Series> = {}): Series {
@@ -131,7 +163,9 @@ function entry(overrides: Partial<Entry> = {}): Entry {
 beforeEach(() => {
   updateSeriesMock.mockReset();
   updateSessionMock.mockReset();
+  updateWeekdayMock.mockReset();
   programmesFixture = [];
+  weekdaysFixture = [];
   seriesFixture = [];
   sessionsFixture = [];
   entriesFixture = [];
@@ -214,5 +248,58 @@ describe('ProgrammeEditor', () => {
     await user.click(screen.getByRole('button', { name: 'Edit' }));
 
     expect(await screen.findByText(/3 non-cancelled sign-ups/)).toBeTruthy();
+  });
+
+  describe('Weekdays card', () => {
+    it('lists a row per weekday with label, times, steward name, and notes', () => {
+      programmesFixture = [programme()];
+      weekdaysFixture = [
+        weekday({ partnerStewardMemberId: 'm-joan', notes: 'BYO cards' }),
+        weekday({ id: 'friday', weekday: 'friday', label: 'Friday Evening' }),
+      ];
+      render(<ProgrammeEditor />);
+
+      expect(screen.getByText('Weekdays')).toBeTruthy();
+      const weekdaysCard = screen.getByText('Weekdays').closest('div') as HTMLElement;
+      expect(within(weekdaysCard).getByText('Monday Afternoon')).toBeTruthy();
+      expect(within(weekdaysCard).getByText('Joan')).toBeTruthy();
+      expect(within(weekdaysCard).getByText('BYO cards')).toBeTruthy();
+      expect(within(weekdaysCard).getByText('Friday Evening')).toBeTruthy();
+      // No steward set for Friday: shown as an em dash, not blank.
+      const fridayRow = within(weekdaysCard).getByText('Friday Evening').closest('tr') as HTMLElement;
+      expect(within(fridayRow).getAllByText('—')).toHaveLength(2); // steward, notes
+    });
+
+    it('does not render the card when the year has no weekday docs', () => {
+      programmesFixture = [programme()];
+      weekdaysFixture = [];
+      render(<ProgrammeEditor />);
+
+      expect(screen.queryByText('Weekdays')).toBeNull();
+    });
+
+    it('opens WeekdayEditDialog on Edit and saves via updateWeekday', async () => {
+      programmesFixture = [programme()];
+      weekdaysFixture = [weekday()];
+      updateWeekdayMock.mockResolvedValueOnce({ weekday: weekday({ label: 'Monday Social' }) });
+      const user = userEvent.setup();
+      render(<ProgrammeEditor />);
+
+      const weekdaysCard = screen.getByText('Weekdays').closest('div') as HTMLElement;
+      await user.click(within(weekdaysCard).getByRole('button', { name: 'Edit' }));
+
+      expect(screen.getByRole('dialog', { name: 'Edit Monday Afternoon' })).toBeTruthy();
+      const labelInput = screen.getByLabelText('Label');
+      await user.clear(labelInput);
+      await user.type(labelInput, 'Monday Social');
+      await user.click(screen.getByRole('button', { name: 'Save changes' }));
+
+      expect(updateWeekdayMock).toHaveBeenCalledWith({
+        year: 2027,
+        weekday: 'monday',
+        patch: { label: 'Monday Social' },
+      });
+      expect(await screen.findByText('Monday Social updated.')).toBeTruthy();
+    });
   });
 });

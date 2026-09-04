@@ -18,21 +18,28 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import { collection, onSnapshot, orderBy, query, where } from 'firebase/firestore';
-import { paths, type Entry, type Programme, type Series, type Session } from '@obc/shared';
+import { paths, type Entry, type Programme, type Series, type Session, type WeekdayProgramme } from '@obc/shared';
 import { db } from '../../firebase';
-import { formatDateNZ } from '../../lib/format';
+import { formatDateNZ, formatTimeOfDay } from '../../lib/format';
 import { formatSignupSummary, seriesSignupRange, sessionSignupCounts, type SignupCounts } from '../../lib/signupCounts';
 import { SubscriptionError } from '../../components/SubscriptionError';
+import { useMembersDirectory } from '../../members/useMembersDirectory';
 import { SeriesEditDialog } from './SeriesEditDialog';
 import { SessionEditDialog } from './SessionEditDialog';
+import { WeekdayEditDialog } from './WeekdayEditDialog';
 
-type EditorDialog = { kind: 'series'; series: Series } | { kind: 'session'; session: Session };
+type EditorDialog =
+  | { kind: 'series'; series: Series }
+  | { kind: 'session'; session: Session }
+  | { kind: 'weekday'; weekday: WeekdayProgramme };
 
 const EMPTY_SIGNUP_COUNTS: SignupCounts = { pairs: 0, teams: 0, looking: 0, available: 0, unavailable: 0, total: 0 };
 
 export function ProgrammeEditor() {
+  const { nameOf } = useMembersDirectory();
   const [programmes, setProgrammes] = useState<Programme[]>([]);
   const [year, setYear] = useState<number | null>(null);
+  const [weekdays, setWeekdays] = useState<WeekdayProgramme[]>([]);
   const [series, setSeries] = useState<Series[]>([]);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [entries, setEntries] = useState<Entry[]>([]);
@@ -58,11 +65,20 @@ export function ProgrammeEditor() {
 
   useEffect(() => {
     if (year == null) {
+      setWeekdays([]);
       setSeries([]);
       setSessions([]);
       setEntries([]);
       return;
     }
+    const unsubWeekdays = onSnapshot(
+      collection(db, paths.weekdays(year)),
+      (snap) => setWeekdays(snap.docs.map((d) => d.data() as WeekdayProgramme)),
+      (err) => {
+        console.error('subscription_failed', 'admin_programme_editor_weekdays', err.code);
+        setError({ code: err.code });
+      },
+    );
     const unsubSeries = onSnapshot(
       collection(db, paths.series(year)),
       (snap) => setSeries(snap.docs.map((d) => d.data() as Series)),
@@ -88,6 +104,7 @@ export function ProgrammeEditor() {
       },
     );
     return () => {
+      unsubWeekdays();
       unsubSeries();
       unsubSessions();
       unsubEntries();
@@ -111,6 +128,8 @@ export function ProgrammeEditor() {
     }
     return counts;
   }, [entries, sessions]);
+
+  const sortedWeekdays = useMemo(() => [...weekdays].sort((a, b) => a.weekday.localeCompare(b.weekday)), [weekdays]);
 
   const sortedSeries = useMemo(() => [...series].sort((a, b) => a.weekday.localeCompare(b.weekday) || a.order - b.order), [series]);
 
@@ -144,6 +163,42 @@ export function ProgrammeEditor() {
           ))}
         </select>
       </div>
+
+      {sortedWeekdays.length > 0 && (
+        <div className="card">
+          <h3>Weekdays</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>Weekday</th>
+                <th>Label</th>
+                <th>Times</th>
+                <th>Partner steward</th>
+                <th>Notes</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {sortedWeekdays.map((w) => (
+                <tr key={w.id}>
+                  <td>{w.weekday}</td>
+                  <td>{w.label}</td>
+                  <td>
+                    {formatTimeOfDay(w.startTime)} &middot; seated by {formatTimeOfDay(w.seatedByTime)}
+                  </td>
+                  <td>{w.partnerStewardMemberId ? nameOf(w.partnerStewardMemberId) : '—'}</td>
+                  <td>{w.notes || '—'}</td>
+                  <td>
+                    <button type="button" className="button button-link" onClick={() => setDialog({ kind: 'weekday', weekday: w })}>
+                      Edit
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {sortedSeries.map((s) => {
         const seriesSessions = sessions.filter((sess) => sess.seriesId === s.id).sort((a, b) => a.date.localeCompare(b.date));
@@ -239,6 +294,18 @@ export function ProgrammeEditor() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {dialog?.kind === 'weekday' && year != null && (
+        <WeekdayEditDialog
+          year={year}
+          weekday={dialog.weekday}
+          onClose={() => setDialog(null)}
+          onSaved={(message) => {
+            setDialog(null);
+            setNotice(message);
+          }}
+        />
       )}
 
       {dialog?.kind === 'series' && year != null && (

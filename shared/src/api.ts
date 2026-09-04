@@ -10,7 +10,7 @@
 
 import type { MemberImportReport, ProgrammeImportReport } from './csv.js';
 import type { Weekday } from './enums.js';
-import type { AuditLogEntry, Entry, IntegrityViolation, Invite, Member, Notification, Series, Session, Team, Visitor } from './models.js';
+import type { AuditLogEntry, Entry, IntegrityViolation, Invite, Member, Notification, Series, Session, Team, Visitor, WeekdayProgramme } from './models.js';
 import type { Id, IsoDate } from './primitives.js';
 
 export type {
@@ -67,6 +67,8 @@ export type {
   UpdateSessionInput,
   UpdateSessionPatch,
   UpdateVisitorInput,
+  UpdateWeekdayInput,
+  UpdateWeekdayPatch,
   VerifyLoginCodeInput,
 } from './schemas.js';
 
@@ -280,6 +282,10 @@ export interface UpdateSeriesResult {
 export interface UpdateSessionResult {
   session: Session | null;
   removed: boolean;
+}
+
+export interface UpdateWeekdayResult {
+  weekday: WeekdayProgramme;
 }
 
 /* --------------------------- integrity --------------------------- */

@@ -450,6 +450,7 @@ export const sendInvite = onCall(opts, async (req) => {
 | `importProgramme` | admin | `{year, weekdaysCsv, seriesCsv, singlesCsv, dryRun?}` | programme not published or `replace:true` | writes draft docs; deterministic ids | `programme_import` | — |
 | `publishProgramme` | admin | `{year}` | draft exists | status=published | `programme_publish` | broadcast "2027 programme is out" |
 | `updateSeries` / `updateSession` | admin | partial docs | published allowed | edits; if a session is removed, cascade-cancel its entries | `programme_edit` | affected members |
+| `updateWeekday` (§21, closed 2026-09-05) | admin | `{year, weekday, label?, startTime?, seatedByTime?, partnerStewardMemberId?: Id\|null, notes?: string\|null}` | programme + weekday doc exist; steward, if a string, is an ACTIVE member | merges provided fields (`null` clears steward/notes); published allowed; `startTime` changes when this weekday's sessions lock (`sessionCutoff`) — no cascade | `programme_edit` | — |
 | `sendInvite` | member | `{scope, sessionId? \| seriesId?, toMemberId, message?, onBehalfOfMemberId?}` | to ≠ from; to active; sessions bookable & unlocked; neither has active entry on any target session; no duplicate pending invite; rate 30/day | creates invite | if on-behalf | to: `invite_received` |
 | `respondToInvite` | member (the invitee) | `{inviteId, accept, onBehalfOfMemberId?}` | pending, unexpired; on accept: all sessions still free for both | accept: pairings for every session (I2); decline: status | if on-behalf | from: `invite_accepted`/`declined` |
 | `cancelInvite` | member (the sender) | `{inviteId}` | pending | status=cancelled | if on-behalf | to: `invite_cancelled` |
@@ -1134,6 +1135,26 @@ visible rather than being papered over.
   it stays on tokens and the server handles both.
 - No change to what a push carries (ids only, §14.2) or to the permission
   rules (never auto-prompt).
+### B7. Admin weekday editing (partner steward mid-year handover)
+
+**Intent.** `programmes/{year}/weekdays/{weekday}` (label, times, single
+`partnerStewardMemberId`, notes — §5.4) was only writable via the CSV
+programme import's `stewardEmail` column, so changing a steward mid-year
+("Joan handed Mondays to Bill") required a full re-import.
+
+> **Status: implemented 2026-09-05.** Added `updateWeekday` (admin-only,
+> partial patch; `null` clears steward/notes; preconditions: programme +
+> weekday doc exist, and a supplied `partnerStewardMemberId` is an ACTIVE
+> member — `failed-precondition` otherwise), the `WeekdayEditDialog` +
+> `ProgrammeEditor` "Weekdays" card, and the member-facing steward phone
+> garnish on `ProgrammeScreen`. **Single steward confirmed** — no list, per
+> the existing `partnerStewardMemberId?: Id` shape. Reuses the `programme_edit`
+> audit action (same as `updateSeries`/`updateSession`) rather than adding a
+> new one, since all three are admin edits to the same programme tree.
+> Editing published programmes is allowed, matching the other two. Changing
+> `startTime` changes when that weekday's sessions lock (`sessionCutoff`,
+> §6) from the next read onward — no cascade, since the lock instant is
+> computed at read time rather than stored.
 
 ### Cross-cutting notes for the backlog
 

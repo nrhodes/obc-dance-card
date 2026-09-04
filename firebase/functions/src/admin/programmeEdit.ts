@@ -11,17 +11,22 @@ import { onCall, HttpsError, type CallableRequest } from 'firebase-functions/v2/
 import {
   UpdateSeriesInputSchema,
   UpdateSessionInputSchema,
+  UpdateWeekdayInputSchema,
   paths,
   todayNZ,
   weekdayOfNZ,
   type Entry,
   type Invite,
+  type Member,
   type Series,
   type Session,
   type UpdateSeriesInput,
   type UpdateSeriesResult,
   type UpdateSessionInput,
   type UpdateSessionResult,
+  type UpdateWeekdayInput,
+  type UpdateWeekdayResult,
+  type WeekdayProgramme,
 } from '@obc/shared';
 import { db } from '../lib/admin.js';
 import { audit } from '../lib/audit.js';
@@ -349,3 +354,83 @@ export async function updateSessionHandler(req: CallableRequest<UpdateSessionInp
 }
 
 export const updateSession = onCall(callableOptions, updateSessionHandler);
+
+/* --------------------------------- updateWeekday --------------------------------- */
+
+/**
+ * Admin-only partial edit to a weekday programme doc (`programmes/{year}/weekdays/{weekday}`,
+ * plan §5.4, §9.2; backlog gap closed 2026-09-05). Until now the weekday's
+ * label, times, partner steward and notes were only settable via the CSV
+ * import's `stewardEmail` column, so a mid-year steward handover ("Joan
+ * handed Mondays to Bill") required a full programme re-import. This is the
+ * single point of change for those fields instead — same editing-a-published-
+ * programme allowance as `updateSeries`/`updateSession`.
+ *
+ * `startTime` feeds `sessionCutoff` (plan §6): changing it changes when every
+ * session on this weekday locks for entries, from the next read onward. No
+ * cascade is needed — sessions and entries are untouched, since the lock
+ * instant is computed from `startTime` at read time rather than stored.
+ */
+export async function updateWeekdayHandler(req: CallableRequest<UpdateWeekdayInput>): Promise<UpdateWeekdayResult> {
+  const input = parseInput(UpdateWeekdayInputSchema, req.data);
+  const caller = await requireAdmin(req);
+  const patch = input.patch;
+
+  if (Object.keys(patch).length === 0) {
+    throw new HttpsError('invalid-argument', 'patch must set at least one field.');
+  }
+
+  const programmeRef = db.doc(paths.programme(input.year));
+  const weekdayRef = db.doc(paths.weekday(input.year, input.weekday));
+
+  const result = await db.runTransaction(async (tx) => {
+    const [programmeSnap, weekdaySnap] = await Promise.all([tx.get(programmeRef), tx.get(weekdayRef)]);
+    if (!programmeSnap.exists) throw new HttpsError('not-found', 'Programme not found.');
+    const weekday = weekdaySnap.data() as WeekdayProgramme | undefined;
+    if (!weekday) throw new HttpsError('not-found', 'Weekday not found.');
+
+    if (patch.partnerStewardMemberId) {
+      const stewardSnap = await tx.get(db.doc(paths.member(patch.partnerStewardMemberId)));
+      const steward = stewardSnap.data() as Member | undefined;
+      if (!steward || !steward.active) {
+        throw new HttpsError('failed-precondition', 'That member is not available as a partner steward.');
+      }
+    }
+
+    const now = new Date().toISOString();
+    const updated: WeekdayProgramme = { ...weekday, updatedAt: now };
+    if (patch.label !== undefined) updated.label = patch.label;
+    if (patch.startTime !== undefined) updated.startTime = patch.startTime;
+    if (patch.seatedByTime !== undefined) updated.seatedByTime = patch.seatedByTime;
+    if (patch.partnerStewardMemberId !== undefined) {
+      if (patch.partnerStewardMemberId === null) {
+        delete updated.partnerStewardMemberId;
+      } else {
+        updated.partnerStewardMemberId = patch.partnerStewardMemberId;
+      }
+    }
+    if (patch.notes !== undefined) {
+      if (patch.notes === null) {
+        delete updated.notes;
+      } else {
+        updated.notes = patch.notes;
+      }
+    }
+
+    tx.set(weekdayRef, updated);
+    return { before: weekday, after: updated };
+  });
+
+  await audit({
+    actorMemberId: caller.uid,
+    action: 'programme_edit',
+    entityRef: weekdayRef.path,
+    before: { label: result.before.label, startTime: result.before.startTime, seatedByTime: result.before.seatedByTime, partnerStewardMemberId: result.before.partnerStewardMemberId ?? null, notes: result.before.notes ?? null },
+    after: { label: result.after.label, startTime: result.after.startTime, seatedByTime: result.after.seatedByTime, partnerStewardMemberId: result.after.partnerStewardMemberId ?? null, notes: result.after.notes ?? null },
+    detail: { year: input.year, weekday: input.weekday, patch },
+  });
+
+  return { weekday: result.after };
+}
+
+export const updateWeekday = onCall(callableOptions, updateWeekdayHandler);

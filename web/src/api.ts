@@ -93,6 +93,8 @@ import type {
   UpdateSessionResult,
   UpdateVisitorInput,
   UpdateVisitorResult,
+  UpdateWeekdayInput,
+  UpdateWeekdayResult,
   VerifyLoginCodeInput,
   VerifyLoginCodeResult,
 } from '@obc/shared';
@@ -163,6 +165,7 @@ export const reactivateMember = callable<ReactivateMemberInput, ReactivateMember
 export const eraseMember = callable<EraseMemberInput, EraseMemberResult>('eraseMember');
 export const updateSeries = callable<UpdateSeriesInput, UpdateSeriesResult>('updateSeries');
 export const updateSession = callable<UpdateSessionInput, UpdateSessionResult>('updateSession');
+export const updateWeekday = callable<UpdateWeekdayInput, UpdateWeekdayResult>('updateWeekday');
 export const broadcast = callable<BroadcastInput, BroadcastResult>('broadcast');
 export const listAuditLog = callable<ListAuditLogInput, ListAuditLogResult>('listAuditLog');
 export const runPairingSweep = callable<RunPairingSweepInput, RunPairingSweepResult>('runPairingSweep');
