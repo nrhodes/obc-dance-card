@@ -2,7 +2,16 @@ import { act, fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { ReactNode } from 'react';
 import { SignInScreen } from './SignInScreen';
+
+// `render`'s `wrapper` wants a component whose props are exactly
+// `{ children: ReactNode }`. Under @types/react 19 + react-router-dom 6,
+// `MemoryRouter`'s optional-children props type no longer satisfies that
+// overload directly, so give it the one-liner it needs.
+function RouterWrapper({ children }: { children: ReactNode }) {
+  return <MemoryRouter>{children}</MemoryRouter>;
+}
 
 const requestLoginCodeMock = vi.fn();
 const verifyLoginCodeMock = vi.fn();
@@ -35,7 +44,7 @@ afterEach(() => {
 describe('SignInScreen — email -> code step -> verify -> signed in', () => {
   it('disables "Email me a code" until the email looks valid', async () => {
     const user = userEvent.setup();
-    render(<SignInScreen />, { wrapper: MemoryRouter });
+    render(<SignInScreen />, { wrapper: RouterWrapper });
 
     const sendCodeButton = screen.getByRole('button', { name: 'Email me a code' });
     expect(sendCodeButton).toHaveProperty('disabled', true);
@@ -47,7 +56,7 @@ describe('SignInScreen — email -> code step -> verify -> signed in', () => {
   it('requests a code and shows the code step with no clickable "link" wording', async () => {
     requestLoginCodeMock.mockResolvedValue({ ok: true });
     const user = userEvent.setup();
-    render(<SignInScreen />, { wrapper: MemoryRouter });
+    render(<SignInScreen />, { wrapper: RouterWrapper });
 
     await user.type(screen.getByLabelText('Email address'), 'member@example.org');
     await user.click(screen.getByRole('button', { name: 'Email me a code' }));
@@ -64,7 +73,7 @@ describe('SignInScreen — email -> code step -> verify -> signed in', () => {
     requestLoginCodeMock.mockResolvedValue({ ok: true });
     verifyLoginCodeMock.mockResolvedValue({ token: 'custom-token-abc' });
     const user = userEvent.setup();
-    render(<SignInScreen />, { wrapper: MemoryRouter });
+    render(<SignInScreen />, { wrapper: RouterWrapper });
 
     await user.type(screen.getByLabelText('Email address'), 'member@example.org');
     await user.click(screen.getByRole('button', { name: 'Email me a code' }));
@@ -89,7 +98,7 @@ describe('SignInScreen — email -> code step -> verify -> signed in', () => {
       message: 'HMAC mismatch for hash xyz',
     });
     const user = userEvent.setup();
-    render(<SignInScreen />, { wrapper: MemoryRouter });
+    render(<SignInScreen />, { wrapper: RouterWrapper });
 
     await user.type(screen.getByLabelText('Email address'), 'member@example.org');
     await user.click(screen.getByRole('button', { name: 'Email me a code' }));
@@ -104,7 +113,7 @@ describe('SignInScreen — email -> code step -> verify -> signed in', () => {
   it('maps a rate-limit error to the "too many attempts" message', async () => {
     requestLoginCodeMock.mockRejectedValue({ code: 'resource-exhausted', message: 'x' });
     const user = userEvent.setup();
-    render(<SignInScreen />, { wrapper: MemoryRouter });
+    render(<SignInScreen />, { wrapper: RouterWrapper });
 
     await user.type(screen.getByLabelText('Email address'), 'member@example.org');
     await user.click(screen.getByRole('button', { name: 'Email me a code' }));
@@ -122,7 +131,7 @@ describe('SignInScreen — email -> code step -> verify -> signed in', () => {
     vi.useFakeTimers();
     try {
       requestLoginCodeMock.mockResolvedValue({ ok: true });
-      render(<SignInScreen />, { wrapper: MemoryRouter });
+      render(<SignInScreen />, { wrapper: RouterWrapper });
 
       fireEvent.change(screen.getByLabelText('Email address'), {
         target: { value: 'member@example.org' },
@@ -154,7 +163,7 @@ describe('SignInScreen — email -> code step -> verify -> signed in', () => {
   it('"Use a different email" returns to the chooser step', async () => {
     requestLoginCodeMock.mockResolvedValue({ ok: true });
     const user = userEvent.setup();
-    render(<SignInScreen />, { wrapper: MemoryRouter });
+    render(<SignInScreen />, { wrapper: RouterWrapper });
 
     await user.type(screen.getByLabelText('Email address'), 'member@example.org');
     await user.click(screen.getByRole('button', { name: 'Email me a code' }));
@@ -169,7 +178,7 @@ describe('SignInScreen — email -> code step -> verify -> signed in', () => {
 describe('SignInScreen — password path', () => {
   it('reveals the password field on request', async () => {
     const user = userEvent.setup();
-    render(<SignInScreen />, { wrapper: MemoryRouter });
+    render(<SignInScreen />, { wrapper: RouterWrapper });
 
     expect(screen.queryByLabelText('Password')).toBeNull();
     await user.click(screen.getByRole('button', { name: 'I have a password' }));
@@ -182,7 +191,7 @@ describe('SignInScreen — password path', () => {
       message: 'INVALID_PASSWORD',
     });
     const user = userEvent.setup();
-    render(<SignInScreen />, { wrapper: MemoryRouter });
+    render(<SignInScreen />, { wrapper: RouterWrapper });
 
     await user.type(screen.getByLabelText('Email address'), 'member@example.org');
     await user.click(screen.getByRole('button', { name: 'I have a password' }));

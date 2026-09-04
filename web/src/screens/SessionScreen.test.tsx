@@ -1,4 +1,4 @@
-import type { ReactElement } from 'react';
+import type { ReactNode } from 'react';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
@@ -265,7 +265,7 @@ function team(overrides: Partial<Team> = {}): Team {
   };
 }
 
-function renderAt(path: string, ui: ReactElement) {
+function renderAt(path: string, ui: ReactNode) {
   return render(
     <MemoryRouter initialEntries={[path]}>
       <Routes>
