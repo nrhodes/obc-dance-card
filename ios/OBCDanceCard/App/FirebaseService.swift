@@ -93,6 +93,18 @@ enum FirebaseService {
 
         Firestore.firestore().settings = settings
 
+        #if DEBUG
+        // Where this build is pointed. On a physical device the answer must
+        // be the Mac's LAN address — `localhost` there is the phone itself,
+        // and the emulator is never reached. No secrets: a host and ports.
+        if AppEnvironment.useEmulators {
+            print("emulator_target host=\(AppEnvironment.emulatorHost) "
+                  + "auth=\(AppEnvironment.authEmulatorPort) "
+                  + "firestore=\(AppEnvironment.firestoreEmulatorPort) "
+                  + "functions=\(AppEnvironment.functionsEmulatorPort)")
+        }
+        #endif
+
         isConfigured = true
     }
 
@@ -136,6 +148,16 @@ enum Callable {
             let result = try await FirebaseService.functions.httpsCallable(name).call(payload)
             return result.data
         } catch {
+            #if DEBUG
+            // The UI deliberately collapses every failure to generic copy, so
+            // this is the only place the real cause is visible. Domain + code
+            // only — never the payload, which can carry an email or a login
+            // code (plan §3.7). NSURLErrorDomain -1004 = can't connect,
+            // -1022 = blocked by App Transport Security, -1001 = timed out;
+            // FIRFunctionsErrorDomain codes are the server's HttpsError.
+            let ns = error as NSError
+            print("callable_failed \(name) \(ns.domain) \(ns.code)")
+            #endif
             throw ErrorMapper.toAppError(error)
         }
     }
