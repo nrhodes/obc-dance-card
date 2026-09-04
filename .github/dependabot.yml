@@ -12,6 +12,14 @@ updates:
           - minor
           - patch
     open-pull-requests-limit: 10
+    ignore:
+      # firebase-functions 6.x declares peer firebase-admin ^11 || ^12 || ^13.
+      # A firebase-admin major bump breaks the Cloud Build install of the
+      # bundled functions-deploy/package.json (no lockfile there), even when
+      # the local lockfile still resolves to 13.x — seen 2026-09-04. Lift
+      # this once firebase-functions supports admin >= 14.
+      - dependency-name: firebase-admin
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: github-actions
     directory: "/"
