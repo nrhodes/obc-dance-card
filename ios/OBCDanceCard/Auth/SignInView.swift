@@ -127,12 +127,31 @@ struct SignInView: View {
     }
 }
 
-/// The "enter the 6-digit code" step, shared between sign-in and any future
-/// re-authentication step. Sends the first code on appear.
+/// The "enter the 6-digit code" step as its own screen (sign-in).
 struct EmailCodeView: View {
     let email: String
     let onVerified: (String) async throws -> Void
     let onUseDifferentEmail: () -> Void
+
+    var body: some View {
+        Form {
+            EmailCodeSections(email: email, onVerified: onVerified, onUseDifferentEmail: onUseDifferentEmail)
+        }
+    }
+}
+
+/// The "enter the 6-digit code" step as `Section`s, so it can also sit inline
+/// in another `List`/`Form` — the Profile's set-password re-auth (plan §8.2,
+/// audit M1) embeds it rather than navigating the member anywhere. Sends the
+/// first code on appear. Counterpart of `web/src/auth/EmailCodeStep.tsx`.
+struct EmailCodeSections: View {
+    let email: String
+    let onVerified: (String) async throws -> Void
+    let onUseDifferentEmail: () -> Void
+    var useDifferentEmailLabel = "Use a different email"
+    /// "Sign in" for the sign-in flow; "Confirm" when re-authenticating inline.
+    var verifyLabel = "Sign in"
+    var verifyingLabel = "Signing in…"
 
     @StateObject private var flow = EmailCodeFlow()
     @State private var code = ""
@@ -147,55 +166,53 @@ struct EmailCodeView: View {
     }
 
     var body: some View {
-        Form {
-            Section {
-                Text("We've emailed a 6-digit code to \(email). It's valid for 10 minutes.")
-                    .font(.body)
-            }
-
-            if let message = flow.errorMessage ?? signInError {
-                Section {
-                    Text(message).foregroundStyle(.red)
-                }
-            }
-
-            Section("6-digit code") {
-                TextField("000000", text: $code)
-                    .keyboardType(.numberPad)
-                    .textContentType(.oneTimeCode)
-                    .font(.system(.title, design: .monospaced))
-                    .multilineTextAlignment(.center)
-                    .accessibilityLabel("Six digit code")
-                    .onChange(of: code) { _, newValue in
-                        // Accept a pasted code that carries spaces or dashes.
-                        code = String(newValue.filter(\.isNumber).prefix(6))
-                    }
-            }
-
-            Section {
-                Button {
-                    Task { await verify() }
-                } label: {
-                    Text(flow.phase == .verifying ? "Signing in…" : "Sign in").frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
-                .disabled(!canSubmit)
-
-                Button(resendLabel) {
-                    Task { await flow.sendCode(email: email) }
-                }
-                .disabled(flow.secondsUntilResend(now: now) > 0 || flow.phase == .sending)
-
-                Button("Use a different email", action: onUseDifferentEmail)
-            }
+        Section {
+            Text("We've emailed a 6-digit code to \(email). It's valid for 10 minutes.")
+                .font(.body)
         }
-        .onReceive(ticker) { now = $0 }
         .task {
             guard !sentOnce else { return }
             sentOnce = true
             await flow.sendCode(email: email)
         }
+
+        if let message = flow.errorMessage ?? signInError {
+            Section {
+                Text(message).foregroundStyle(.red)
+            }
+        }
+
+        Section("6-digit code") {
+            TextField("000000", text: $code)
+                .keyboardType(.numberPad)
+                .textContentType(.oneTimeCode)
+                .font(.system(.title, design: .monospaced))
+                .multilineTextAlignment(.center)
+                .accessibilityLabel("Six digit code")
+                .onChange(of: code) { _, newValue in
+                    // Accept a pasted code that carries spaces or dashes.
+                    code = String(newValue.filter(\.isNumber).prefix(6))
+                }
+        }
+
+        Section {
+            Button {
+                Task { await verify() }
+            } label: {
+                Text(flow.phase == .verifying ? verifyingLabel : verifyLabel).frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+            .disabled(!canSubmit)
+
+            Button(resendLabel) {
+                Task { await flow.sendCode(email: email) }
+            }
+            .disabled(flow.secondsUntilResend(now: now) > 0 || flow.phase == .sending)
+
+            Button(useDifferentEmailLabel, action: onUseDifferentEmail)
+        }
+        .onReceive(ticker) { now = $0 }
     }
 
     private var resendLabel: String {

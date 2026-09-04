@@ -21,11 +21,35 @@ import FirebaseFunctions
 /// (`unauthenticated`, `permission-denied`, `invalid-argument`,
 /// `failed-precondition`, `not-found`, `resource-exhausted`, …), never a
 /// Firebase-prefixed one.
-struct AppError: Error, Equatable {
+struct AppError: Error {
     var code: String
     var message: String
+    /// The `details` payload from a callable's `HttpsError` third argument,
+    /// when present (e.g. `{ reason: "recent-login-required" }` from
+    /// `setPassword` — audit M1). Server-controlled and structured, unlike
+    /// `message`, which is plan §8.3 display-safe copy — details are for
+    /// dispatching client behaviour, never for showing to the member.
+    var details: [String: Any]?
 
     static let generic = AppError(code: "unknown", message: "Something went wrong.")
+
+    /// `shared/src/schemas.ts#RECENT_LOGIN_REQUIRED_REASON`.
+    static let recentLoginRequiredReason = "recent-login-required"
+
+    /// True when this is `setPassword` saying the session is too old (plan
+    /// §8.2 amended 2026-09-05): the fix is an inline re-auth, not an error.
+    var isRecentLoginRequired: Bool {
+        code == "failed-precondition"
+            && details?["reason"] as? String == Self.recentLoginRequiredReason
+    }
+}
+
+/// `details` is deliberately outside equality: it is untyped, and every test
+/// and call site compares on the code/message pair.
+extension AppError: Equatable {
+    static func == (lhs: AppError, rhs: AppError) -> Bool {
+        lhs.code == rhs.code && lhs.message == rhs.message
+    }
 }
 
 enum ErrorMapper {
@@ -40,7 +64,9 @@ enum ErrorMapper {
         if nsError.domain == FunctionsErrorDomain,
            let code = FunctionsErrorCode(rawValue: nsError.code) {
             let message = nsError.localizedDescription
-            return AppError(code: httpsCode(for: code), message: message)
+            // The HttpsError third argument rides along in userInfo.
+            let details = nsError.userInfo[FunctionsErrorDetailsKey] as? [String: Any]
+            return AppError(code: httpsCode(for: code), message: message, details: details)
         }
         return AppError(code: nsError.domain.isEmpty ? "unknown" : "unknown",
                         message: nsError.localizedDescription)
