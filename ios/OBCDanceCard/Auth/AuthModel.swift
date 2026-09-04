@@ -69,7 +69,14 @@ final class AuthModel: ObservableObject {
                     self.member = nil
                     self.memberPrivate = nil
                     self.memberDocState = .pending
-                } else {
+                } else if self.listeningUid != user!.uid {
+                    // A re-sign-in for the *same* member — the Profile's
+                    // inline set-password re-auth (plan §8.2, audit M1)
+                    // signs in again with a fresh custom token — must not
+                    // restart the listeners: that flips status to .loading
+                    // and tears down the screen the member is standing on,
+                    // which is exactly the "navigated away" the fix exists
+                    // to avoid. The docs haven't changed; keep them.
                     self.startMemberListeners(uid: user!.uid)
                 }
                 self.recomputeStatus()
@@ -79,6 +86,7 @@ final class AuthModel: ObservableObject {
 
     private func startMemberListeners(uid: String) {
         stopMemberListeners()
+        listeningUid = uid
         memberDocState = .pending
         recomputeStatus()
 
@@ -179,7 +187,11 @@ final class AuthModel: ObservableObject {
         startMemberListeners(uid: user.uid)
     }
 
+    /// The uid the member listeners are currently attached for.
+    private var listeningUid: String?
+
     private func stopMemberListeners() {
+        listeningUid = nil
         memberListener?.remove()
         memberListener = nil
         privateListener?.remove()

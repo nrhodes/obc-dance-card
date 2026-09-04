@@ -46,7 +46,7 @@ struct ProfileView: View {
 
                     AppLockSection()
 
-                    PasswordSection(hasPassword: memberPrivate.hasPassword)
+                    PasswordSection(hasPassword: memberPrivate.hasPassword, email: memberPrivate.emailLower)
 
                     Section {
                         NavigationLink("Getting started / Help", value: Route.help)
@@ -234,12 +234,21 @@ private struct AppLockSection: View {
 // MARK: - Password
 
 /// Setting a password calls the server-side `setPassword` callable, which
-/// uses the member's current session — no Firebase "recent login" re-auth, so
-/// a member is never bounced to a sign-in screen just to add an optional
-/// password. Removing rotates it to an unknowable value server-side without
-/// ending the session (plan §8.2).
+/// requires the member to have signed in within the last 10 minutes (plan
+/// §8.2 as amended 2026-09-05, audit M1). The member is NEVER navigated away
+/// to satisfy that: when the server answers `failed-precondition` with
+/// `details.reason == "recent-login-required"`, this section stays put,
+/// keeps the password already typed, takes the emailed 6-digit code inline
+/// (`EmailCodeSections`), signs in with the custom token — which refreshes
+/// the session's `auth_time` — and retries automatically. Mirrors
+/// `web/src/screens/PasswordSection.tsx`. Removing a password rotates it to
+/// an unknowable value server-side without ending the session (risk-reducing,
+/// so no freshness check).
 private struct PasswordSection: View {
     let hasPassword: Bool
+    let email: String
+
+    @EnvironmentObject private var auth: AuthModel
 
     @State private var password = ""
     @State private var confirmPassword = ""
@@ -247,6 +256,9 @@ private struct PasswordSection: View {
     @State private var errorMessage: String?
     @State private var successMessage: String?
     @State private var confirmingRemoval = false
+    /// Inline re-auth step (audit M1): shown instead of the form, never a
+    /// navigation. `password`/`confirmPassword` are untouched while it's up.
+    @State private var needsReauth = false
 
     var body: some View {
         if hasPassword {
@@ -264,6 +276,19 @@ private struct PasswordSection: View {
             } message: {
                 Text("You will need to sign in with an emailed code next time instead of a password.")
             }
+        } else if needsReauth {
+            Section("Set a password (optional)") {
+                Text("To keep your account safe, we've emailed you a 6-digit code. Enter it here to finish setting your password.")
+                    .accessibilityAddTraits(.updatesFrequently)
+            }
+            EmailCodeSections(
+                email: email,
+                onVerified: { token in await reauthVerified(token: token) },
+                onUseDifferentEmail: { needsReauth = false },
+                useDifferentEmailLabel: "Cancel",
+                verifyLabel: "Confirm",
+                verifyingLabel: "Confirming…"
+            )
         } else {
             Section("Set a password (optional)") {
                 Text("You can always sign in with an emailed code. A password is optional and just saves you a step.")
@@ -298,8 +323,33 @@ private struct PasswordSection: View {
             password = ""
             confirmPassword = ""
         } catch {
+            if ErrorMapper.toAppError(error).isRecentLoginRequired {
+                needsReauth = true
+            } else {
+                errorMessage = ErrorMapper.genericMessage(error)
+            }
+        }
+        submitting = false
+    }
+
+    /// Runs once the inline code step verifies. Signing in with the fresh
+    /// custom token gives the session a fresh `auth_time`, so the retry
+    /// clears the server's recent-login check. Whatever fails here is not
+    /// the "please re-auth" case again (we just did that), so it's shown as a
+    /// normal error back on the form rather than looping on the code step.
+    private func reauthVerified(token: String) async {
+        submitting = true
+        errorMessage = nil
+        do {
+            try await auth.signIn(withCustomToken: token)
+            try await Api.setPassword(password)
+            successMessage = "Password set."
+            password = ""
+            confirmPassword = ""
+        } catch {
             errorMessage = ErrorMapper.genericMessage(error)
         }
+        needsReauth = false
         submitting = false
     }
 

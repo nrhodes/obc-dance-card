@@ -5,6 +5,7 @@
 //  format,actionErrors}.test.ts` and `web/src/push/deepLink.test.ts`.
 //
 
+import FirebaseFunctions
 import XCTest
 @testable import OBCDanceCard
 
@@ -286,6 +287,32 @@ final class ErrorMappingTests: XCTestCase {
         let b = ErrorMapper.passwordSignIn(appError("permission-denied"))
         XCTAssertEqual(a, b)
         XCTAssertEqual(a, ErrorMapper.passwordMismatch)
+    }
+
+    /// Audit M1 (plan §8.2): `setPassword` on a stale session answers
+    /// `failed-precondition` with `details.reason = "recent-login-required"`.
+    /// The client dispatches on that — and only that — to re-auth inline.
+    func testRecentLoginRequiredIsReadFromTheCallableDetails() {
+        let raw = NSError(
+            domain: FunctionsErrorDomain,
+            code: FunctionsErrorCode.failedPrecondition.rawValue,
+            userInfo: [
+                NSLocalizedDescriptionKey: "For your security, please confirm it's you first.",
+                FunctionsErrorDetailsKey: ["reason": "recent-login-required"],
+            ]
+        )
+        let mapped = ErrorMapper.toAppError(raw)
+        XCTAssertEqual(mapped.code, "failed-precondition")
+        XCTAssertTrue(mapped.isRecentLoginRequired)
+        // Idempotent: a second pass must keep the details, not drop them.
+        XCTAssertTrue(ErrorMapper.toAppError(mapped).isRecentLoginRequired)
+
+        // A plain failed-precondition (e.g. a date clash) is not a re-auth cue…
+        XCTAssertFalse(AppError(code: "failed-precondition", message: "You already play on 11 Jan.").isRecentLoginRequired)
+        // …and neither is the reason on any other code.
+        XCTAssertFalse(
+            AppError(code: "invalid-argument", message: "x", details: ["reason": "recent-login-required"]).isRecentLoginRequired
+        )
     }
 
     func testPasswordStrengthMirrorsTheSharedPolicy() {
