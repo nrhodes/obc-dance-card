@@ -31,6 +31,6 @@
     "firebase-tools": "^15.28.2",
     "prettier": "^3.4.2",
     "typescript": "^5.7.2",
-    "typescript-eslint": "^8.18.1"
+    "typescript-eslint": "^8.69.0"
   }
 }
