@@ -7,7 +7,7 @@
 //  scheme — a release build can never be pointed at a local emulator, and a
 //  debug build run without the scheme still talks to the real project.
 //
-//  `GoogleService-Info.plist` is gitignored (plan §14.2); when it's absent
+//  `GoogleService-Info.plist` is committed (plan §14.2, amended); when it's absent
 //  and we're in emulator mode, options are synthesised for the `demo-obc`
 //  project so a fresh checkout can run against the emulator with no secrets
 //  at all. When it's absent and we're *not* in emulator mode, that's a

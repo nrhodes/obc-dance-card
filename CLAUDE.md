@@ -20,7 +20,7 @@ npm run emulators                       # Firestore+Auth+Functions+UI on localho
 - Clients never write Firestore except `notifications/{id}.read/readAt`. All mutations are callables.
 - `shared/` is the single source of truth for types, enums, zod schemas, callable contracts.
 - Every pairing/team mutation runs in a transaction and must satisfy `validatePairingGroup` / `validateTeamGroup` (plan §7) before commit.
-- Never log codes, tokens, emails, phones. Never commit secrets (`.env`, service accounts, `GoogleService-Info.plist` are gitignored).
+- Never log codes, tokens, emails, phones. Never commit secrets (`.env`, service accounts are gitignored). `GoogleService-Info.plist` is public Firebase config, committed like `web/.env.production`.
 - Tests and seeds talk only to the emulator (`demo-*` project ids).
 - Date logic uses `Pacific/Auckland` via `shared/src/time.ts`.
 

@@ -32,7 +32,7 @@ ios/OBCDanceCard/
   Features/   Card, Programme, Session (+ team panel), Invites, Notifications, Profile, Common (pickers, tabs)
   Support/    NZ date helpers, formatting, error mapping
 ios/OBCDanceCardTests/    unit tests for the ported pure logic and the Codable mirrors
-ios/GoogleService-Info.plist.example
+ios/OBCDanceCard/GoogleService-Info.plist   committed — public Firebase config, like web/.env.production
 ```
 
 Files whose header says "port of …" are 1:1 ports of a `web/src/lib/*.ts`
@@ -45,7 +45,7 @@ are ports of that module's `*.test.ts`.
 The `OBCDanceCard (Emulator)` scheme sets `OBC_USE_EMULATORS=1`, and the app treats that
 as "use the local emulator" **only in a DEBUG build** — a release build can
 never be pointed at one. With it set, the app synthesises `demo-obc` Firebase
-options in code, so no `GoogleService-Info.plist` is needed.
+options in code and ignores the committed plist.
 
 From the repo root, in separate terminals:
 
@@ -87,12 +87,11 @@ empty namespace.
 
 ## Running against a real project (Simulator or device)
 
-1. **Plist.** Firebase console → Project settings → Your apps → the iOS app
-   (bundle id `nz.org.orewabridge.dancecard`; register it if absent) →
-   download `GoogleService-Info.plist` → save as
-   `ios/OBCDanceCard/GoogleService-Info.plist`. Gitignored; the synchronized
-   folder picks it up with no project edit. Use `obc-dance-card-dev`, not
-   production, for testing.
+1. **Plist — already there.** `ios/OBCDanceCard/GoogleService-Info.plist` is
+   committed and points at `obc-dance-card` (production), matching
+   `web/.env.production`. It's public config (project id, sender id, app id,
+   API key), not a secret. To target another project instead, overwrite it:
+   `npx firebase apps:sdkconfig IOS <appId> --project <id> -o ios/OBCDanceCard/GoogleService-Info.plist`.
 2. **App Check debug token.** Every DEBUG build uses Firebase's debug
    provider (App Attest doesn't exist on the Simulator, and on a device needs
    console registration). On first launch the Xcode console prints

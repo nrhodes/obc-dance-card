@@ -673,7 +673,7 @@ Unchanged from v1 in format (see `docs/csv-formats.md`, templates in
   Messaging, AppCheck (App Attest, DeviceCheck fallback).
 - Keychain persistence (SDK default). Optional Face ID / Touch ID app lock via
   `LAContext` with passcode fallback; default off; toggle in Profile.
-- `GoogleService-Info.plist` is gitignored; a template with placeholders is committed.
+- `GoogleService-Info.plist` is **committed** (amended 2026-09-04): it holds the same public values as `web/.env.production` — project id, sender id, app id, API key — and the web already commits those. Nothing in it authorises anything; App Check and rules do. A fresh checkout targets the real project by default, as the web does; the emulator is an opt-in scheme.
 - Mirror `shared` types as `Codable` structs in `ios/Shared/Models.swift` with a
   comment pointing to the TS source of truth; keep enum raw values identical.
 - Parity with web member screens; no admin screens.

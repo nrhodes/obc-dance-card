@@ -28,7 +28,7 @@ ios/OBCDanceCard/
                   Invites, Notifications, Profile (prefs, password, devices, visitors)
   Support/        NZ date helpers (mirror shared/src/time.ts), error mapping, formatting
 ios/OBCDanceCardTests/  view-model tests against the emulator
-ios/GoogleService-Info.plist.example  (real plist is gitignored)
+ios/OBCDanceCard/GoogleService-Info.plist  (committed: public config, like web/.env.production)
 ```
 
 ## Non-negotiables (from the plan)
