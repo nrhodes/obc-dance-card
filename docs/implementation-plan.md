@@ -1156,6 +1156,25 @@ programme import's `stewardEmail` column, so changing a steward mid-year
 > §6) from the next read onward — no cascade, since the lock instant is
 > computed at read time rather than stored.
 
+### B8. App Check: configure the DeviceCheck fallback for iOS (captured 2026-09-05)
+
+**Intent.** `FirebaseService` registers App Attest for Release builds with a
+DeviceCheck fallback for devices where App Attest is unavailable (iOS 13 and
+earlier, some enterprise-managed devices, App Attest quota exhaustion). App
+Attest is configured in the Firebase console; the DeviceCheck side is not, so
+a device that falls back is rejected by App Check enforcement and cannot sign
+in. Every phone the club is likely to see runs iOS 14+, so this is a
+robustness item rather than a launch blocker.
+
+**Console steps (no code change).**
+1. Apple Developer portal → Keys → "+" → tick **DeviceCheck** → register,
+   download the `.p8` once, note the Key ID (the APNs key cannot be reused;
+   DeviceCheck needs its own key).
+2. Firebase console → App Check → Apps → the iOS app → providers → enable
+   **DeviceCheck**, upload the `.p8`, enter Key ID + Team ID (`9URFEM2LBL`).
+3. Verify on a device with App Attest disabled or by temporarily forcing the
+   fallback in a Debug build; keep enforcement on throughout.
+
 ### Cross-cutting notes for the backlog
 
 - **B3 is a prerequisite** for B1, B4, and the value of B2 (bulk-setting across the
