@@ -118,9 +118,13 @@ jobs:
         run: |
           xcodebuild -resolvePackageDependencies \
             -project OBCDanceCard.xcodeproj \
-            -scheme OBCDanceCard \
+            -scheme "OBCDanceCard (Emulator)" \
             -clonedSourcePackagesDirPath .spm
 
+      # CI runs the *emulator* scheme: a runner has no GoogleService-Info.plist,
+      # and that scheme is the one that starts without it (it synthesises
+      # demo-obc options). The default 'OBCDanceCard' scheme is the real
+      # backend, as for the web app, and needs the plist.
       # Simulator names and OS versions move with the runner image, so pick a
       # concrete available device by id rather than hard-coding "iPhone 17".
       - name: Pick a simulator
@@ -196,7 +200,7 @@ jobs:
         run: |
           xcodebuild test \
             -project OBCDanceCard.xcodeproj \
-            -scheme OBCDanceCard \
+            -scheme "OBCDanceCard (Emulator)" \
             -destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
             -clonedSourcePackagesDirPath .spm \
             -resultBundlePath OBCDanceCard.xcresult

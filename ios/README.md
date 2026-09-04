@@ -42,7 +42,7 @@ are ports of that module's `*.test.ts`.
 
 ## Running against the emulator
 
-The `OBCDanceCard` scheme sets `OBC_USE_EMULATORS=1`, and the app treats that
+The `OBCDanceCard (Emulator)` scheme sets `OBC_USE_EMULATORS=1`, and the app treats that
 as "use the local emulator" **only in a DEBUG build** — a release build can
 never be pointed at one. With it set, the app synthesises `demo-obc` Firebase
 options in code, so no `GoogleService-Info.plist` is needed.
@@ -60,7 +60,7 @@ export GCLOUD_PROJECT=demo-obc
 npm run seed -w @obc/functions   # 20 fake members incl. admin@example.org
 ```
 
-Then Run the `OBCDanceCard` scheme on a simulator and sign in as a seeded
+Then Run the `OBCDanceCard (Emulator)` scheme on a simulator and sign in as a seeded
 member. The emulator prints the login-code email to the Functions log rather
 than sending it, so watch that terminal for the 6-digit code.
 
@@ -71,14 +71,48 @@ On a **physical device** the simulator's `127.0.0.1` is the phone itself. Set
 Note the seeded programme must be **published** before the Programme tab shows
 anything — members never see a draft (rules, plan §10).
 
-## Running against a real project
+## Two schemes
 
-Drop the real `GoogleService-Info.plist` into `ios/OBCDanceCard/` (gitignored;
-see `GoogleService-Info.plist.example`), and run without `OBC_USE_EMULATORS`.
-App Check uses App Attest with a DeviceCheck fallback, so the app's App Attest
-key must be registered in the Firebase console before callables will accept it
-— `docs/ops-runbook.md` covers that, and `docs/security-checklist.md` tracks
-it.
+| scheme | talks to | needs |
+|---|---|---|
+| **`OBCDanceCard`** (default) | the real project in the bundled plist — like the web app | `GoogleService-Info.plist` + an App Check debug token |
+| `OBCDanceCard (Emulator)` | the local emulator (`demo-obc`) | emulators + seed running; **no plist** |
+
+They differ only in environment variables: the Emulator scheme sets
+`OBC_USE_EMULATORS=1` (and `OBC_EMULATOR_HOST`). CI runs the Emulator scheme,
+since a runner has no plist. Emulator mode always
+synthesises `demo-obc` options — it ignores a bundled plist on purpose, since
+the emulator is started as `demo-obc` and a real project id would land in an
+empty namespace.
+
+## Running against a real project (Simulator or device)
+
+1. **Plist.** Firebase console → Project settings → Your apps → the iOS app
+   (bundle id `nz.org.orewabridge.dancecard`; register it if absent) →
+   download `GoogleService-Info.plist` → save as
+   `ios/OBCDanceCard/GoogleService-Info.plist`. Gitignored; the synchronized
+   folder picks it up with no project edit. Use `obc-dance-card-dev`, not
+   production, for testing.
+2. **App Check debug token.** Every DEBUG build uses Firebase's debug
+   provider (App Attest doesn't exist on the Simulator, and on a device needs
+   console registration). On first launch the Xcode console prints
+   `Firebase App Check debug token: <uuid>` — register it once per project:
+   console → App Check → Apps → the iOS app → Manage debug tokens, or
+   `firebase appcheck:debugtokens:create <uuid> --project obc-dance-card-dev`.
+   Until it's registered, every callable fails with the generic error (the
+   console shows `callable_failed … FIRFunctionsErrorDomain 16`
+   unauthenticated). Each device/simulator has its own token.
+3. **Be a member.** The real project only knows members an admin imported;
+   your email has to be in its `members` collection or `requestLoginCode`
+   silently succeeds and no code ever arrives (plan §8.2). The seed script
+   refuses non-`demo-` projects by design.
+4. Select the **`OBCDanceCard`** scheme (the default) and Run. HTTPS to Google — no
+   LAN address, no ATS exception, any network.
+
+Release builds use App Attest with a DeviceCheck fallback; the app's App
+Attest key must be registered in the console before a TestFlight build's
+callables are accepted — `docs/ops-runbook.md` covers that, and
+`docs/security-checklist.md` tracks it.
 
 ## Tests
 

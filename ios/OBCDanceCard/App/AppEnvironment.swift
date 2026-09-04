@@ -49,11 +49,20 @@ enum AppEnvironment {
     /// Firebase options: the bundled plist when present, else synthesised
     /// emulator options. Returns nil when neither applies.
     static func firebaseOptions() -> FirebaseOptions? {
+        // Emulator mode always synthesises `demo-obc` options, *even when a
+        // real plist is bundled*. The emulator is started with
+        // `--project demo-obc`; sending it a real project id lands in a
+        // different namespace where none of the seed data exists, and the
+        // app looks connected but empty.
+        if useEmulators { return emulatorOptions() }
         if let path = Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist"),
            let options = FirebaseOptions(contentsOfFile: path) {
             return options
         }
-        guard useEmulators else { return nil }
+        return nil
+    }
+
+    private static func emulatorOptions() -> FirebaseOptions {
         // Emulator-only stand-in. The emulator itself validates none of
         // these, but the Firebase SDK does before it ever sends a request:
         // `FirebaseInstallations` rejects an API key that isn't 39

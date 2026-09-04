@@ -49,11 +49,16 @@ enum FirebaseService {
         // runs with `ENFORCE_APP_CHECK=false`, accepts the request anyway.
         // It is noise, not a failure.
         #if DEBUG
-        if AppEnvironment.useEmulators {
-            AppCheck.setAppCheckProviderFactory(AppCheckDebugProviderFactory())
-        } else {
-            AppCheck.setAppCheckProviderFactory(OBCAppCheckProviderFactory())
-        }
+        // Every DEBUG build uses the debug provider, not just emulator runs.
+        // App Attest is unavailable on the Simulator and needs the app's
+        // attest key registered in the console on a device, so against a
+        // real *dev* project a Debug build would otherwise fail every
+        // callable with the same generic error as an unreachable server.
+        // The debug provider prints a token on first launch; register it
+        // once per project (Firebase console → App Check → Apps → Manage
+        // debug tokens, or `firebase appcheck:debugtokens:create`). Never
+        // compiled into Release, which keeps App Attest.
+        AppCheck.setAppCheckProviderFactory(AppCheckDebugProviderFactory())
         #else
         AppCheck.setAppCheckProviderFactory(OBCAppCheckProviderFactory())
         #endif
@@ -66,9 +71,10 @@ enum FirebaseService {
             // says what to do (the plist is gitignored — see
             // ios/GoogleService-Info.plist.example).
             fatalError(
-                "Firebase is not configured: add ios/OBCDanceCard/GoogleService-Info.plist "
-                + "(see GoogleService-Info.plist.example), or run the OBCDanceCard scheme "
-                + "with OBC_USE_EMULATORS=1 to use the local emulator."
+                "Firebase is not configured. The 'OBCDanceCard' scheme talks to the real "
+                + "project and needs ios/OBCDanceCard/GoogleService-Info.plist from the "
+                + "Firebase console (see GoogleService-Info.plist.example). To use the local "
+                + "emulator instead, select the 'OBCDanceCard (Emulator)' scheme."
             )
         }
 
