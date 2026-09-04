@@ -1016,6 +1016,23 @@ session/series, to gauge turnout and chase low numbers.
 
 **Open.** Live (denormalised counters) vs. on-demand aggregation — start on-demand.
 
+> **Status: implemented 2026-09-04.** Deviated from the sketch above: no
+> `getSignupCounts` callable was added, and no functions/rules/index changed.
+> `ProgrammeEditor` already subscribed to the whole selected year's `entries`
+> (a date-range query on the top-level collection) to compute the bare
+> non-cancelled count it fed `SessionEditDialog`'s `activeEntryCount` — so a
+> callable would have added a round trip and a second source of truth for
+> data the client already has. B5 is a pure client-side aggregation
+> (`web/src/lib/signupCounts.ts`: `sessionSignupCounts`,
+> `formatSignupSummary`, `seriesSignupRange`) over that same subscription —
+> counts are live, updating as entries change, with no polling or extra
+> reads. Also added a "One-off sessions" card (standalone `seriesId == null`
+> sessions, sorted by date) to the editor, since Holiday Bridge/other
+> standalone sessions had no row anywhere in the admin editor before this —
+> a real gap, not scoped by the original sketch but a natural extension of
+> the same per-session aggregation. `noBridge` sessions show "—" (they take
+> no sign-ups) rather than "No sign-ups yet".
+
 ### Cross-cutting notes for the backlog
 
 - **B3 is a prerequisite** for B1, B4, and the value of B2 (bulk-setting across the

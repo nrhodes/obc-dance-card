@@ -47,8 +47,11 @@ async function openAdmin(page: Page, child: string): Promise<void> {
   // The admin links live behind an "Admin" disclosure that closes on each
   // navigation, so re-open it each time. In-app (SPA) clicks preserve the
   // in-memory "acting on behalf" state that a full page.goto would reset.
+  // Scoped to `.admin-menu-list` (not just the `Main` nav) because
+  // "Programme" names both the member's own `/programme` link and the
+  // admin `/admin/programme` link, and both live in the same `<nav>`.
   await page.getByLabel('Main').getByRole('button', { name: /Admin/ }).click();
-  await page.getByLabel('Main').getByRole('link', { name: child, exact: true }).click();
+  await page.locator('.admin-menu-list').getByRole('link', { name: child, exact: true }).click();
 }
 
 
@@ -93,6 +96,17 @@ test('admin acts on behalf of a member, audits it, checks integrity, and broadca
     await expect(rosterCard.getByRole('heading', { name: 'Looking for a partner' })).toBeVisible();
     await expect(rosterCard.getByText(MEMBER_NAME)).toBeVisible();
     await expect(rosterCard.getByText('Admin User')).toHaveCount(0);
+
+    // ---- Admin: Programme editor shows a live sign-up summary (§21 B5) ----
+    // The "looking for a partner" entry just created is a solo sign-up on
+    // Campbell Cave Pairs' 2027-02-15 session — the editor's per-session
+    // summary (`lib/signupCounts.ts`) is a pure client-side aggregation over
+    // the same `entries` subscription it already used for the bare count, so
+    // it reflects the new entry live with no reload.
+    await openAdmin(adminPage, 'Programme');
+    await adminPage.getByRole('button', { name: /Campbell Cave Pairs \(Pairs, Scr\)/ }).click();
+    const campbellCaveRow = adminPage.getByRole('row', { name: /15 Feb 2027/ });
+    await expect(campbellCaveRow.getByText('1 looking')).toBeVisible();
 
     // ---- Stop acting ----
     await adminPage.getByRole('button', { name: 'Stop' }).click();

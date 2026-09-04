@@ -9,17 +9,26 @@
  * front whether a date move will be refused (`updateSession` cascade rules,
  * plan §9.3) — computed from a single per-year `entries` subscription rather
  * than one listener per session.
+ *
+ * Sign-up counts (plan §21 B5) are a pure client-side aggregation
+ * (`lib/signupCounts.ts`) over that same already-subscribed `entries` data —
+ * see the plan's B5 status note for why this deviates from the sketch's
+ * `getSignupCounts` callable. Counts are therefore live, with no new
+ * callable/rules/index.
  */
 import { useEffect, useMemo, useState } from 'react';
 import { collection, onSnapshot, orderBy, query, where } from 'firebase/firestore';
 import { paths, type Entry, type Programme, type Series, type Session } from '@obc/shared';
 import { db } from '../../firebase';
 import { formatDateNZ } from '../../lib/format';
+import { formatSignupSummary, seriesSignupRange, sessionSignupCounts, type SignupCounts } from '../../lib/signupCounts';
 import { SubscriptionError } from '../../components/SubscriptionError';
 import { SeriesEditDialog } from './SeriesEditDialog';
 import { SessionEditDialog } from './SessionEditDialog';
 
 type EditorDialog = { kind: 'series'; series: Series } | { kind: 'session'; session: Session };
+
+const EMPTY_SIGNUP_COUNTS: SignupCounts = { pairs: 0, teams: 0, looking: 0, available: 0, unavailable: 0, total: 0 };
 
 export function ProgrammeEditor() {
   const [programmes, setProgrammes] = useState<Programme[]>([]);
@@ -85,16 +94,30 @@ export function ProgrammeEditor() {
     };
   }, [year]);
 
-  const activeCountBySessionId = useMemo(() => {
-    const counts = new Map<string, number>();
+  // One grouping pass over the year's entries, then one aggregation per
+  // session — avoids an O(sessions × entries) scan. `total` here is the
+  // same "non-cancelled entries" count `SessionEditDialog` calls
+  // `activeEntryCount`.
+  const signupCountsBySessionId = useMemo(() => {
+    const entriesBySessionId = new Map<string, Entry[]>();
     for (const e of entries) {
-      if (e.status === 'cancelled') continue;
-      counts.set(e.sessionId, (counts.get(e.sessionId) ?? 0) + 1);
+      const list = entriesBySessionId.get(e.sessionId);
+      if (list) list.push(e);
+      else entriesBySessionId.set(e.sessionId, [e]);
+    }
+    const counts = new Map<string, SignupCounts>();
+    for (const sess of sessions) {
+      counts.set(sess.id, sessionSignupCounts(sess.id, entriesBySessionId.get(sess.id) ?? []));
     }
     return counts;
-  }, [entries]);
+  }, [entries, sessions]);
 
   const sortedSeries = useMemo(() => [...series].sort((a, b) => a.weekday.localeCompare(b.weekday) || a.order - b.order), [series]);
+
+  const standaloneSessions = useMemo(
+    () => sessions.filter((sess) => sess.seriesId == null).sort((a, b) => a.date.localeCompare(b.date)),
+    [sessions],
+  );
 
   if (programmes.length === 0 && !error) return null;
 
@@ -125,6 +148,11 @@ export function ProgrammeEditor() {
       {sortedSeries.map((s) => {
         const seriesSessions = sessions.filter((sess) => sess.seriesId === s.id).sort((a, b) => a.date.localeCompare(b.date));
         const expanded = expandedSeriesId === s.id;
+        const rollUp = seriesSignupRange(
+          seriesSessions.map((sess) => sess.id),
+          signupCountsBySessionId,
+          s.format,
+        );
         return (
           <div key={s.id} className="card">
             <div className="actions-row">
@@ -136,6 +164,7 @@ export function ProgrammeEditor() {
               >
                 {s.weekday} &middot; {s.name} ({s.format}, {s.scoring})
               </button>
+              {rollUp && <span className="muted">{rollUp}</span>}
               <button type="button" className="button button-secondary" onClick={() => setDialog({ kind: 'series', series: s })}>
                 Edit series
               </button>
@@ -159,7 +188,7 @@ export function ProgrammeEditor() {
                       <td>{sess.title}</td>
                       <td>{sess.kind}</td>
                       <td>{sess.partnerRequired ? 'Yes' : 'No'}</td>
-                      <td>{activeCountBySessionId.get(sess.id) ?? 0}</td>
+                      <td>{formatSignupSummary(signupCountsBySessionId.get(sess.id) ?? EMPTY_SIGNUP_COUNTS, s.format)}</td>
                       <td>
                         <button type="button" className="button button-link" onClick={() => setDialog({ kind: 'session', session: sess })}>
                           Edit
@@ -173,6 +202,44 @@ export function ProgrammeEditor() {
           </div>
         );
       })}
+
+      {standaloneSessions.length > 0 && (
+        <div className="card">
+          <h3>One-off sessions</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Title</th>
+                <th>Kind</th>
+                <th>Partner required</th>
+                <th>Sign-ups</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {standaloneSessions.map((sess) => (
+                <tr key={sess.id}>
+                  <td>{formatDateNZ(sess.date)}</td>
+                  <td>{sess.title}</td>
+                  <td>{sess.kind}</td>
+                  <td>{sess.partnerRequired ? 'Yes' : 'No'}</td>
+                  <td>
+                    {sess.kind === 'noBridge'
+                      ? '—'
+                      : formatSignupSummary(signupCountsBySessionId.get(sess.id) ?? EMPTY_SIGNUP_COUNTS, sess.format ?? 'Pairs')}
+                  </td>
+                  <td>
+                    <button type="button" className="button button-link" onClick={() => setDialog({ kind: 'session', session: sess })}>
+                      Edit
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {dialog?.kind === 'series' && year != null && (
         <SeriesEditDialog
@@ -190,7 +257,7 @@ export function ProgrammeEditor() {
         <SessionEditDialog
           year={year}
           session={dialog.session}
-          activeEntryCount={activeCountBySessionId.get(dialog.session.id) ?? 0}
+          activeEntryCount={signupCountsBySessionId.get(dialog.session.id)?.total ?? 0}
           onClose={() => setDialog(null)}
           onSaved={(message) => {
             setDialog(null);
