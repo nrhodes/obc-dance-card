@@ -375,7 +375,9 @@ function DayCell({
   onSelect: (cell: MonthDayCell) => void;
   compact?: boolean;
 }) {
-  if (!cell) return <div className="month-cell month-cell-blank" aria-hidden="true" />;
+  // Blank cells must carry the same size classes as real ones — a 48px blank
+  // next to 22px compact cells makes the year grid's rows ragged.
+  if (!cell) return <div className={`month-cell month-cell-blank${compact ? ' month-cell-compact' : ''}`} aria-hidden="true" />;
   const meta = STATUS_META[cell.status];
   const isToday = cell.date === today;
   const clickable = cell.sessions.length > 0;
@@ -388,11 +390,11 @@ function DayCell({
       onClick={() => onSelect(cell)}
     >
       <span className="month-cell-day">{cell.dayOfMonth}</span>
-      {meta.glyph && (
-        <span className="month-cell-glyph" aria-hidden="true">
-          {meta.glyph}
-        </span>
-      )}
+      {/* Always rendered (nbsp when statusless) so every cell is two lines
+          tall — otherwise glyph-less cells are shorter and rows misalign. */}
+      <span className="month-cell-glyph" aria-hidden="true">
+        {meta.glyph || '\u00A0'}
+      </span>
     </button>
   );
 }

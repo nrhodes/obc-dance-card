@@ -218,4 +218,16 @@ describe('buildYearOverview', () => {
     const cell = march.weeks.flat().find((c) => c?.date === '2027-03-08');
     expect(cell?.status).toBe('booked');
   });
+
+  it('pads every month to exactly 6 week rows so the year grid lines up', () => {
+    const overview = buildYearOverview(2026, [], [], '2026-01-01');
+    for (const m of overview) {
+      expect(m.weeks).toHaveLength(6);
+    }
+    // Padding rows are all-blank, never truncation: every real day survives.
+    const feb = overview.find((m) => m.month === 2)!;
+    const days = feb.weeks.flat().filter((c) => c != null);
+    // Feb 2026 has 20 weekdays (Mon-Fri).
+    expect(days).toHaveLength(20);
+  });
 });
