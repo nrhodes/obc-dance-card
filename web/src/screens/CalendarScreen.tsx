@@ -283,7 +283,7 @@ export function CalendarScreen() {
             <button type="button" className="button button-secondary" disabled={viewYear === minYear && viewMonth === 1} onClick={prevMonth}>
               &larr; Prev
             </button>
-            <h2>
+            <h2 className="month-nav-title">
               {MONTH_NAMES[viewMonth - 1]} {viewYear}
             </h2>
             <button type="button" className="button button-secondary" disabled={viewYear === maxYear && viewMonth === 12} onClick={nextMonth}>

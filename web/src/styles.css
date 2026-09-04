@@ -605,6 +605,18 @@ td {
   color: var(--color-status-open-text);
 }
 
+/* The Month view's "<Month> <Year>" heading sits in a wrapping .actions-row
+   between the Prev/Next buttons. At 200% text zoom in a 320px viewport (the
+   a11y.spec reflow probe) even the heading alone can exceed the viewport, so
+   it must be allowed to shrink and break — WCAG 1.4.10 reflow. */
+.month-nav-title {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  text-align: center;
+  margin: 0;
+}
+
 .month-grid {
   display: flex;
   flex-direction: column;
