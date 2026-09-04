@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <!--
+    OBC Dance Card app icon — a clean redraw of the club's mark from
+    orewabridgeclub.org: three fanned playing cards spelling O, B, C
+    (diamond, spade, heart pips). Source of truth for every rendered size;
+    regenerate with web/icon-src/render.sh.
+  -->
+  <defs>
+    <clipPath id="squircle">
+      <rect x="0" y="0" width="1024" height="1024" rx="0"/>
+    </clipPath>
+    <g id="card">
+      <rect x="-150" y="-210" width="300" height="420" rx="34"
+            fill="#ffffff" stroke="#20262b" stroke-width="7"/>
+    </g>
+  </defs>
+
+  <!-- Ground: the app's navy (matches the PWA theme colour). -->
+  <rect width="1024" height="1024" fill="#1b3a57"/>
+  <!-- Subtle baize-green table arc at the base, a nod to the game. -->
+  <ellipse cx="512" cy="1210" rx="800" ry="330" fill="#1f6b4e"/>
+
+  <!-- Fan pivots near the bottom centre; left and right cards tuck behind. -->
+  <!-- O card (red diamond) -->
+  <g transform="translate(272 492) rotate(-26)">
+    <use href="#card"/>
+    <text y="66" font-family="DejaVu Sans, Arial, sans-serif" font-weight="bold"
+          font-size="190" text-anchor="middle" fill="#20262b" x="-24">O</text>
+    <path d="M -100 -172 l 26 34 l -26 34 l -26 -34 z" fill="#c2202a"/>
+  </g>
+
+  <!-- C card (red heart) -->
+  <g transform="translate(752 492) rotate(26)">
+    <use href="#card"/>
+    <text y="66" font-family="DejaVu Sans, Arial, sans-serif" font-weight="bold"
+          font-size="190" text-anchor="middle" fill="#20262b" x="24">C</text>
+    <path d="M 96 -150 c -12 -22 -44 -18 -44 7 c 0 17 20 32 44 51 c 24 -19 44 -34 44 -51 c 0 -25 -32 -29 -44 -7 z" fill="#c2202a"/>
+  </g>
+
+  <!-- B card (black spade) on top -->
+  <g transform="translate(512 430)">
+    <use href="#card"/>
+    <text x="0" y="66" font-family="DejaVu Sans, Arial, sans-serif" font-weight="bold"
+          font-size="190" text-anchor="middle" fill="#20262b">B</text>
+    <g transform="translate(-100 -138)"><path d="M 0 -34 C 12 -18 30 -6 30 8 C 30 22 12 26 2 16 C 4 26 8 31 14 35 L -14 35 C -8 31 -4 26 -2 16 C -12 26 -30 22 -30 8 C -30 -6 -12 -18 0 -34 Z" fill="#20262b"/></g>
+  </g>
+</svg>
