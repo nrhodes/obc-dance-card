@@ -73,7 +73,12 @@ struct NotificationsView: View {
 
     private func open(_ notification: AppNotification) async {
         if !notification.read {
-            try? await Api.markNotificationsRead(ids: [notification.id])
+            notifications.markReadOptimistically(ids: [notification.id])
+            do {
+                try await Api.markNotificationsRead(ids: [notification.id])
+            } catch {
+                notifications.revertRead(ids: [notification.id])
+            }
         }
         // The in-app feed has somewhere sensible to already be, so — unlike a
         // tapped OS notification — a payload with no link does nothing.
@@ -87,6 +92,14 @@ struct NotificationsView: View {
 
     private func markAllRead() async {
         let ids = notifications.notifications.filter { !$0.read }.map(\.id)
-        try? await Api.markNotificationsRead(ids: ids)
+        guard !ids.isEmpty else { return }
+        // Clear the dots and the tab badge immediately; the callable
+        // confirms in the background and the listener reconciles.
+        notifications.markReadOptimistically(ids: ids)
+        do {
+            try await Api.markNotificationsRead(ids: ids)
+        } catch {
+            notifications.revertRead(ids: ids)
+        }
     }
 }
