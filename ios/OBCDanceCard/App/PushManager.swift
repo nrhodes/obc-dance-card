@@ -13,6 +13,16 @@
 //   * A device token is a secret-adjacent value: never logged, never shown.
 //   * Deep links come from the payload's ids only, via `DeepLink.resolve`.
 //
+//  Deprecation warnings on `Messaging.token()` / `deleteToken()` are
+//  deliberate. Firebase Messaging 12.18 is moving from registration tokens to
+//  Firebase-Installation-ID registration (`register()`/`unregister()`), but
+//  push here is token-addressed end to end — the server sends to
+//  `memberPrivate.devices[].token`, and the web client registers tokens too —
+//  so iOS switching alone would leave it unreachable. The old calls still
+//  work (the new model is opt-in via an Info.plist key we don't set). The
+//  cross-client migration is plan §21 B6; leave the warnings visible until
+//  then rather than hiding them.
+//
 
 import FirebaseMessaging
 import Foundation

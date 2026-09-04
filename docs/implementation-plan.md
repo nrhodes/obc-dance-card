@@ -1095,6 +1095,38 @@ session/series, to gauge turnout and chase low numbers.
 > the same per-session aggregation. `noBridge` sessions show "—" (they take
 > no sign-ups) rather than "No sign-ups yet".
 
+### B6. Push: move from FCM registration tokens to Firebase Installation IDs (captured 2026-09-05)
+
+**Intent.** Firebase Messaging (iOS SDK 12.18) has deprecated every
+registration-token API (`token()`, `deleteToken()`, `fcmToken`, the per-sender
+variants) in favour of registering the *app instance* with FCM by its Firebase
+Installation ID (FID): `register(completion:)` / `unregister(completion:)`, opted
+in with `FirebaseMessagingInstallationIdEnabled = YES` in `Info.plist`. Once that
+flag is on, the token APIs fail outright, so this is a switch, not a gradual
+migration.
+
+**Why not now.** Push is token-addressed end to end (§11, §14.2): the server
+sends by token (`registerDevice { token, platform, label }` →
+`memberPrivate.devices[].token` → Admin SDK `send`/`sendEach` to tokens), and
+the web client registers tokens too. Switching iOS alone would leave the
+server unable to address it. Until the Admin SDK and the web SDK can target
+FIDs on the same footing, iOS deliberately keeps the deprecated calls
+(`ios/OBCDanceCard/App/PushManager.swift`) and the two build warnings stay
+visible rather than being papered over.
+
+**Sketch (when picked up).**
+- `devices[]` gains `fid?: string` alongside `token`; `registerDevice` accepts
+  either; the sender prefers `fid` where the Admin SDK supports it and falls
+  back to `token`.
+- iOS: set the plist flag, replace `token()`/`deleteToken()` with
+  `register()`/`unregister()`, adopt `messaging(_:didReceiveRegistration:)` /
+  `messaging(_:didUnregister:)`; the stored-token / sign-out semantics are
+  unchanged.
+- Web follows whenever `firebase/messaging` offers the equivalent; until then
+  it stays on tokens and the server handles both.
+- No change to what a push carries (ids only, §14.2) or to the permission
+  rules (never auto-prompt).
+
 ### Cross-cutting notes for the backlog
 
 - **B3 is a prerequisite** for B1, B4, and the value of B2 (bulk-setting across the
