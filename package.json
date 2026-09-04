@@ -27,7 +27,7 @@
     "deploy": "npm run deploy:rules && npm run deploy:functions && npm run deploy:hosting"
   },
   "devDependencies": {
-    "eslint": "^9.17.0",
+    "eslint": "^10.9.1",
     "firebase-tools": "^15.28.2",
     "prettier": "^3.4.2",
     "typescript": "^5.7.2",
