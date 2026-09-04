@@ -13,6 +13,11 @@ updates:
           - patch
     open-pull-requests-limit: 10
     ignore:
+      # TypeScript 7 (the native compiler) is not yet supported by
+      # typescript-eslint 8.x — the install itself ERESOLVEs (PR #22,
+      # 2026-09-05). Lift once typescript-eslint declares TS 7 support.
+      - dependency-name: typescript
+        update-types: ["version-update:semver-major"]
       # firebase-functions 6.x declares peer firebase-admin ^11 || ^12 || ^13.
       # A firebase-admin major bump breaks the Cloud Build install of the
       # bundled functions-deploy/package.json (no lockfile there), even when
