@@ -21,12 +21,18 @@
 //
 
 import Combine
+import FirebaseAppCheck
 import FirebaseAuth
 import FirebaseFirestore
 import Foundation
 
 enum AuthStatus: Equatable {
     case loading, signedOut, signedIn, notActive
+    /// Signed in, but the member doc can't be read for a reason that is not
+    /// "you're not a member": Firestore is denying this *build* (an App
+    /// Check token the project doesn't accept) or is unreachable. Shown with
+    /// a retry, never as a membership verdict.
+    case unavailable
 }
 
 @MainActor
@@ -38,7 +44,7 @@ final class AuthModel: ObservableObject {
     /// The signed-in member's id, only while genuinely signed in and active.
     var memberId: String? { status == .signedIn ? member?.id : nil }
 
-    private enum MemberDocState { case pending, active, notActive }
+    private enum MemberDocState { case pending, active, notActive, unavailable }
 
     private var authHandle: AuthStateDidChangeListenerHandle?
     private var memberListener: ListenerRegistration?
@@ -92,12 +98,17 @@ final class AuthModel: ObservableObject {
                         // the current state; the listener retries itself.
                         let denied = ns.domain == FirestoreErrorDomain
                             && ns.code == FirestoreErrorCode.permissionDenied.rawValue
-                        self.debugReason("member_doc_error \(ns.domain) \(ns.code) treatedAsNotActive=\(denied)")
-                        if denied {
-                            self.member = nil
-                            self.memberDocState = .notActive
-                            self.recomputeStatus()
+                        guard denied else {
+                            self.debugReason("member_doc_error \(ns.domain) \(ns.code) transient")
+                            return
                         }
+                        // A denial has two possible authors, and they look
+                        // identical to a client: the rules (deactivated
+                        // member) or App Check (this build isn't accepted —
+                        // an unregistered debug token, or a device whose
+                        // attestation failed). Ask App Check which before
+                        // telling anyone their membership has lapsed.
+                        self.classifyDenial()
                         return
                     }
                     guard let snapshot, snapshot.exists else {
@@ -141,6 +152,33 @@ final class AuthModel: ObservableObject {
             }
     }
 
+    /// Resolves a `permission-denied` on the member doc into either
+    /// `.notActive` (rules) or `.unavailable` (App Check refused this build).
+    private func classifyDenial() {
+        Task { @MainActor in
+            do {
+                _ = try await AppCheck.appCheck().token(forcingRefresh: false)
+                // App Check is fine, so the rules said no: not an active member.
+                self.debugReason("member_doc_denied app_check=ok -> notActive")
+                self.member = nil
+                self.memberDocState = .notActive
+            } catch {
+                let ns = error as NSError
+                self.debugReason("member_doc_denied app_check_failed \(ns.domain) \(ns.code) -> unavailable")
+                self.member = nil
+                self.memberDocState = .unavailable
+            }
+            self.recomputeStatus()
+        }
+    }
+
+    /// "Try again" from the unavailable screen: re-subscribe, which also
+    /// re-exchanges the App Check token.
+    func retry() {
+        guard let user else { return }
+        startMemberListeners(uid: user.uid)
+    }
+
     private func stopMemberListeners() {
         memberListener?.remove()
         memberListener = nil
@@ -163,6 +201,7 @@ final class AuthModel: ObservableObject {
         case .pending: status = .loading
         case .active: status = .signedIn
         case .notActive: status = .notActive
+        case .unavailable: status = .unavailable
         }
     }
 
