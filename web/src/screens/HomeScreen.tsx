@@ -49,18 +49,28 @@ export function HomeScreen() {
   const [teams, setTeams] = useState<Team[]>([]);
 
   useEffect(() => {
-    if (teamIds.length === 0) {
+    // App-Store-review cohort partition (plan §8.1, decided 2026-09-05): these
+    // are always the caller's own teams (from their own entries' `teamId`),
+    // so their cohort always equals the caller's — but the `teams` rule still
+    // requires `resource.data.cohort == callerCohort()` to be provable from
+    // the query itself, so this filter is added defensively even though it
+    // can never actually exclude a result.
+    if (teamIds.length === 0 || !member?.cohort) {
       setTeams([]);
       return;
     }
-    const q = query(collection(db, paths.teams()), where(documentId(), 'in', teamIds));
+    const q = query(
+      collection(db, paths.teams()),
+      where(documentId(), 'in', teamIds),
+      where('cohort', '==', member.cohort),
+    );
     return onSnapshot(
       q,
       (snap) => setTeams(snap.docs.map((d) => d.data() as Team)),
       () => setTeams([]),
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [teamIdsKey]);
+  }, [teamIdsKey, member?.cohort]);
 
   const groups = groupCardEntries(futureEntries, sessions, series, weekdays, teams);
   const pastRows = buildPastRows(pastEntries, sessions, series, teams).slice(0, PAST_LIMIT);

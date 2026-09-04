@@ -53,6 +53,19 @@ const LAST_NAMES = [
 ];
 const GRADES: SeedMemberSpec['grade'][] = ['Open', 'Intermediate', 'Junior', 'Unknown'];
 
+/**
+ * App-Store-review cohort partition (plan §8.1, decided 2026-09-05): the seed
+ * additionally provisions this many `cohort: 'review'` members, through the
+ * exact same `provisionReviewMembers` path `provision-review-cohort.ts`'s CLI
+ * uses, with a fixed, known, emulator-only password — so both rules tests and
+ * `web/e2e/review-cohort.spec.ts` can sign in as a reviewer without any
+ * secret beyond what's in this repo. Never used against a real project (this
+ * file is `checkEmulatorSafe`-gated, see `main()` below).
+ */
+export const SEED_REVIEW_COUNT = 2;
+export const SEED_REVIEW_DOMAIN = 'reviewer.example.test';
+export const SEED_REVIEW_PASSWORD = 'ci-dev-reviewer-pw-1';
+
 function buildSeedMembers(): SeedMemberSpec[] {
   const members: SeedMemberSpec[] = [];
   for (let i = 0; i < FIRST_NAMES.length; i++) {
@@ -309,6 +322,8 @@ async function main(): Promise<void> {
   const { BatchWriter } = await import('../functions/src/lib/batchWriter.js');
   const { runProgrammeImport } = await import('../functions/src/admin/programmeImport.js');
   const { runPublishProgramme } = await import('../functions/src/admin/programme.js');
+  const { provisionReviewMembers } = await import('../scripts/provision-review-cohort.js');
+  const { db, auth } = await import('../functions/src/lib/admin.js');
 
   console.log(`Seeding demo data into project "${projectId}" (Firestore: ${process.env.FIRESTORE_EMULATOR_HOST}, Auth: ${process.env.FIREBASE_AUTH_EMULATOR_HOST})`);
 
@@ -340,6 +355,12 @@ async function main(): Promise<void> {
   await writer.flush();
 
   console.log(`Seeded ${members.length} members (added ${added}, updated ${updated}, unchanged ${unchanged}).`);
+
+  // ---- App-Store-review cohort partition (plan §8.1, decided 2026-09-05) ----
+  const reviewMembers = await provisionReviewMembers(db, auth, SEED_REVIEW_DOMAIN, SEED_REVIEW_PASSWORD, SEED_REVIEW_COUNT);
+  console.log(
+    `Seeded ${reviewMembers.length} review-cohort member(s): ${reviewMembers.map((m) => m.email).join(', ')} (password: ${SEED_REVIEW_PASSWORD}).`,
+  );
 
   if (!adminUid) {
     throw new Error('Seed admin member was not provisioned; cannot import the programme without an admin actor.');

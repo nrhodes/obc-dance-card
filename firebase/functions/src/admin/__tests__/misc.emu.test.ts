@@ -73,6 +73,18 @@ describe('broadcast', () => {
     ).rejects.toMatchObject({ code: 'resource-exhausted' });
   });
 
+  // App-Store-review cohort partition (plan §8.1, decided 2026-09-05).
+  it('never notifies a review-cohort member', async () => {
+    const admin = await makeMember('bcast-cohort-admin@example.org', { role: 'admin' });
+    const club = await makeMember('bcast-cohort-club@example.org', { cohort: 'club' });
+    const reviewer = await makeMember('bcast-cohort-reviewer@example.org', { cohort: 'review' });
+
+    await broadcastHandler(fakeCallableRequest<BroadcastInput>({ title: 'Club-only notice', body: 'x' }, { uid: admin }));
+
+    expect(await notificationsFor(club, 'broadcast')).toHaveLength(1);
+    expect(await notificationsFor(reviewer, 'broadcast')).toHaveLength(0);
+  });
+
   it('audits broadcast_sent with the recipient count and title', async () => {
     const admin = await makeMember('bcast-audit-admin@example.org', { role: 'admin' });
     await broadcastHandler(fakeCallableRequest<BroadcastInput>({ title: 'Audited notice', body: 'x' }, { uid: admin }));

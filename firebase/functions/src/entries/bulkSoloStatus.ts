@@ -194,6 +194,7 @@ export async function setBulkSoloStatusHandler(
         weekday: session.weekday,
         seriesId: session.seriesId,
         memberId: actor.memberId,
+        cohort: actor.member.cohort,
         status: input.status,
         partner: null,
         pairingId: null,

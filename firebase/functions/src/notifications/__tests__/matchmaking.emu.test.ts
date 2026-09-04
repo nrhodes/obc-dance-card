@@ -95,4 +95,35 @@ describe('matchmaking alerts (setSoloStatus -> looking_for_partner)', () => {
 
     expect(await notificationsFor(free, 'matchmaking_alert')).toHaveLength(0);
   });
+
+  // App-Store-review cohort partition (plan §8.1, decided 2026-09-05).
+  it('never alerts across cohorts, either direction', async () => {
+    const clubPoster = await makeMember('mm-cohort-club-poster@example.org', { cohort: 'club' });
+    const reviewFree = await makeMember('mm-cohort-review-free@example.org', { cohort: 'review' });
+    const reviewPoster = await makeMember('mm-cohort-review-poster@example.org', { cohort: 'review' });
+    const clubFree = await makeMember('mm-cohort-club-free@example.org', { cohort: 'club' });
+    await optIn(reviewFree);
+    await optIn(clubFree);
+
+    const prog = await makeProgramme({ dates: [sessionInFuture('monday')] });
+
+    await setSoloStatusHandler(
+      fakeCallableRequest<SetSoloStatusInput>(
+        { year: prog.year, sessionId: prog.sessionIds[0]!, status: 'looking_for_partner' },
+        { uid: clubPoster },
+      ),
+    );
+    expect(await notificationsFor(reviewFree, 'matchmaking_alert')).toHaveLength(0);
+    expect(await notificationsFor(clubFree, 'matchmaking_alert')).toHaveLength(1);
+
+    const prog2 = await makeProgramme({ dates: [sessionInFuture('tuesday')], weekday: 'tuesday' });
+    await setSoloStatusHandler(
+      fakeCallableRequest<SetSoloStatusInput>(
+        { year: prog2.year, sessionId: prog2.sessionIds[0]!, status: 'looking_for_partner' },
+        { uid: reviewPoster },
+      ),
+    );
+    expect(await notificationsFor(clubFree, 'matchmaking_alert')).toHaveLength(1); // unchanged
+    expect(await notificationsFor(reviewFree, 'matchmaking_alert')).toHaveLength(1);
+  });
 });

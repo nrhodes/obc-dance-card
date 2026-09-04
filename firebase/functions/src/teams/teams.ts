@@ -125,6 +125,7 @@ export async function createTeamHandler(req: CallableRequest<CreateTeamInput>): 
       seriesId: series.id,
       name: input.name?.trim() || `${actor.member.lastName} team`,
       captainMemberId: actor.memberId,
+      cohort: actor.member.cohort,
       members: [{ ref: memberRef(actor.member), joinedAt: now }],
       status: 'forming',
       createdAt: now,
@@ -181,6 +182,10 @@ export async function inviteToTeamHandler(req: CallableRequest<InviteToTeamInput
   const toSnap = await db.doc(paths.member(input.toMemberId)).get();
   const toMember = toSnap.data() as Member | undefined;
   if (!toMember || !toMember.active) {
+    throw new HttpsError('failed-precondition', 'That member is not available to invite.');
+  }
+  // Review-cohort partition (plan §8.1, decided 2026-09-05).
+  if (toMember.cohort !== actor.member.cohort) {
     throw new HttpsError('failed-precondition', 'That member is not available to invite.');
   }
 
@@ -575,6 +580,15 @@ export async function transferCaptaincyHandler(
     if (!isMember) {
       throw new HttpsError('failed-precondition', 'That member is not on this team.');
     }
+    // Review-cohort partition (plan §8.1, decided 2026-09-05): defence in
+    // depth — a same-team member is already guaranteed to share the team's
+    // (and so the captain's) cohort, but check explicitly rather than trust
+    // that invariant transitively.
+    const toSnap = await tx.get(db.doc(paths.member(input.toMemberId)));
+    const toMember = toSnap.data() as Member | undefined;
+    if (!toMember || toMember.cohort !== actor.member.cohort) {
+      throw new HttpsError('failed-precondition', 'That member is not available.');
+    }
 
     const pendingSnap = await tx.get(
       db
@@ -763,6 +777,11 @@ export async function addTeamSessionSubstituteHandler(
       if (!subMember || !subMember.active) {
         throw new HttpsError('failed-precondition', 'That member is not available.');
       }
+      // Review-cohort partition (plan §8.1, decided 2026-09-05): a team
+      // session substitute must share the team's cohort.
+      if (subMember.cohort !== team.cohort) {
+        throw new HttpsError('failed-precondition', 'That member is not available.');
+      }
       const existing = await readEntry(tx, input.sessionId, subMemberId);
       if (!isFree(existing)) {
         throw new HttpsError('failed-precondition', 'That member already has an entry for this session.');
@@ -775,6 +794,7 @@ export async function addTeamSessionSubstituteHandler(
         weekday: loaded.session.weekday,
         seriesId: loaded.session.seriesId,
         memberId: subMemberId,
+        cohort: subMember.cohort,
         status: 'confirmed',
         partner: null,
         pairingId: null,

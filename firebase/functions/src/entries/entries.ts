@@ -93,6 +93,7 @@ export async function setSoloStatusHandler(req: CallableRequest<SetSoloStatusInp
       weekday: loaded.session.weekday,
       seriesId: loaded.session.seriesId,
       memberId: actor.memberId,
+      cohort: actor.member.cohort,
       status: input.status,
       partner: null,
       pairingId: null,
@@ -122,6 +123,7 @@ export async function setSoloStatusHandler(req: CallableRequest<SetSoloStatusInp
       posterName: `${actor.member.firstName} ${actor.member.lastName}`,
       sessionId: input.sessionId,
       date: entry.date,
+      posterCohort: actor.member.cohort,
     });
   }
 
@@ -211,6 +213,11 @@ export async function claimLookingForPartnerHandler(
       if (!poster || !poster.active) {
         throw new HttpsError('failed-precondition', 'That member is no longer active.');
       }
+      // Review-cohort partition (plan §8.1, decided 2026-09-05): a claim must
+      // never cross cohorts — display-safe message, no cohort disclosed.
+      if (poster.cohort !== actor.member.cohort) {
+        throw new HttpsError('failed-precondition', 'That member is not available.');
+      }
 
       // Look the caller's team up by membership, not by the deterministic id:
       // after a captaincy transfer the doc keeps the original captain's id.
@@ -277,6 +284,10 @@ export async function claimLookingForPartnerHandler(
     const poster = posterSnap.data() as Member | undefined;
     if (!poster || !poster.active) {
       throw new HttpsError('failed-precondition', 'That member is no longer active.');
+    }
+    // Review-cohort partition (plan §8.1, decided 2026-09-05).
+    if (poster.cohort !== actor.member.cohort) {
+      throw new HttpsError('failed-precondition', 'That member is not available.');
     }
     const claimerSnap = await tx.get(db.doc(paths.member(actor.memberId)));
     const claimer = claimerSnap.data() as Member;

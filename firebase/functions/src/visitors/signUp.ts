@@ -99,6 +99,7 @@ export async function signUpWithVisitorHandler(
         weekday: ls.session.weekday,
         seriesId: ls.session.seriesId,
         memberId: actor.memberId,
+        cohort: actor.member.cohort,
         status: 'confirmed',
         partner: { kind: 'visitor', visitorId: visitor.id, displayName: visitor.displayName },
         pairingId: randomUUID(),

@@ -34,6 +34,7 @@ function member(overrides: Partial<Member> = {}): Member {
     email: 'jane.doe@example.org',
     grade: 'Open',
     role: 'member',
+    cohort: 'club',
     active: true,
     createdAt: '2027-01-01T00:00:00.000Z',
     updatedAt: '2027-01-01T00:00:00.000Z',

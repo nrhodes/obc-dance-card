@@ -201,6 +201,11 @@ export function writeTeamEntries(
       weekday: session.weekday,
       seriesId: session.seriesId,
       memberId,
+      // The member joining a team must already be the same cohort as the
+      // team (enforced by every caller's precondition before this is
+      // called) — denormalising the *team's* cohort here, not a freshly
+      // read member doc, keeps this function synchronous/pure (doc header).
+      cohort: team.cohort,
       status: 'confirmed',
       partner: null,
       pairingId: null,

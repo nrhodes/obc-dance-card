@@ -9,6 +9,20 @@ export type MemberGrade = (typeof MEMBER_GRADES)[number];
 export const MEMBER_ROLES = ['member', 'admin'] as const;
 export type MemberRole = (typeof MEMBER_ROLES)[number];
 
+/**
+ * App-Store-review cohort partition (decided 2026-09-05): every member,
+ * entry and team belongs to exactly one cohort. `'club'` is every real
+ * member — imports (`importMembers`, `provisionMember` with no explicit
+ * override) can NEVER produce `'review'`. `'review'` is reserved for the
+ * handful of fake accounts `provision-review-cohort.ts` creates so an Apple
+ * reviewer can exercise the real programme/schedule without ever seeing (or
+ * being seen by) real members. Rules (`firestore.rules`) and every
+ * cross-member callable (invites, claims, substitutes, team joins) enforce
+ * that the two cohorts never see or interact with each other.
+ */
+export const MEMBER_COHORTS = ['club', 'review'] as const;
+export type MemberCohort = (typeof MEMBER_COHORTS)[number];
+
 /** Day a weekday programme runs on. Tuesday is the juniors' evening. */
 export const WEEKDAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'] as const;
 export type Weekday = (typeof WEEKDAYS)[number];

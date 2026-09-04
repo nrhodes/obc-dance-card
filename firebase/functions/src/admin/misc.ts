@@ -40,7 +40,15 @@ export async function broadcastHandler(req: CallableRequest<BroadcastInput>): Pr
 
   await assertRateLimit('broadcast', caller.uid, BROADCAST_DAILY_LIMIT, BROADCAST_WINDOW_SEC);
 
-  const activeSnap = await db.collection(paths.members()).where('active', '==', true).get();
+  // Review-cohort partition (plan §8.1, decided 2026-09-05): a reviewer must
+  // never receive a real club-wide broadcast (they have no context for it,
+  // and it would leak that the club is actively communicating with members
+  // outside the reviewer's synthetic world) — restrict to cohort 'club'.
+  const activeSnap = await db
+    .collection(paths.members())
+    .where('active', '==', true)
+    .where('cohort', '==', 'club')
+    .get();
   const activeMembers = activeSnap.docs.map((d) => d.data() as Member);
 
   let recipientIds: string[];

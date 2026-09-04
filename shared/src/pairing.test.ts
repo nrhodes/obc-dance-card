@@ -10,6 +10,7 @@ function entry(over: Partial<Entry> & Pick<Entry, 'id' | 'memberId'>): Entry {
     date: '2027-01-12',
     weekday: 'monday',
     seriesId: 'ser1',
+    cohort: 'club',
     status: 'confirmed',
     partner: null,
     pairingId: null,
@@ -193,6 +194,7 @@ describe('validateTeamGroup', () => {
       seriesId: 'ser1',
       name: 'Alice team',
       captainMemberId: 'alice',
+      cohort: 'club',
       status: 'active',
       members: [
         { ref: memberRef('alice'), joinedAt: TS.createdAt },
@@ -339,7 +341,7 @@ describe('validateTeamGroup — orchestrator review additions', () => {
     allowSubstitute: true, order: 1, sessionIds: ['s1'], teamMin: 4, teamMax: 6, ...TS,
   };
   const team = (members: string[], captain = members[0]!): Team => ({
-    id: 'ser-t-' + captain, year: 2027, seriesId: 'ser-t', name: 't', captainMemberId: captain,
+    id: 'ser-t-' + captain, year: 2027, seriesId: 'ser-t', name: 't', captainMemberId: captain, cohort: 'club',
     members: members.map((m) => ({ ref: memberRef(m), joinedAt: TS.createdAt })), status: 'active', ...TS,
   });
   const teamEntry = (memberId: string, over: Partial<Entry> = {}) =>
@@ -364,5 +366,27 @@ describe('validateTeamGroup — orchestrator review additions', () => {
       teamEntry('c', { id: 's1_c_sub', teamSessionOnly: true }),
     ];
     expect(validateTeamGroup(t, series, entries).join(' ')).toMatch(/belongs to a rostered member/);
+  });
+
+  it('flags a team entry whose cohort does not match the team', () => {
+    const t = team(['cap', 'b', 'c', 'd']);
+    const entries = [
+      teamEntry('cap'), teamEntry('b', { cohort: 'review' }), teamEntry('c'), teamEntry('d'),
+    ];
+    expect(validateTeamGroup(t, series, entries).join(' ')).toMatch(/cohort 'review', team is 'club'/);
+  });
+});
+
+describe('validatePairingGroup — cohort partition (decided 2026-09-05)', () => {
+  it('rejects a pairing whose two sides are in different cohorts', () => {
+    const a = entry({ id: 'e-a', memberId: 'alice', partner: memberRef('bob'), pairingId: 'p1', cohort: 'club' });
+    const b = entry({ id: 'e-b', memberId: 'bob', partner: memberRef('alice'), pairingId: 'p1', cohort: 'review' });
+    expect(validatePairingGroup([a, b]).join(' ')).toMatch(/more than one cohort/);
+  });
+
+  it('accepts a same-cohort review/review pairing', () => {
+    const a = entry({ id: 'e-a', memberId: 'r1', partner: memberRef('r2'), pairingId: 'p1', cohort: 'review' });
+    const b = entry({ id: 'e-b', memberId: 'r2', partner: memberRef('r1'), pairingId: 'p1', cohort: 'review' });
+    expect(validatePairingGroup([a, b])).toEqual([]);
   });
 });

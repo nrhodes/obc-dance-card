@@ -14,7 +14,7 @@
  * module only handles "who gets told".
  */
 import { randomUUID } from 'node:crypto';
-import { paths, type Entry, type MemberPrivate, type Notification } from '@obc/shared';
+import { paths, type Entry, type MemberCohort, type MemberPrivate, type Notification } from '@obc/shared';
 import { db } from '../lib/admin.js';
 import { BatchWriter } from '../lib/batchWriter.js';
 
@@ -27,6 +27,13 @@ export interface SendMatchmakingAlertsInput {
   sessionId: string;
   /** NZ-local `YYYY-MM-DD`, for the notification body. */
   date: string;
+  /**
+   * App-Store-review cohort partition (plan §8.1, decided 2026-09-05): a
+   * club member's listing must never alert a review member and vice versa —
+   * same reasoning as `broadcast` restricting to `'club'`. Required (not
+   * derived here) so this stays pure I/O over what the caller already read.
+   */
+  posterCohort: MemberCohort;
 }
 
 /**
@@ -56,10 +63,10 @@ async function alreadyAlerted(memberId: string, sessionId: string, cutoffIso: st
 }
 
 export async function sendMatchmakingAlerts(input: SendMatchmakingAlertsInput): Promise<void> {
-  const { posterMemberId, posterName, sessionId, date } = input;
+  const { posterMemberId, posterName, sessionId, date, posterCohort } = input;
 
   const [membersSnap, busy] = await Promise.all([
-    db.collection(paths.members()).where('active', '==', true).get(),
+    db.collection(paths.members()).where('active', '==', true).where('cohort', '==', posterCohort).get(),
     busyMemberIds(sessionId),
   ]);
 

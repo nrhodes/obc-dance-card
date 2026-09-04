@@ -56,6 +56,70 @@ project ids. Copy `firebase/functions/.env.example` to `.env` for local runs.
    the first one in-app via `setMemberRole`.
 8. Import the programme CSVs (`importProgramme`), review, `publishProgramme`.
 
+## App-Store-review cohort partition (decided 2026-09-05, plan §2/§8.1)
+
+**Deployment order — read this before deploying the cohort partition to an
+existing project.** `firestore.rules`' `members`/`entries`/`teams` reads now
+require `resource.data.cohort` to exist and match the caller's own — a doc
+still missing that field compares `undefined == 'club'` and fails closed.
+The order MUST be:
+
+1. Deploy functions first (`npm run deploy:functions`) — every callable that
+   writes a member/entry/team doc now stamps `cohort` server-side, so new
+   writes are safe as soon as this lands, even before the backfill/rules
+   steps below.
+2. Run `firebase/scripts/backfill-cohort.ts` against the target project —
+   stamps `cohort: 'club'` onto every pre-existing `members`/`entries`/`teams`
+   doc (safe: a pre-partition project has no `review` members, so every
+   existing doc is unambiguously `'club'`):
+   ```sh
+   GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json \
+     npx tsx firebase/scripts/backfill-cohort.ts --project obc-dance-card
+   ```
+   Run with `--dry-run` first to preview counts. Idempotent — safe to re-run.
+3. **Only then** deploy `firestore.rules` (`npm run deploy:rules`). Deploying
+   the rules before steps 1–2 have completed would deny every non-admin,
+   non-self read of any doc still missing `cohort`.
+4. **iOS handoff** (do not skip): the native app talks to Firestore directly
+   (no callable-shaped REST layer to gate this centrally), and
+   `ios/OBCDanceCard/App/Stores.swift` has two queries that read the same
+   collections the new rules now scope by cohort but do **not** filter on it:
+   - `MembersStore` (~line 220): `db.collection(Paths.members).whereField("active", isEqualTo: true)`
+   - `TeamsStore` (~line 465): `db.collection(Paths.teams).whereField("status", in: [...])`
+   Both will start failing outright (`permission-denied`) for a non-admin
+   the moment the rules deploy, because Firestore requires a security rule to
+   be provable from the query's own `where()` clauses — an unfiltered query
+   cannot be proven safe once the rule depends on `resource.data.cohort`. The
+   fix mirrors what `web/src/members/MembersDirectoryProvider.tsx` and
+   `web/src/teams/TeamsProvider.tsx` already do: add
+   `.whereField("cohort", isEqualTo: <the signed-in member's own cohort>)` to
+   both queries, sourced from the already-subscribed own-member doc. (The
+   third cohort-scoped collection, `entries`, is untouched on iOS — its one
+   query there, `EntriesStore` ~line 576, is already `memberId == uid`
+   ownership-scoped, which the rules' ownership disjunct keeps working with
+   no cohort filter at all — same reasoning as web's `useMyEntries`.) Ship
+   this iOS change (or at minimum confirm iOS has no App-Store-review build
+   in flight) **before** step 3, or those two screens go blank for every
+   signed-in member on the App Store build until the next release.
+5. Provision the review accounts an Apple reviewer will actually use:
+   ```sh
+   GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json \
+     npx tsx firebase/scripts/provision-review-cohort.ts \
+       --project obc-dance-card --domain reviewer.orewabridgeclub.org.nz \
+       --password <a strong password, chosen fresh each window — never reused, never committed>
+   ```
+   Idempotent (re-running updates password/active state). Hand the reviewer
+   the printed `reviewer1@...`/`reviewer2@...` emails and the password you
+   just typed — nothing else records it.
+6. **Outside a review window**, deactivate the whole cohort (never deletes —
+   same "keep the row, flip active" convention as `deactivateMember`):
+   ```sh
+   GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json \
+     npx tsx firebase/scripts/provision-review-cohort.ts --project obc-dance-card --deactivate
+   ```
+   Re-running step 5 (without `--deactivate`) reactivates and re-provisions
+   for the next window.
+
 ## Deploy notes learned on the first production deploy (2026-08-30)
 
 - **Functions are deployed as an esbuild bundle.** `firebase.json` points

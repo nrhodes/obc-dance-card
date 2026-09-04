@@ -50,6 +50,7 @@ function entry(overrides: Partial<Entry> = {}): Entry {
     weekday: 'monday',
     seriesId: 'monday-pairs',
     memberId: 'member-a',
+    cohort: 'club',
     status: 'confirmed',
     partner: null,
     pairingId: null,

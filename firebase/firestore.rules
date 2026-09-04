@@ -33,6 +33,15 @@ service cloud.firestore {
       return request.auth != null && request.auth.uid == id;
     }
 
+    // App-Store-review cohort partition (plan §8.1, decided 2026-09-05): the
+    // caller's own cohort ('club' or 'review'), read off their own member
+    // doc exactly like isActiveMember()/isAdmin() do — never from a token
+    // claim, so a cohort change (there shouldn't be one, in practice) takes
+    // effect immediately.
+    function callerCohort() {
+      return callerDoc().cohort;
+    }
+
     function programmePublished(year) {
       return get(/databases/$(database)/documents/programmes/$(year)).data.status == 'published';
     }
@@ -42,8 +51,15 @@ service cloud.firestore {
     match /members/{id} {
       // The printed booklet lists every member's name and phone; mirror that —
       // any active member may read any other *active* member, and always
-      // their own doc (even if it has just been deactivated).
-      allow read: if isAdmin() || (isActiveMember() && (resource.data.active == true || isSelf(id)));
+      // their own doc (even if it has just been deactivated). App-Store-review
+      // cohort partition (plan §8.1, decided 2026-09-05): every non-admin read
+      // additionally requires the target doc's cohort to match the caller's
+      // own — a no-op for isSelf(id) (a member's own doc is always their own
+      // cohort), kept in the AND for shape-parity with the entries/teams rules.
+      allow read: if isAdmin()
+        || (isActiveMember()
+            && resource.data.cohort == callerCohort()
+            && (resource.data.active == true || isSelf(id)));
       allow write: if false; // provisioning, imports, role/active changes: functions only.
     }
 
@@ -78,19 +94,28 @@ service cloud.firestore {
     /* --------------------------- entries -------------------------- */
 
     match /entries/{id} {
-      // Roster visibility: any active member can see who is playing / looking.
-      // Every write — solo status, pairing, substitute, cancel, team roster —
-      // goes through a callable so pairing/team invariants can be enforced
-      // transactionally (plan §7).
-      allow read: if isActiveMember();
+      // Roster visibility: any active member can see who is playing / looking
+      // — but only within their own cohort (plan §8.1, decided 2026-09-05),
+      // EXCEPT for a member's own entries, which they must always be able to
+      // read regardless (the ownership disjunct below) — that's also what
+      // keeps a plain `where('memberId', '==', uid)` "my entries" query
+      // provable without a cohort filter (web `useMyEntries`). The isAdmin()
+      // branch is caller-only (never touches resource.data), so it alone
+      // keeps every admin query provable too. Every write — solo status,
+      // pairing, substitute, cancel, team roster — goes through a callable so
+      // pairing/team invariants can be enforced transactionally (plan §7).
+      allow read: if isAdmin()
+        || (isActiveMember()
+            && (resource.data.memberId == request.auth.uid || resource.data.cohort == callerCohort()));
       allow write: if false;
     }
 
     /* ---------------------------- teams ------------------------------ */
 
     match /teams/{id} {
-      // Roster parity: the booklet would list team members.
-      allow read: if isActiveMember();
+      // Roster parity: the booklet would list team members — within the
+      // caller's own cohort (plan §8.1, decided 2026-09-05).
+      allow read: if isAdmin() || (isActiveMember() && resource.data.cohort == callerCohort());
       allow write: if false;
     }
 
