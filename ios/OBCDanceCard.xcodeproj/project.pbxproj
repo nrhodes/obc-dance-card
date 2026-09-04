@@ -288,6 +288,7 @@
 				DEVELOPMENT_TEAM = "";
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Config/Info-Debug.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Dance Card";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "Unlock your dance card with Face ID instead of signing in again.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
