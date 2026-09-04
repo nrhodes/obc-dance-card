@@ -76,7 +76,10 @@ project ids. Copy `firebase/functions/.env.example` to `.env` for local runs.
   only; for the rest, grant `roles/run.invoker` to `allUsers` on each callable and
   blocking function (Cloud Run console → service → Security → "Allow
   unauthenticated", or the Cloud Run API). Triggers and scheduled jobs stay
-  private.
+  private. `icalFeed` (plan §21 B1) needs this too — it's a plain HTTP
+  `onRequest` function, not a callable, but the same Cloud Run "no public
+  invoker yet" failure mode applies to it identically; the orchestrator
+  applies this grant post-deploy alongside the callables.
 - **Custom-token sign-in needs two extra grants** that no deploy step applies:
   enable the **IAM Service Account Credentials API** (`iamcredentials.googleapis.com`),
   and grant `roles/iam.serviceAccountTokenCreator` to the functions' runtime

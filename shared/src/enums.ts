@@ -189,6 +189,11 @@ export const AUDIT_ACTIONS = [
   'disband_team_on_behalf',
   'add_team_session_substitute_on_behalf',
   'clear_team_session_substitute_on_behalf',
+  /** plan §21 B1: an admin acted on a member's iCal subscription feed. */
+  'get_ical_feed_on_behalf',
+  'create_ical_feed_on_behalf',
+  'rotate_ical_feed_on_behalf',
+  'remove_ical_feed_on_behalf',
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 

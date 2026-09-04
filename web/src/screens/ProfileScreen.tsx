@@ -7,6 +7,7 @@ import { mapGenericError } from '../auth/errors';
 import { NotificationPrefsForm } from './NotificationPrefsForm';
 import { PasswordSection } from './PasswordSection';
 import { PushSettings } from '../push/PushSettings';
+import { CalendarFeedCard } from './CalendarFeedCard';
 
 export function ProfileScreen() {
   const { member, memberPrivate, signOut } = useAuth();
@@ -45,6 +46,10 @@ export function ProfileScreen() {
 
       <div className="card">
         <PushSettings />
+      </div>
+
+      <div className="card">
+        <CalendarFeedCard />
       </div>
 
       <div className="card">
