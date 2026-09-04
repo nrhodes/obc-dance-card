@@ -62,7 +62,7 @@ and must never leak the roster.
 | Member data | CSV import from NZ Bridge export (name, email, phone, grade). Re-import syncs; absent members are deactivated, never deleted. |
 | Grades | `Open`, `Intermediate`, `Junior`, `Unknown`. Eligibility notes displayed, not enforced. |
 | Time zone | All date logic in **`Pacific/Auckland`**. Cloud Functions run in UTC — never call `new Date().toISOString().slice(0,10)` for "today"; use the shared `todayNZ()` helper. |
-| Visibility | Active members can see: the published programme, every session roster (names), the noticeboard, and other members' **name, grade, phone** (booklet parity). **Email addresses and device tokens are private** (owner + admin only). |
+| Visibility | Active members can see: the published programme, every session roster (names), the noticeboard, and other members' **name, grade, phone, email** (amended 2026-09-05: full contact directory, Neil's sign-off; was booklet-parity phones-only with emails private). **Device tokens remain private** (owner + admin only, `memberPrivate`). |
 
 ## 3. Rules for the implementer
 
@@ -123,11 +123,18 @@ the code must match. `Timestamps` = `{ createdAt, updatedAt }` ISO strings.
 `memberId` **is the Firebase Auth uid.** Created only by `importMembers`.
 
 ```
-id, firstName, lastName, phone, grade, role ('member'|'admin'), active (bool),
+id, firstName, lastName, phone, email?, grade, role ('member'|'admin'), active (bool),
 lastImportId?, + Timestamps
 ```
 
-No email here. No tokens here.
+`email` (amended 2026-09-05, §2 Visibility): the member's address, denormalised from
+`memberPrivate.emailLower` so the members directory can show it without a
+`memberPrivate` read. Written by `provisionMember` on every create and update (it's
+always the address the row was matched on, so it's kept in sync — and backfills any
+member doc created before this field existed). Optional in the type: existing prod
+docs lack it until `firebase/scripts/backfill-member-emails.ts` runs against them; the
+UI must tolerate absence. No tokens here — device tokens stay on `memberPrivate`
+(owner + admin only, §5.2).
 
 ### 5.2 `memberPrivate/{memberId}` — owner + admin only
 
@@ -320,7 +327,8 @@ re-validates inside its transaction before commit; the nightly sweep runs both.
 | Asset | Threat | Controls |
 |---|---|---|
 | Member roster (names, phones) | Unauthenticated read; scraping by ex-member | Rules require active member (checked via `get()` of caller's member doc — no stale claims); deactivation revokes refresh tokens; App Check |
-| Member emails, device tokens | Read by other members | Split into `memberPrivate`; owner/admin only |
+| Device tokens | Read by other members | Kept on `memberPrivate` only; owner/admin read |
+| Member emails | Scraping by ex-member / non-admin misuse | Amended 2026-09-05 (§2 Visibility, Neil's sign-off): denormalised onto `members` and readable by any active member — same control as name/grade/phone (active-member gating via rules `get()`, revoked on deactivation, App Check). Residual risk: an ex-member who scraped the directory before deactivation retains emails as well as phones; mitigation is unchanged (active-member gating + refresh-token revocation on deactivation), not a new exposure this amendment introduces beyond what already applied to phones. |
 | Visitor PII | Read by non-sponsors | `visitors` readable by sponsor + admin only; only `displayName` denormalised onto entries |
 | Accounts | Login-code brute force | CSPRNG 6-digit; HMAC-SHA256 with secret pepper; 10-min TTL; 5 attempts then invalidated; single use; new request invalidates old; constant-time compare |
 | Accounts | Code-request flooding / email bombing | Rate limits: 3 per email / 15 min; 10 verifies per email / 15 min; per-IP limits kept loose (30 requests, 60 verifies / hour) because the club wifi NATs many members behind one address; App Check; generic response |

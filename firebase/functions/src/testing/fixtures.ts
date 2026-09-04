@@ -49,6 +49,7 @@ export async function makeMember(email: string, opts: MakeMemberOptions = {}): P
     firstName: opts.firstName ?? 'Test',
     lastName: opts.lastName ?? 'Member',
     phone: opts.phone ?? '',
+    email: email.toLowerCase(),
     grade: opts.grade ?? 'Open',
     role: opts.role ?? 'member',
     active: opts.active ?? true,

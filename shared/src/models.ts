@@ -42,6 +42,13 @@ export interface Member extends Timestamps {
   firstName: string;
   lastName: string;
   phone: string;
+  /**
+   * Denormalised from memberPrivate.emailLower for the members directory
+   * (decided 2026-09-05); memberPrivate remains the source of truth for
+   * login. Optional: members created before the backfill lack it until
+   * `backfill-member-emails.ts` runs — UI must tolerate absence.
+   */
+  email?: string;
   grade: MemberGrade;
   role: MemberRole;
   /** False once a member leaves the club; row is kept, never hard-deleted. */

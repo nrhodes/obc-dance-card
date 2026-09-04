@@ -16,6 +16,7 @@ import { VisitorsScreen } from './screens/VisitorsScreen';
 import { ProgrammeScreen } from './screens/ProgrammeScreen';
 import { CalendarScreen } from './screens/CalendarScreen';
 import { SessionScreen } from './screens/SessionScreen';
+import { MembersScreen } from './screens/MembersScreen';
 import { InvitesScreen } from './screens/InvitesScreen';
 import { NotificationsScreen } from './screens/NotificationsScreen';
 import { PrivacyScreen } from './screens/PrivacyScreen';
@@ -64,6 +65,7 @@ export function App() {
             <Route path="/programme" element={<ProgrammeScreen />} />
             <Route path="/calendar" element={<CalendarScreen />} />
             <Route path="/session/:year/:sessionId" element={<SessionScreen />} />
+            <Route path="/members" element={<MembersScreen />} />
             <Route path="/invites" element={<InvitesScreen />} />
             <Route path="/notifications" element={<NotificationsScreen />} />
             <Route path="/help" element={<HelpScreen />} />

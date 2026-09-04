@@ -132,6 +132,7 @@ async function main(): Promise<void> {
       firstName: args.firstName,
       lastName: args.lastName,
       phone: args.phone ?? '',
+      email: emailLower,
       grade: 'Unknown',
       role: 'member',
       active: true,
