@@ -61,10 +61,16 @@ struct PushSoftAskView: View {
             .buttonStyle(.borderedProminent)
             .controlSize(.large)
             .disabled(push.busy)
-            Button("Not now") {
+            // A bordered, full-width secondary button: plain blue text on
+            // the dark sheet background was too faint to find.
+            Button {
                 push.dismissSoftAsk()
                 dismiss()
+            } label: {
+                Text("Not now").frame(maxWidth: .infinity)
             }
+            .buttonStyle(.bordered)
+            .controlSize(.large)
             .disabled(push.busy)
             Text("You can change this any time in Profile.")
                 .font(.footnote)
