@@ -14,6 +14,15 @@
 import Foundation
 
 /// `MEMBER_GRADES`
+/// App-Store-review cohort partition (plan §8.1, decided 2026-09-05):
+/// `club` is every real member; `review` only the fake accounts provisioned
+/// for Apple's reviewers. Rules require every roster-style read to be scoped
+/// to the caller's own cohort, so the directory, teams and session-entries
+/// listeners all filter on it. Mirrors `MEMBER_COHORTS` in `shared/src/enums.ts`.
+enum MemberCohort: String, Codable, Hashable {
+    case club, review
+}
+
 enum MemberGrade: String, Codable, CaseIterable, Hashable {
     case open = "Open"
     case intermediate = "Intermediate"

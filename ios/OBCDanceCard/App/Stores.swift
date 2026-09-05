@@ -214,11 +214,19 @@ final class MembersDirectoryStore: ObservableObject {
     @Published private(set) var error: SubscriptionError?
 
     private var listener: ListenerRegistration?
+    private var cohort: MemberCohort?
 
-    func start() {
-        guard listener == nil else { return }
+    /// The `members` rule (plan §8.1) only proves a non-self read when
+    /// `cohort == callerCohort()`, so the query must filter on the caller's
+    /// own cohort — and must wait for it rather than fire once unscoped.
+    func start(cohort: MemberCohort) {
+        if listener != nil, cohort == self.cohort { return }
+        stop()
+        self.cohort = cohort
+        loading = true
         listener = FirebaseService.db.collection(Paths.members)
             .whereField("active", isEqualTo: true)
+            .whereField("cohort", isEqualTo: cohort.rawValue)
             .addSnapshotListener { [weak self] snap, err in
                 Task { @MainActor in
                     guard let self else { return }
@@ -458,12 +466,20 @@ final class TeamsStore: ObservableObject {
 
     private var listener: ListenerRegistration?
     private var selfId: String?
+    private var cohort: MemberCohort?
 
-    func start(selfId: String?) {
+    /// Cohort-scoped like the directory (plan §8.1): the `teams` rule proves
+    /// a read only when `cohort == callerCohort()`.
+    func start(selfId: String?, cohort: MemberCohort) {
         self.selfId = selfId
-        guard listener == nil else { return }
+        if listener != nil, cohort == self.cohort { return }
+        stop()
+        self.selfId = selfId
+        self.cohort = cohort
+        loading = true
         listener = FirebaseService.db.collection(Paths.teams)
             .whereField("status", in: [TeamStatus.forming.rawValue, TeamStatus.active.rawValue])
+            .whereField("cohort", isEqualTo: cohort.rawValue)
             .addSnapshotListener { [weak self] snap, err in
                 Task { @MainActor in
                     guard let self else { return }

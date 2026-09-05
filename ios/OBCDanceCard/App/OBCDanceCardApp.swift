@@ -75,6 +75,11 @@ struct OBCDanceCardApp: App {
                 .environmentObject(visitors)
                 .environmentObject(myEntries)
                 .task { start() }
+                .onChange(of: auth.member?.cohort) { _, _ in
+                    // The cohort-scoped stores (plan §8.1) can only subscribe
+                    // once the member doc — and so the cohort — has arrived.
+                    bindMemberScopedStores(to: auth.memberId)
+                }
                 .onChange(of: auth.memberId) { _, memberId in
                     bindMemberScopedStores(to: memberId)
                 }
@@ -106,8 +111,10 @@ struct OBCDanceCardApp: App {
     private func bindMemberScopedStores(to memberId: String?) {
         if memberId != nil {
             programme.start()
-            directory.start()
-            teams.start(selfId: memberId)
+            if let cohort = auth.member?.cohort {
+                directory.start(cohort: cohort)
+                teams.start(selfId: memberId, cohort: cohort)
+            }
         } else {
             programme.stop()
             directory.stop()
