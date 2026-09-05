@@ -12,6 +12,7 @@
 
 import SwiftUI
 import UIKit
+import UniformTypeIdentifiers
 
 struct CalendarFeedSection: View {
     @State private var loading = true
@@ -41,15 +42,19 @@ struct CalendarFeedSection: View {
             } else if let url, let webcalUrl {
                 if let actionError { Text(actionError).foregroundStyle(.red) }
                 if copied { Text("Copied.").foregroundStyle(.green) }
+                // Not `.textSelection(.enabled)`: SwiftUI's selectable text
+                // copies through a lazily-fulfilled pasteboard promise, which
+                // on device logged "BUG IN CLIENT OF PASTEBOARD … failed to
+                // return data it promised … in a timely fashion" and stalled
+                // other apps reading the pasteboard. Both copy routes below
+                // write the string eagerly instead.
                 Text(url)
                     .font(.footnote.monospaced())
-                    .textSelection(.enabled)
                     .accessibilityLabel("Your calendar link")
-                Button("Copy link") {
-                    UIPasteboard.general.string = url
-                    copied = true
-                    Task { try? await Task.sleep(nanoseconds: 3_000_000_000); copied = false }
-                }
+                    .contextMenu {
+                        Button("Copy link", systemImage: "doc.on.doc") { copyLink(url) }
+                    }
+                Button("Copy link") { copyLink(url) }
                 Button("Open in Apple Calendar") {
                     if let u = URL(string: webcalUrl) { UIApplication.shared.open(u) }
                 }
@@ -94,6 +99,15 @@ struct CalendarFeedSection: View {
             }
         }
         }
+    }
+
+    /// Eager, typed pasteboard write (no item-provider promise). Plain text
+    /// rather than a URL type so it pastes cleanly into any calendar app's
+    /// "subscribe" field.
+    private func copyLink(_ url: String) {
+        UIPasteboard.general.setValue(url, forPasteboardType: UTType.utf8PlainText.identifier)
+        copied = true
+        Task { try? await Task.sleep(nanoseconds: 3_000_000_000); copied = false }
     }
 
     private func load() async {
