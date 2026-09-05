@@ -21,6 +21,7 @@ struct CalendarFeedSection: View {
     @State private var actionError: String?
     @State private var copied = false
     @State private var confirming: Confirm?
+    @State private var loadedOnce = false
 
     private enum Confirm: Identifiable { case reset, remove; var id: Self { self } }
 
@@ -62,10 +63,19 @@ struct CalendarFeedSection: View {
                     .disabled(busy)
             }
         } header: {
+            // The header is the one element that exists exactly once, so the
+            // load and the alert hang off it. A modifier on the `Section`
+            // itself is applied to every row: `.task` would then re-run —
+            // flipping the section back to its spinner and changing its
+            // height — each time a row scrolled back into view, which is what
+            // made the Profile screen refuse to scroll to the top.
             Text("Calendar feed")
-        }
-        .task { await load() }
-        .alert(item: $confirming) { which in
+                .task {
+                    guard !loadedOnce else { return }
+                    loadedOnce = true
+                    await load()
+                }
+                .alert(item: $confirming) { which in
             switch which {
             case .reset:
                 return Alert(
@@ -82,6 +92,7 @@ struct CalendarFeedSection: View {
                     secondaryButton: .cancel()
                 )
             }
+        }
         }
     }
 

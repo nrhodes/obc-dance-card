@@ -129,6 +129,33 @@ final class PushManager: NSObject, ObservableObject {
         await refreshState()
     }
 
+    /// Reconciles the locally remembered token with what the server actually
+    /// holds in `memberPrivate.devices`. The two can disagree: the server
+    /// pruned the token as dead (plan §11), a sign-out's `unregisterDevice`
+    /// ran while this device's local copy survived a reinstall, or the
+    /// registration never completed. Either way the Profile would say "on"
+    /// while nothing arrives. When
+    /// permission is still granted, silently re-register; if it was revoked
+    /// in Settings, fall back to the honest state. Mirrors the web's
+    /// on-mount re-registration in `usePush.ts`, extended to server truth.
+    func reconcile(registeredTokens: [String]) async {
+        guard let token = storedToken, !registeredTokens.contains(token) else { return }
+        let settings = await UNUserNotificationCenter.current().notificationSettings()
+        switch settings.authorizationStatus {
+        case .authorized, .provisional, .ephemeral:
+            UIApplication.shared.registerForRemoteNotifications()
+            do {
+                try await register(token: token)
+                state = .enabled
+            } catch {
+                state = .error(ErrorMapper.genericMessage(error))
+            }
+        default:
+            storedToken = nil
+            await refreshState()
+        }
+    }
+
     /// Sign-out hook: forget this device's token server-side so the next
     /// person to sign in on this handset never receives the last one's
     /// notifications.

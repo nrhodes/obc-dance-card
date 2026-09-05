@@ -80,6 +80,10 @@ struct OBCDanceCardApp: App {
                     // once the member doc — and so the cohort — has arrived.
                     bindMemberScopedStores(to: auth.memberId)
                 }
+                .onChange(of: auth.memberPrivate?.devices.map(\.token)) { _, tokens in
+                    guard let tokens else { return }
+                    Task { await push.reconcile(registeredTokens: tokens) }
+                }
                 .onChange(of: auth.memberId) { _, memberId in
                     bindMemberScopedStores(to: memberId)
                 }
