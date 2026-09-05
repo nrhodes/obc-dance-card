@@ -4,10 +4,11 @@
 //  counterpart of `web/src/push/usePush.ts`).
 //
 //  Rules this file exists to keep:
-//   * Permission is **never** requested on its own. `Notification.request…`
-//     only ever runs from a direct tap on the Profile toggle — auto-prompting
-//     punishes elderly members with a modal they didn't ask for and burns the
-//     one chance iOS gives you to ask.
+//   * The iOS permission dialog is only ever triggered by a member's own tap:
+//     the first-launch soft ask (`PushSoftAskView`) or Profile's "Turn on
+//     notifications on this device". iOS shows that dialog once per install,
+//     so an unexpected one gets a reflexive "Don't Allow" that only Settings
+//     can undo; the soft ask explains first, and "Not now" costs nothing.
 //   * `registerDevice { token, platform: "ios", label }` on every token
 //     refresh; `unregisterDevice` on sign-out (plan §14.2).
 //   * A device token is a secret-adjacent value: never logged, never shown.
@@ -42,9 +43,21 @@ final class PushManager: NSObject, ObservableObject {
     }
 
     private static let tokenKey = "obc.pushToken"
+    private static let softAskDismissedKey = "obc.pushSoftAskDismissed"
 
     @Published private(set) var state: State = .prompt
     @Published private(set) var busy = false
+    /// The OS-level answer, as last read. `.notDetermined` until iOS has
+    /// been asked; the soft ask is only offered while it is.
+    @Published private(set) var authorization: UNAuthorizationStatus = .notDetermined
+    /// The member tapped "Not now" on the soft ask on this install.
+    @Published private(set) var softAskDismissed: Bool =
+        UserDefaults.standard.bool(forKey: PushManager.softAskDismissedKey)
+
+    func dismissSoftAsk() {
+        softAskDismissed = true
+        UserDefaults.standard.set(true, forKey: Self.softAskDismissedKey)
+    }
 
     /// Set by the app so a tapped notification can be routed once the UI is up.
     var onDeepLink: ((DeepLink) -> Void)?
@@ -67,6 +80,7 @@ final class PushManager: NSObject, ObservableObject {
     /// Reads the current OS-level permission without prompting.
     func refreshState() async {
         let settings = await UNUserNotificationCenter.current().notificationSettings()
+        authorization = settings.authorizationStatus
         switch settings.authorizationStatus {
         case .denied:
             state = .denied

@@ -1165,7 +1165,8 @@ visible rather than being papered over.
 - Web follows whenever `firebase/messaging` offers the equivalent; until then
   it stays on tokens and the server handles both.
 - No change to what a push carries (ids only, §14.2) or to the permission
-  rules (never auto-prompt).
+  rules (the iOS dialog only from a member's own tap: the first-launch soft
+  ask or Profile — see `docs/web-push.md`).
 ### B7. Admin weekday editing (partner steward mid-year handover)
 
 **Intent.** `programmes/{year}/weekdays/{weekday}` (label, times, single
