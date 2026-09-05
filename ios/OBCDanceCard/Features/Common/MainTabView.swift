@@ -36,7 +36,6 @@ struct MainTabView: View {
             }
             .sheet(isPresented: $showSoftAsk) {
                 PushSoftAskView()
-                    .presentationDetents([.medium])
             }
     }
 

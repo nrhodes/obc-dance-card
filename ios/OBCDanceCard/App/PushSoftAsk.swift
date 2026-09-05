@@ -32,20 +32,24 @@ struct PushSoftAskView: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        VStack(spacing: 24) {
-            Spacer()
+        // Texts are `fixedSize` vertically so a tight sheet height can never
+        // truncate them to one "…" line — the VStack grows instead, and the
+        // sheet can be pulled up to `.large` if a small phone needs it.
+        VStack(spacing: 20) {
             Image(systemName: "bell.badge")
-                .font(.system(size: 56))
+                .font(.system(size: 48))
                 .foregroundStyle(.tint)
                 .accessibilityHidden(true)
+                .padding(.top, 8)
             Text("Stay in the loop")
-                .font(.title.bold())
+                .font(.title2.bold())
+                .fixedSize(horizontal: false, vertical: true)
             Text("Get a notification on this phone when a partner responds, cancels, or invites you.")
                 .font(.body)
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
-                .padding(.horizontal)
-            Spacer()
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 8)
             Button {
                 Task {
                     await push.enable()
@@ -65,8 +69,11 @@ struct PushSoftAskView: View {
             Text("You can change this any time in Profile.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .padding(24)
         .interactiveDismissDisabled(push.busy)
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
     }
 }
