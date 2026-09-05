@@ -81,10 +81,18 @@ replaced with `/// <reference lib="webworker" />` and it'll all still work.
 ## Registration flow (`usePush.ts` / `PushSettings.tsx`)
 
 State machine: `unsupported | denied | prompt | enabled | error`. The
-Profile screen never auto-prompts for permission (plan task brief: elderly
-users and browsers both punish that) — the only place
+Profile screen never auto-prompts for permission — browsers won't show the
+dialog without a click anyway — so the only place
 `Notification.requestPermission()` is called is inside `enable()`, itself
 only ever invoked from the "Turn on notifications on this device" button.
+
+(Amended 2026-09-05.) iOS adds a **soft ask**: on the first signed-in launch,
+while the OS hasn't been asked, the member-wide preference is on and the
+member hasn't said "Not now" on this install, the app shows its own screen
+explaining what notifications are for, with one button that triggers the
+real iOS dialog. "Not now" is remembered per install and Profile's
+"Notifications on this device" remains the fallback. Registration is still
+tied to a granted permission — the phone is never registered "just in case".
 
 - **Turn on** → request permission → `getToken(messaging, { vapidKey,
   serviceWorkerRegistration })` → `registerDevice({ token, platform: 'web',
