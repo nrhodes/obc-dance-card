@@ -112,7 +112,7 @@ final class EmulatorSignInTests: XCTestCase {
         // 6. The members directory is readable by an active member (booklet
         //    parity, plan §2 "Visibility").
         let directory = MembersDirectoryStore()
-        directory.start()
+        directory.start(cohort: auth.member?.cohort ?? .club)
         try await waitUntil("directory loads") { !directory.loading && !directory.members.isEmpty }
         XCTAssertNotNil(directory.members.first { $0.fullName == memberName })
         directory.stop()

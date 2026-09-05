@@ -24,16 +24,21 @@ final class CardTeamsModel: ObservableObject {
 
     private var listener: ListenerRegistration?
     private var currentIds: [String] = []
+    private var currentCohort: MemberCohort?
 
-    func refresh(entries: [Entry]) {
+    /// `cohort` is the signed-in member's own (plan §8.1): the `teams` rule
+    /// can only prove an id-in query that is also cohort-scoped.
+    func refresh(entries: [Entry], cohort: MemberCohort?) {
         let ids = Array(Set(entries.compactMap(\.teamId))).sorted().prefix(Self.maxTeamIds).map { $0 }
-        guard ids != currentIds else { return }
+        guard ids != currentIds || cohort != currentCohort else { return }
         currentIds = ids
+        currentCohort = cohort
         listener?.remove()
         listener = nil
-        guard !ids.isEmpty else { teams = []; return }
+        guard !ids.isEmpty, let cohort else { teams = []; return }
         listener = FirebaseService.db.collection(Paths.teams)
             .whereField(FieldPath.documentID(), in: ids)
+            .whereField("cohort", isEqualTo: cohort.rawValue)
             .addSnapshotListener { [weak self] snap, err in
                 Task { @MainActor in
                     guard let self else { return }
@@ -128,8 +133,9 @@ struct CardView: View {
         }
         .navigationTitle(auth.member.map { "Hello, \($0.firstName)" } ?? "My card")
         .navigationBarTitleDisplayMode(.large)
-        .onAppear { teamsModel.refresh(entries: myEntries.entries) }
-        .onChange(of: myEntries.entries) { _, entries in teamsModel.refresh(entries: entries) }
+        .onAppear { teamsModel.refresh(entries: myEntries.entries, cohort: auth.member?.cohort) }
+        .onChange(of: myEntries.entries) { _, entries in teamsModel.refresh(entries: entries, cohort: auth.member?.cohort) }
+        .onChange(of: auth.member?.cohort) { _, cohort in teamsModel.refresh(entries: myEntries.entries, cohort: cohort) }
     }
 
     @ViewBuilder

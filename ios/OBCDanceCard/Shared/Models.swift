@@ -123,6 +123,9 @@ struct Member: Codable, Identifiable, Hashable {
     var grade: MemberGrade
     var role: MemberRole
     var active: Bool
+    /// Plan §8.1 cohort. Absent on a doc written before the backfill ran —
+    /// treated as `club`, which is what the backfill stamps.
+    var cohort: MemberCohort
     var lastImportId: String?
     var deactivatedAt: String?
     var erasedAt: String?
@@ -140,6 +143,7 @@ struct Member: Codable, Identifiable, Hashable {
         grade = try c.decodeIfPresent(MemberGrade.self, forKey: .grade) ?? .unknown
         role = try c.decodeIfPresent(MemberRole.self, forKey: .role) ?? .member
         active = try c.decodeIfPresent(Bool.self, forKey: .active) ?? false
+        cohort = try c.decodeIfPresent(MemberCohort.self, forKey: .cohort) ?? .club
         lastImportId = try c.decodeIfPresent(String.self, forKey: .lastImportId)
         deactivatedAt = try c.decodeIfPresent(String.self, forKey: .deactivatedAt)
         erasedAt = try c.decodeIfPresent(String.self, forKey: .erasedAt)
@@ -155,7 +159,8 @@ struct Member: Codable, Identifiable, Hashable {
         phone: String = "",
         grade: MemberGrade = .unknown,
         role: MemberRole = .member,
-        active: Bool = true
+        active: Bool = true,
+        cohort: MemberCohort = .club
     ) {
         self.id = id
         self.firstName = firstName
@@ -164,6 +169,7 @@ struct Member: Codable, Identifiable, Hashable {
         self.grade = grade
         self.role = role
         self.active = active
+        self.cohort = cohort
     }
 }
 
@@ -469,6 +475,8 @@ struct Session: Codable, Identifiable, Hashable {
 /// One member's dance-card line for one session. See plan §5.6 / §7 for the
 /// invariants; `shared/src/pairing.ts` is where the server checks them.
 struct Entry: Codable, Identifiable, Hashable {
+    /// Server-stamped copy of the owner's cohort (plan §8.1); never sent by a client.
+    var cohort: MemberCohort? = nil
     var id: String
     var sessionId: String
     /// Denormalised from the session for range queries.
@@ -509,6 +517,7 @@ struct Entry: Codable, Identifiable, Hashable {
         pairingId = try c.decodeIfPresent(String.self, forKey: .pairingId)
         teamId = try c.decodeIfPresent(String.self, forKey: .teamId)
         teamSessionOnly = try c.decodeIfPresent(Bool.self, forKey: .teamSessionOnly) ?? false
+        cohort = try c.decodeIfPresent(MemberCohort.self, forKey: .cohort)
         substitute = try c.decodeIfPresent(PartnerRef.self, forKey: .substitute)
         partnerSubstitute = try c.decodeIfPresent(PartnerRef.self, forKey: .partnerSubstitute)
         isSubstituteFor = try c.decodeIfPresent(String.self, forKey: .isSubstituteFor)
@@ -641,6 +650,8 @@ struct TeamMemberEntry: Codable, Hashable, Identifiable {
 }
 
 struct Team: Codable, Identifiable, Hashable {
+    /// Server-stamped copy of the captain's cohort (plan §8.1).
+    var cohort: MemberCohort? = nil
     var id: String
     var year: Int
     var seriesId: String
@@ -665,6 +676,7 @@ struct Team: Codable, Identifiable, Hashable {
         members = try c.decodeIfPresent([TeamMemberEntry].self, forKey: .members) ?? []
         status = try c.decodeIfPresent(TeamStatus.self, forKey: .status) ?? .forming
         sessionVisitors = try c.decodeIfPresent([String: [PartnerRef]].self, forKey: .sessionVisitors)
+        cohort = try c.decodeIfPresent(MemberCohort.self, forKey: .cohort)
     }
 
     init(

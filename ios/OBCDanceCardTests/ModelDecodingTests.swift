@@ -106,6 +106,26 @@ final class ModelDecodingTests: XCTestCase {
         XCTAssertEqual(member.fullName, "Jane Doe")
         XCTAssertEqual(member.grade, .intermediate)
         XCTAssertTrue(member.active)
+        // Plan §8.1: absent before the backfill → `club`, never `review`.
+        XCTAssertEqual(member.cohort, .club)
+    }
+
+    func testCohortDecodesOnMembersEntriesAndTeams() throws {
+        let reviewer = try decode(Member.self, """
+        { "id": "r1", "firstName": "App", "lastName": "Reviewer", "grade": "Open",
+          "role": "member", "active": true, "cohort": "review" }
+        """)
+        XCTAssertEqual(reviewer.cohort, .review)
+        let entry = try decode(Entry.self, """
+        { "id": "e1", "sessionId": "s1", "date": "2027-01-11", "weekday": "monday",
+          "memberId": "r1", "status": "confirmed", "cohort": "review" }
+        """)
+        XCTAssertEqual(entry.cohort, .review)
+        let team = try decode(Team.self, """
+        { "id": "t", "year": 2027, "seriesId": "s", "name": "N", "captainMemberId": "r1",
+          "members": [], "status": "forming", "cohort": "club" }
+        """)
+        XCTAssertEqual(team.cohort, .club)
     }
 
     func testMemberPrivateFallsBackToTheDefaultPreferences() throws {

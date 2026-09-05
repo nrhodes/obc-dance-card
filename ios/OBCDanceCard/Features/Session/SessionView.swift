@@ -22,15 +22,23 @@ final class SessionEntriesModel: ObservableObject {
 
     private var listener: ListenerRegistration?
     private var currentSessionId: String?
+    private var currentCohort: MemberCohort?
 
-    func start(sessionId: String) {
-        guard sessionId != currentSessionId else { return }
+    /// Cohort-scoped (plan §8.1): the `entries` rule proves a roster read
+    /// only for `cohort == callerCohort()` (own entries are always readable,
+    /// but a whole-session query has to be provable for every row). Waits
+    /// for the cohort rather than firing once unscoped.
+    func start(sessionId: String, cohort: MemberCohort?) {
+        guard sessionId != currentSessionId || cohort != currentCohort else { return }
         stop()
         currentSessionId = sessionId
+        currentCohort = cohort
         loaded = false
+        guard let cohort else { return }
 
         listener = FirebaseService.db.collection(Paths.entries)
             .whereField("sessionId", isEqualTo: sessionId)
+            .whereField("cohort", isEqualTo: cohort.rawValue)
             .addSnapshotListener { [weak self] snap, err in
                 Task { @MainActor in
                     guard let self else { return }
@@ -177,7 +185,8 @@ struct SessionView: View {
         }
         .navigationTitle(session?.title ?? "Session")
         .navigationBarTitleDisplayMode(.inline)
-        .onAppear { model.start(sessionId: sessionId) }
+        .onAppear { model.start(sessionId: sessionId, cohort: auth.member?.cohort) }
+        .onChange(of: auth.member?.cohort) { _, cohort in model.start(sessionId: sessionId, cohort: cohort) }
         .sheet(item: $sheet) { sheetContent($0) }
         .alert(item: $confirm) { item in
             Alert(
