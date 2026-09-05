@@ -1,7 +1,7 @@
 /**
  * E2E: App-Store-review cohort partition (plan §8.1, decided 2026-09-05).
  * The seed (`firebase/seed/seed.ts`) provisions `SEED_REVIEW_COUNT` (2)
- * `cohort: 'review'` members — Alex Sharp / Billie Trumper, reviewer1/2@
+ * `cohort: 'review'` members — Ted TEST01 Jones / Sally TEST02 Smith, test01/02@
  * `SEED_REVIEW_DOMAIN`, password `SEED_REVIEW_PASSWORD` — via the exact same
  * `provisionReviewMembers` path `firebase/scripts/provision-review-cohort.ts`
  * uses (see that file's header). Values are duplicated as local consts below
@@ -27,8 +27,8 @@ import { type Page } from '@playwright/test';
 import { waitForLoginCode } from './support/emailOutbox';
 
 // Kept in sync with firebase/seed/seed.ts's SEED_REVIEW_* constants.
-const REVIEWER1_EMAIL = 'reviewer1@reviewer.example.test';
-const REVIEWER2_NAME = 'Billie Trumper';
+const REVIEWER1_EMAIL = 'test01@reviewer.example.test';
+const REVIEWER2_NAME = 'Sally TEST02 Smith';
 const REVIEWER_PASSWORD = 'ci-dev-reviewer-pw-1';
 
 // A club member + session date no other e2e spec references (see header).
@@ -112,5 +112,5 @@ test('the review cohort and the club are invisible to each other', async ({ page
   await page.getByLabel('Main').getByRole('link', { name: 'Members' }).click();
   await expect(page.getByRole('heading', { name: 'Members' })).toBeVisible();
   await expect(page.getByText(REVIEWER2_NAME)).not.toBeVisible();
-  await expect(page.getByText('Alex Sharp')).not.toBeVisible();
+  await expect(page.getByText('Ted TEST01 Jones')).not.toBeVisible();
 });

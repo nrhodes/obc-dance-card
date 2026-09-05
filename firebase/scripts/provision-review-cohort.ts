@@ -47,15 +47,36 @@ import {
   type MemberPrivate,
 } from '@obc/shared';
 
-/** Clearly-fake names (plan §8.1: "clearly fake names") — never a real member's shape. */
-const REVIEW_NAMES: Array<{ firstName: string; lastName: string }> = [
-  { firstName: 'Alex', lastName: 'Sharp' },
-  { firstName: 'Billie', lastName: 'Trumper' },
-  { firstName: 'Casey', lastName: 'Finesse' },
-  { firstName: 'Drew', lastName: 'Ruff' },
-  { firstName: 'Every', lastName: 'Trick' },
-  { firstName: 'Frankie', lastName: 'Slam' },
-];
+/**
+ * Clearly-fake names (plan §8.1, format decided by Neil 2026-09-06): common
+ * first and last names with `TESTNN` in the middle — "Ted TEST05 Jones" —
+ * so every review account is unmistakably fake at a glance while the roster
+ * still reads like a real club. The NN matches the account's email
+ * (`test05@…` ⇔ `TEST05`). `TESTNN` lives in `lastName` so the fake accounts
+ * group together anywhere sorted by surname (e.g. the admin members table).
+ */
+const REVIEW_FIRST_NAMES = [
+  'Ted', 'Sally', 'John', 'Mary', 'Peter', 'Susan', 'David', 'Karen', 'Michael', 'Linda',
+  'Robert', 'Carol', 'James', 'Helen', 'Brian', 'Janet', 'Alan', 'Judith', 'Graham', 'Margaret',
+  'Colin', 'Barbara', 'Ian', 'Patricia', 'Keith', 'Pamela', 'Trevor', 'Shirley', 'Bruce', 'Gail',
+] as const;
+const REVIEW_LAST_NAMES = [
+  'Jones', 'Smith', 'Brown', 'Wilson', 'Taylor', 'Clark', 'Walker', 'Harris', 'Lewis', 'Young',
+  'King', 'Wright', 'Hill', 'Green', 'Baker', 'Adams', 'Nelson', 'Carter', 'Mitchell', 'Roberts',
+  'Turner', 'Phillips', 'Campbell', 'Parker', 'Evans', 'Edwards', 'Collins', 'Stewart', 'Morris', 'Murphy',
+] as const;
+const MAX_REVIEW_MEMBERS = REVIEW_FIRST_NAMES.length;
+
+/** Zero-padded two-digit account number: 1 → "01". */
+function reviewNN(i: number): string {
+  return String(i + 1).padStart(2, '0');
+}
+
+/** Account i's name parts, e.g. i=4 → { firstName: 'Peter', lastName: 'TEST05 Taylor' }. */
+function reviewName(i: number): { firstName: string; lastName: string } {
+  return { firstName: REVIEW_FIRST_NAMES[i]!, lastName: `TEST${reviewNN(i)} ${REVIEW_LAST_NAMES[i]!}` };
+}
+
 const DEFAULT_COUNT = 4;
 
 interface Args {
@@ -90,8 +111,8 @@ function parseArgs(argv: string[]): Args {
   if (strengthError) {
     throw new Error(`--password is too weak: ${strengthError}`);
   }
-  if (count < 1 || count > REVIEW_NAMES.length) {
-    throw new Error(`--count must be between 1 and ${REVIEW_NAMES.length}.`);
+  if (count < 1 || count > MAX_REVIEW_MEMBERS) {
+    throw new Error(`--count must be between 1 and ${MAX_REVIEW_MEMBERS}.`);
   }
   return { domain, password, count, project, deactivate };
 }
@@ -144,8 +165,8 @@ export async function provisionReviewMembers(
 ): Promise<ProvisionedReviewMember[]> {
   const results: ProvisionedReviewMember[] = [];
   for (let i = 0; i < count; i++) {
-    const { firstName, lastName } = REVIEW_NAMES[i]!;
-    const emailLower = `reviewer${i + 1}@${domain}`.toLowerCase();
+    const { firstName, lastName } = reviewName(i);
+    const emailLower = `test${reviewNN(i)}@${domain}`.toLowerCase();
 
     const existingPrivate = await db.collection('memberPrivate').where('emailLower', '==', emailLower).limit(1).get();
     const now = new Date().toISOString();
