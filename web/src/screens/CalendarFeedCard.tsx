@@ -140,7 +140,9 @@ export function CalendarFeedCard() {
             </a>
           </div>
           <p className="muted">
-            Google Calendar: Other calendars → + → From URL, then paste the link above.
+            Google Calendar only lets you add a subscription from a computer: at
+            calendar.google.com, next to Other calendars click +, then From URL, and paste the link
+            above. It then shows in the Google Calendar app on your phone.
           </p>
           <div className="actions-row">
             <button type="button" className="button button-secondary" onClick={() => setConfirming('reset')}>
