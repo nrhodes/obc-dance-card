@@ -105,15 +105,32 @@ final class PushManager: NSObject, ObservableObject {
                 return
             }
             UIApplication.shared.registerForRemoteNotifications()
-            guard let token = try await Messaging.messaging().token() as String? else {
-                state = .error("No push token was issued.")
+            // `registerForRemoteNotifications` is asynchronous: Apple hands
+            // the APNs token to the app delegate a moment later, and FCM
+            // refuses to mint a token until it has one ("Declining request
+            // for FCM Token since no APNS Token specified"). Asking straight
+            // away therefore always failed on a real phone.
+            guard await Self.waitForAPNsToken() else {
+                state = .error("This phone didn't get a push token from Apple. Check your connection and try again.")
                 return
             }
+            let token = try await Messaging.messaging().token()
             try await register(token: token)
             state = .enabled
         } catch {
             state = .error(ErrorMapper.genericMessage(error))
         }
+    }
+
+    /// Waits (up to ~10 s) for the APNs device token that
+    /// `registerForRemoteNotifications()` delivers asynchronously; FCM's
+    /// swizzled delegate proxy stores it on `Messaging.apnsToken`.
+    private static func waitForAPNsToken() async -> Bool {
+        for _ in 0..<40 {
+            if Messaging.messaging().apnsToken != nil { return true }
+            try? await Task.sleep(nanoseconds: 250_000_000)
+        }
+        return Messaging.messaging().apnsToken != nil
     }
 
     /// Turns push off for *this device* only. The server prunes dead tokens
@@ -144,6 +161,7 @@ final class PushManager: NSObject, ObservableObject {
         switch settings.authorizationStatus {
         case .authorized, .provisional, .ephemeral:
             UIApplication.shared.registerForRemoteNotifications()
+            _ = await Self.waitForAPNsToken()
             do {
                 try await register(token: token)
                 state = .enabled
