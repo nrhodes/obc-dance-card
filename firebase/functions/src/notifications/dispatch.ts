@@ -99,23 +99,35 @@ export class FcmPushProvider implements PushProvider {
     const invalidTokens: string[] = [];
 
     async function sendGroup(
+      platform: 'ios' | 'web',
       tokens: string[],
       rest: Omit<MulticastMessage, 'tokens'>,
     ): Promise<void> {
       if (tokens.length === 0) return;
       const response = await getMessaging().sendEachForMulticast({ tokens, ...rest });
+      // Per-token failures that are *not* dead tokens (an APNs credential
+      // problem, a web-push 401, a throttled send…) were previously
+      // swallowed, so `notification_dispatched channel=push` could log while
+      // nothing ever arrived. Log the code and platform — never the token.
+      const failures = new Map<string, number>();
       response.responses.forEach((r, i) => {
-        if (!r.success && r.error && DEAD_TOKEN_CODES.has(r.error.code)) {
+        if (r.success || !r.error) return;
+        if (DEAD_TOKEN_CODES.has(r.error.code)) {
           invalidTokens.push(tokens[i]!);
+        } else {
+          failures.set(r.error.code, (failures.get(r.error.code) ?? 0) + 1);
         }
       });
+      for (const [code, count] of failures) {
+        logger.warn('push_send_failed', { platform, code, count, of: tokens.length });
+      }
     }
 
     const iosTokens = devices.filter((d) => d.platform === 'ios').map((d) => d.token);
     const webTokens = devices.filter((d) => d.platform === 'web').map((d) => d.token);
 
-    await sendGroup(iosTokens, { notification: { title, body }, data });
-    await sendGroup(webTokens, {
+    await sendGroup('ios', iosTokens, { notification: { title, body }, data });
+    await sendGroup('web', webTokens, {
       data: { ...data, title, body },
       webpush: { headers: { Urgency: 'normal' } },
     });
