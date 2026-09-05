@@ -25,6 +25,12 @@ updates:
       # this once firebase-functions supports admin >= 14.
       - dependency-name: firebase-admin
         update-types: ["version-update:semver-major"]
+      # @types/node must track the runtime, not the newest release: functions
+      # run on Node 22 (`firebase.json` runtime, CI node-version), so 22.x is
+      # the right major. Dependabot only ever proposes the latest (PR #38
+      # offered 26). Bump this by hand when the runtime moves.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: github-actions
     directory: "/"
