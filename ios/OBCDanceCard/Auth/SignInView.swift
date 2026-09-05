@@ -166,14 +166,16 @@ struct EmailCodeSections: View {
     }
 
     var body: some View {
+        // Modifiers go on rows, not on the `Section`: a List applies a
+        // Section's modifiers to every row, so `.task` would fire per row.
         Section {
             Text("We've emailed a 6-digit code to \(email). It's valid for 10 minutes.")
                 .font(.body)
-        }
-        .task {
-            guard !sentOnce else { return }
-            sentOnce = true
-            await flow.sendCode(email: email)
+                .task {
+                    guard !sentOnce else { return }
+                    sentOnce = true
+                    await flow.sendCode(email: email)
+                }
         }
 
         if let message = flow.errorMessage ?? signInError {
@@ -209,10 +211,10 @@ struct EmailCodeSections: View {
                 Task { await flow.sendCode(email: email) }
             }
             .disabled(flow.secondsUntilResend(now: now) > 0 || flow.phase == .sending)
+            .onReceive(ticker) { now = $0 }
 
             Button(useDifferentEmailLabel, action: onUseDifferentEmail)
         }
-        .onReceive(ticker) { now = $0 }
     }
 
     private var resendLabel: String {

@@ -136,6 +136,8 @@ private struct NotificationPrefsSection: View {
                 Text("Saved.").foregroundStyle(.green)
             }
             Toggle("Push notifications", isOn: binding(\.push))
+            Text("Each phone also needs turning on under \"Notifications on this device\" below.")
+                .font(.footnote).foregroundStyle(.secondary)
             Toggle("Email notifications", isOn: binding(\.email))
             Toggle("Session reminders", isOn: binding(\.reminders))
             if prefs.reminders {
@@ -184,9 +186,18 @@ private struct NotificationPrefsSection: View {
 /// its own (see `PushManager`).
 private struct PushSection: View {
     @EnvironmentObject private var push: PushManager
+    @EnvironmentObject private var auth: AuthModel
+
+    /// The member-wide preference (`notificationPrefs.push`) gates the
+    /// per-device registration, as on the web.
+    private var prefsAllowPush: Bool { auth.memberPrivate?.notificationPrefs.push ?? true }
 
     var body: some View {
         Section("Notifications on this device") {
+            if push.state != .denied && !prefsAllowPush {
+                Text("Push notifications are turned off in your preferences above. Turn \"Push notifications\" on there first.")
+                    .font(.footnote).foregroundStyle(.secondary)
+            }
             switch push.state {
             case .denied:
                 Text("Notifications are turned off for this app.")
@@ -199,10 +210,12 @@ private struct PushSection: View {
                 }
                 .disabled(push.busy)
             case .prompt:
-                Button(push.busy ? "Turning on…" : "Turn on notifications") {
+                Text("Get a notification on this phone when a partner responds, cancels, or invites you.")
+                    .font(.footnote).foregroundStyle(.secondary)
+                Button(push.busy ? "Turning on…" : "Turn on notifications on this device") {
                     Task { await push.enable() }
                 }
-                .disabled(push.busy)
+                .disabled(push.busy || !prefsAllowPush)
             case let .error(message):
                 Text(message).foregroundStyle(.red)
                 Button("Try again") { Task { await push.enable() } }
