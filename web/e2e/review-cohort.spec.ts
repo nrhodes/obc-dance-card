@@ -25,6 +25,7 @@
 import { expect, test } from './support/fixtures';
 import { type Page } from '@playwright/test';
 import { waitForLoginCode } from './support/emailOutbox';
+import { openMore } from './support/nav';
 
 // Kept in sync with firebase/seed/seed.ts's SEED_REVIEW_* constants.
 const REVIEWER1_EMAIL = 'test01@reviewer.example.test';
@@ -61,7 +62,9 @@ async function signInByPassword(page: Page, email: string, password: string) {
 }
 
 async function signOut(page: Page) {
-  await page.getByLabel('Main').getByRole('button', { name: 'Sign out' }).click();
+  // Sign out lives behind the nav's "More" disclosure (2026-09-06 UI review).
+  const more = await openMore(page);
+  await more.getByRole('button', { name: 'Sign out' }).click();
   await expect(page).toHaveURL(/\/signin/);
 }
 

@@ -20,6 +20,7 @@
  */
 import { expect, test } from './support/fixtures';
 import { waitForLoginCode } from './support/emailOutbox';
+import { openMore } from './support/nav';
 
 const MEMBER_EMAIL = 'peter.wilson@example.org';
 const SESSION_PATH = '/session/2027/monday-campbell-cave-pairs-2027-02-08';
@@ -37,8 +38,10 @@ test('a member adds a visitor and signs up to play with them', async ({ page }) 
   await page.getByRole('button', { name: 'Sign in' }).click();
   await expect(page.getByRole('heading', { name: /Hello/ })).toBeVisible({ timeout: 15_000 });
 
-  // Add a visitor from Profile -> "My visitors".
-  await page.getByLabel('Main').getByRole('link', { name: 'Profile' }).click();
+  // Add a visitor from Profile -> "My visitors". Profile lives behind the
+  // nav's "More" disclosure (2026-09-06 UI review).
+  const more = await openMore(page);
+  await more.getByRole('link', { name: 'Profile' }).click();
   await page.getByRole('link', { name: 'Manage my visitors' }).click();
   await expect(page.getByRole('heading', { name: 'My visitors' })).toBeVisible();
   await page.getByRole('button', { name: 'Add a visitor' }).click();

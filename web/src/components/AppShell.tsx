@@ -19,6 +19,8 @@ export function AppShell() {
   const isAdmin = member?.role === 'admin';
   const [adminOpen, setAdminOpen] = useState(false);
   const adminMenuRef = useRef<HTMLDivElement | null>(null);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const moreMenuRef = useRef<HTMLDivElement | null>(null);
   const location = useLocation();
 
   // The admin links live in a disclosure so the always-visible member nav
@@ -27,6 +29,7 @@ export function AppShell() {
   // outside click/focus.
   useEffect(() => {
     setAdminOpen(false);
+    setMoreOpen(false);
   }, [location.pathname]);
   useEffect(() => {
     if (!adminOpen) return;
@@ -44,6 +47,27 @@ export function AppShell() {
     };
   }, [adminOpen]);
 
+  // "More" is the same disclosure pattern as Admin's, just for Profile/Help/
+  // Sign out (2026-09-06 UI review: ~10 flat nav items wrapped to 4 rows at
+  // 420px). Kept as a second, independent disclosure rather than merged
+  // with Admin's — Admin is admin-only and already means something specific
+  // to members who see it.
+  useEffect(() => {
+    if (!moreOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMoreOpen(false);
+    };
+    const onDown = (e: MouseEvent) => {
+      if (moreMenuRef.current && !moreMenuRef.current.contains(e.target as Node)) setMoreOpen(false);
+    };
+    document.addEventListener('keydown', onKey);
+    document.addEventListener('mousedown', onDown);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.removeEventListener('mousedown', onDown);
+    };
+  }, [moreOpen]);
+
   // Shared-device safety (plan §8.1): sign out on next load after 30 days of
   // no activity on this device (task deliverable C).
   useIdleSignOut(signOut);
@@ -56,15 +80,6 @@ export function AppShell() {
       <header className="app-header">
         <div className="app-header-top">
           <p className="title">Orewa Bridge Club</p>
-          {member && (
-            <button
-              type="button"
-              className="button-link not-you-link"
-              onClick={() => void signOut()}
-            >
-              Not you? Sign out
-            </button>
-          )}
         </div>
         <nav className="app-nav" aria-label="Main">
           <NavLink to="/" end>
@@ -72,7 +87,6 @@ export function AppShell() {
           </NavLink>
           <NavLink to="/programme">Programme</NavLink>
           <NavLink to="/calendar">Calendar</NavLink>
-          <NavLink to="/members">Members</NavLink>
           <NavLink to="/invites">
             Invites
             {incoming.length > 0 && <span className="nav-badge">{incoming.length}</span>}
@@ -81,8 +95,33 @@ export function AppShell() {
             Notifications
             {unreadCount > 0 && <span className="nav-badge">{unreadCount}</span>}
           </NavLink>
-          <NavLink to="/profile">Profile</NavLink>
-          <NavLink to="/help">Help</NavLink>
+          <NavLink to="/members">Members</NavLink>
+          <div className="more-menu" ref={moreMenuRef}>
+            <button
+              type="button"
+              aria-expanded={moreOpen}
+              aria-haspopup="true"
+              className={['/profile', '/help'].some((p) => location.pathname.startsWith(p)) ? 'active' : undefined}
+              onClick={() => setMoreOpen((o) => !o)}
+            >
+              More <span aria-hidden="true">{moreOpen ? '▴' : '▾'}</span>
+            </button>
+            {moreOpen && (
+              <div className="more-menu-list">
+                <NavLink to="/profile">Profile</NavLink>
+                <NavLink to="/help">Help</NavLink>
+                {/* Sign out lives here now, not as a separate header link —
+                    plan §8.1's "sign out should be prominent" is satisfied
+                    by this disclosure being one tap away from any screen,
+                    same as the old header link was. The former "Not you?
+                    Sign out" header link is gone; this button reuses the
+                    same signOut() handler. */}
+                <button type="button" onClick={() => void signOut()}>
+                  Sign out
+                </button>
+              </div>
+            )}
+          </div>
           {isAdmin && (
             <div className="admin-menu" ref={adminMenuRef}>
               <button
@@ -105,9 +144,6 @@ export function AppShell() {
               )}
             </div>
           )}
-          <button type="button" onClick={() => void signOut()}>
-            Sign out
-          </button>
         </nav>
       </header>
       {actingAs && (

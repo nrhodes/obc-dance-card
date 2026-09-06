@@ -323,6 +323,13 @@ export function CalendarScreen() {
             </select>
           </div>
 
+          {/* 2026-09-06 UI review: in Year mode the legend renders above the
+              grid (between the year picker and the months) — with twelve
+              mini-months' worth of glyphs on screen at once, readers need
+              the key before they start scanning, not after. Month mode
+              keeps the legend below its single grid, unchanged. */}
+          <Legend />
+
           <div className="year-grid">
             {yearOverview.map((m) => (
               <div className="card year-month-card" key={m.month}>
@@ -344,8 +351,6 @@ export function CalendarScreen() {
               </div>
             ))}
           </div>
-
-          <Legend />
         </div>
       )}
 

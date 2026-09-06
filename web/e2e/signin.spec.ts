@@ -18,6 +18,7 @@
  */
 import { expect, test } from './support/fixtures';
 import { waitForLoginCode } from './support/emailOutbox';
+import { openMore } from './support/nav';
 
 const ADMIN_EMAIL = 'admin@example.org';
 
@@ -36,11 +37,17 @@ test('sign in by emailed code, view profile, sign out', async ({ page }) => {
 
   await expect(page.getByRole('heading', { name: /Hello/ })).toBeVisible({ timeout: 15_000 });
 
-  await page.getByRole('link', { name: 'Profile' }).click();
+  // Profile and Sign out both live behind the nav's "More" disclosure
+  // (2026-09-06 UI review) — it closes on navigation, so reopen it after
+  // landing on /profile.
+  let more = await openMore(page);
+  await more.getByRole('link', { name: 'Profile' }).click();
   await expect(page.getByRole('heading', { name: 'Profile' })).toBeVisible();
   await expect(page.getByText(ADMIN_EMAIL)).toBeVisible();
 
-  // Both the nav and the Profile screen have a "Sign out" button; use the nav's.
-  await page.getByLabel('Main').getByRole('button', { name: 'Sign out' }).click();
+  // Both the nav's More menu and the Profile screen have a "Sign out"
+  // button; use the nav's.
+  more = await openMore(page);
+  await more.getByRole('button', { name: 'Sign out' }).click();
   await expect(page).toHaveURL(/\/signin/);
 });
