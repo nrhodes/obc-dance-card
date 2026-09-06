@@ -30,6 +30,7 @@ enum PushSoftAsk {
 struct PushSoftAskView: View {
     @EnvironmentObject private var push: PushManager
     @Environment(\.dismiss) private var dismiss
+    @ScaledMetric(relativeTo: .largeTitle) private var iconSize: CGFloat = 48
 
     var body: some View {
         // Texts are `fixedSize` vertically so a tight sheet height can never
@@ -37,7 +38,7 @@ struct PushSoftAskView: View {
         // sheet can be pulled up to `.large` if a small phone needs it.
         VStack(spacing: 20) {
             Image(systemName: "bell.badge")
-                .font(.system(size: 48))
+                .font(.system(size: iconSize))
                 .foregroundStyle(.tint)
                 .accessibilityHidden(true)
                 .padding(.top, 8)

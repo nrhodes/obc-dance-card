@@ -81,23 +81,23 @@ struct CalendarFeedSection: View {
                     await load()
                 }
                 .alert(item: $confirming) { which in
-            switch which {
-            case .reset:
-                return Alert(
-                    title: Text("Reset your calendar link?"),
-                    message: Text("Your current subscription will stop working — you'll need to re-subscribe with the new link."),
-                    primaryButton: .default(Text("Reset link")) { Task { await rotate() } },
-                    secondaryButton: .cancel()
-                )
-            case .remove:
-                return Alert(
-                    title: Text("Remove your calendar link?"),
-                    message: Text("Your current subscription will stop working. You can create a new one at any time."),
-                    primaryButton: .destructive(Text("Remove link")) { Task { await remove() } },
-                    secondaryButton: .cancel()
-                )
-            }
-        }
+                    switch which {
+                    case .reset:
+                        return Alert(
+                            title: Text("Reset your calendar link?"),
+                            message: Text("Your current subscription will stop working — you'll need to re-subscribe with the new link."),
+                            primaryButton: .default(Text("Reset link")) { Task { await rotate() } },
+                            secondaryButton: .cancel()
+                        )
+                    case .remove:
+                        return Alert(
+                            title: Text("Remove your calendar link?"),
+                            message: Text("Your current subscription will stop working. You can create a new one at any time."),
+                            primaryButton: .destructive(Text("Remove link")) { Task { await remove() } },
+                            secondaryButton: .cancel()
+                        )
+                    }
+                }
         }
     }
 

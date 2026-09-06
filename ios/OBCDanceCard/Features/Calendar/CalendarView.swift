@@ -185,7 +185,7 @@ struct CalendarView: View {
                         router.openSession(year: item.year, sessionId: item.session.id, from: .calendar)
                     } label: {
                         HStack {
-                            Text(item.session.title)
+                            Text(item.session.title).layoutPriority(1)
                             Spacer()
                             StatusPill(meta: meta(for: item.status))
                         }
@@ -248,7 +248,14 @@ struct CalendarView: View {
             .pickerStyle(.segmented)
         }
         Section {
-            LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
+            // Was a hardcoded 2-column grid. On iPhone portrait (~390pt wide,
+            // less List/insetGrouped padding ≈ a ~360pt section) that gave
+            // each of the 2 columns ≈ (360 - 12 spacing) / 2 ≈ 174pt. An
+            // iPad's much wider section wastes all that extra width on the
+            // same 2 overly-wide columns. `.adaptive(minimum: 170, maximum:
+            // 400)` keeps iPhone at 2 columns (170 < 174) while letting an
+            // iPad grow to 3-4.
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 170, maximum: 400), spacing: 12)], spacing: 12) {
                 ForEach(overview) { month in
                     VStack(alignment: .leading, spacing: 4) {
                         Text(monthNames[month.month - 1]).font(.subheadline.weight(.semibold))
@@ -344,6 +351,13 @@ private struct DayCell: View {
                     RoundedRectangle(cornerRadius: compact ? 3 : 6)
                         .strokeBorder(isToday ? Color.accentColor : .clear, lineWidth: 2)
                 )
+                // The compact (Year view) cell is only 22pt tall, below the
+                // usual 44pt hit-target (a documented exception — see the
+                // file header). This doesn't grow the cell, but it does make
+                // the whole cell rect tappable rather than just its drawn
+                // background, which is as much of the target as we can
+                // safely recover without changing the grid's visuals.
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .disabled(cell.sessions.isEmpty)

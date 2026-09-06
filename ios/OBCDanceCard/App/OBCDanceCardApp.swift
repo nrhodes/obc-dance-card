@@ -175,11 +175,12 @@ struct RootView: View {
 /// sentence must only ever be true.
 struct UnavailableView: View {
     @EnvironmentObject private var auth: AuthModel
+    @ScaledMetric(relativeTo: .largeTitle) private var iconSize: CGFloat = 44
 
     var body: some View {
         VStack(spacing: 20) {
             Image(systemName: "wifi.exclamationmark")
-                .font(.system(size: 44))
+                .font(.system(size: iconSize))
                 .foregroundStyle(.secondary)
                 .accessibilityHidden(true)
             Text("Can't reach the club's server")

@@ -101,11 +101,12 @@ final class AppLock: ObservableObject {
 /// the app name — no card, no names, no notification previews.
 struct AppLockView: View {
     @ObservedObject var lock: AppLock
+    @ScaledMetric(relativeTo: .largeTitle) private var iconSize: CGFloat = 48
 
     var body: some View {
         VStack(spacing: 24) {
             Image(systemName: "lock.fill")
-                .font(.system(size: 48))
+                .font(.system(size: iconSize))
                 .foregroundStyle(.secondary)
                 .accessibilityHidden(true)
             Text("Dance Card is locked")

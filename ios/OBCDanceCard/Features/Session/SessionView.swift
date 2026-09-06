@@ -271,8 +271,8 @@ struct SessionView: View {
                         .foregroundStyle(.secondary)
                 }
                 HStack(spacing: 6) {
-                    if let scoring = session.scoring { badge(scoring.rawValue) }
-                    if let format = session.format { badge(format.rawValue) }
+                    if let scoring = session.scoring { Badge(text: scoring.rawValue) }
+                    if let format = session.format { Badge(text: format.rawValue) }
                 }
                 if let notes = weekdayDoc?.notes, !notes.isEmpty {
                     Text(notes).font(.subheadline).foregroundStyle(.secondary)
@@ -665,13 +665,5 @@ struct SessionView: View {
             actionError = message
             return message
         }
-    }
-
-    private func badge(_ text: String) -> some View {
-        Text(text)
-            .font(.caption.weight(.semibold))
-            .padding(.horizontal, 8)
-            .padding(.vertical, 2)
-            .background(Color.secondary.opacity(0.15), in: Capsule())
     }
 }
