@@ -189,6 +189,7 @@ struct TeamPanelView: View {
             Text(ref.displayName
                  + (ref.kind == .visitor ? " (visitor)" : "")
                  + (isCaptainRef ? " (captain)" : ""))
+                .layoutPriority(1)
             Spacer()
             if isCaptain && !isCaptainRef {
                 Button("Remove") { confirmRemove(ref, from: team) }
@@ -201,7 +202,7 @@ struct TeamPanelView: View {
     @ViewBuilder
     private func substituteRow(label: String, ref: PartnerRefInput, name: String, team: Team) -> some View {
         HStack {
-            Text(label).font(.subheadline)
+            Text(label).font(.subheadline).layoutPriority(1)
             Spacer()
             if isCaptain {
                 Button("Remove") { confirmRemoveSessionSub(ref, name: name, team: team) }

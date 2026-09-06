@@ -80,11 +80,7 @@ struct VisitorsView: View {
             HStack {
                 Text(visitor.displayName).font(.body.weight(.medium))
                 if visitor.promotedToMemberId != nil {
-                    Text("now a member")
-                        .font(.caption.weight(.semibold))
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 2)
-                        .background(Color.secondary.opacity(0.15), in: Capsule())
+                    Badge(text: "now a member")
                 }
             }
             if let email = visitor.email, !email.isEmpty {

@@ -140,10 +140,10 @@ struct ProgrammeView: View {
         VStack(alignment: .leading, spacing: 6) {
             Text(series.name).font(.headline)
             HStack(spacing: 6) {
-                badge(series.scoring.rawValue)
-                badge(series.format.rawValue)
-                if let bestOf = series.bestOf { badge("best \(bestOf.n) of \(bestOf.m)") }
-                if !series.allowSubstitute { badge("no substitutes") }
+                Badge(text: series.scoring.rawValue)
+                Badge(text: series.format.rawValue)
+                if let bestOf = series.bestOf { Badge(text: "best \(bestOf.n) of \(bestOf.m)") }
+                if !series.allowSubstitute { Badge(text: "no substitutes") }
             }
             if let note = series.eligibilityNote, !note.isEmpty {
                 Text(note).font(.subheadline).foregroundStyle(.secondary)
@@ -183,13 +183,5 @@ struct ProgrammeView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-    }
-
-    private func badge(_ text: String) -> some View {
-        Text(text)
-            .font(.caption.weight(.semibold))
-            .padding(.horizontal, 8)
-            .padding(.vertical, 2)
-            .background(Color.secondary.opacity(0.15), in: Capsule())
     }
 }

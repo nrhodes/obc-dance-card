@@ -147,11 +147,7 @@ struct CardView: View {
                 HStack {
                     Text(Fmt.date(row.date)).font(.body.weight(.medium))
                     if row.isTeam {
-                        Text("Team")
-                            .font(.caption.weight(.semibold))
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 2)
-                            .background(Color.secondary.opacity(0.15), in: Capsule())
+                        Badge(text: "Team")
                     }
                 }
                 if showTitle {
