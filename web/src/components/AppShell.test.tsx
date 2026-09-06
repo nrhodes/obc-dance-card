@@ -120,19 +120,42 @@ describe('AppShell', () => {
     expect(screen.queryByText(/Acting on behalf of/)).toBeNull();
   });
 
-  it('shows a "Not you? Sign out" link that signs out (task deliverable C)', async () => {
+  it('signs out from the nav\'s "More" disclosure (task deliverable C: sign-out stays one tap away)', async () => {
+    // The old header "Not you? Sign out" link is gone (2026-09-06 UI review:
+    // removed the duplicate sign-out control) — Sign out now lives in the
+    // "More" disclosure alongside Profile/Help, mirroring the Admin
+    // disclosure below.
     memberFixture = member();
     actingAsFixture = null;
     const user = userEvent.setup();
     renderShell();
-    await user.click(screen.getByRole('button', { name: /not you\? sign out/i }));
+    expect(screen.queryByRole('button', { name: /not you\? sign out/i })).toBeNull();
+    const moreButton = screen.getByRole('button', { name: /More/ });
+    expect(moreButton.getAttribute('aria-expanded')).toBe('false');
+    await user.click(moreButton);
+    expect(moreButton.getAttribute('aria-expanded')).toBe('true');
+    await user.click(screen.getByRole('button', { name: 'Sign out' }));
     expect(signOutMock).toHaveBeenCalled();
   });
 
-  it('has a Help link in the main nav', () => {
+  it('has a Help link behind the nav\'s "More" disclosure', async () => {
     memberFixture = member();
+    const user = userEvent.setup();
     renderShell();
+    expect(screen.queryByRole('link', { name: 'Help' })).toBeNull();
+    await user.click(screen.getByRole('button', { name: /More/ }));
     expect(screen.getByRole('link', { name: 'Help' })).toBeTruthy();
+  });
+
+  it('closes the "More" disclosure on Escape', async () => {
+    memberFixture = member();
+    const user = userEvent.setup();
+    renderShell();
+    const moreButton = screen.getByRole('button', { name: /More/ });
+    await user.click(moreButton);
+    expect(screen.getByRole('link', { name: 'Profile' })).toBeTruthy();
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('link', { name: 'Profile' })).toBeNull();
   });
 
   it('shows a dismissible foreground push toast from anywhere in the app (task deliverable F)', async () => {

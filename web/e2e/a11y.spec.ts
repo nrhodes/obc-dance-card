@@ -18,6 +18,7 @@ import { expect, test } from './support/fixtures';
 import { type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { waitForLoginCode } from './support/emailOutbox';
+import { openMore } from './support/nav';
 
 const ADMIN_EMAIL = 'admin@example.org';
 
@@ -86,7 +87,9 @@ test.describe('accessibility (axe)', () => {
     await expect(page.getByRole('heading', { name: 'Notifications' })).toBeVisible();
     await assertNoSeriousViolations(page, '/notifications');
 
-    await page.getByLabel('Main').getByRole('link', { name: 'Profile' }).click();
+    // Profile lives behind the nav's "More" disclosure (2026-09-06 UI review).
+    const more = await openMore(page);
+    await more.getByRole('link', { name: 'Profile' }).click();
     await expect(page.getByRole('heading', { name: 'Profile' })).toBeVisible();
     await assertNoSeriousViolations(page, '/profile');
 

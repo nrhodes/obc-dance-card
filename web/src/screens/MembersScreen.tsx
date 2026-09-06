@@ -59,7 +59,11 @@ export function MembersScreen() {
         {!loading && filtered.length === 0 && <p className="muted">No members match.</p>}
         {!loading && filtered.length > 0 && (
           <div style={{ overflowX: 'auto' }}>
-            <table>
+            {/* Below ~560px this collapses to one stacked block per member
+                (name+grade, then phone, then email) via CSS alone — see
+                `.members-directory-table` in styles.css. Same markup at
+                every width: no duplicated DOM, no resize listener. */}
+            <table className="members-directory-table">
               <caption className="sr-only">Club members, sorted by last name</caption>
               <thead>
                 <tr>

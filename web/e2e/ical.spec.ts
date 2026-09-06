@@ -19,6 +19,7 @@
  */
 import { expect, test } from './support/fixtures';
 import { waitForLoginCode } from './support/emailOutbox';
+import { openMore } from './support/nav';
 
 const MEMBER_EMAIL = 'linda.young@example.org';
 const FUNCTIONS_EMULATOR_BASE =
@@ -42,7 +43,9 @@ test('a member creates, resets, and removes their calendar feed link', async ({ 
   await page.getByRole('button', { name: 'Sign in' }).click();
   await expect(page.getByRole('heading', { name: /Hello/ })).toBeVisible({ timeout: 15_000 });
 
-  await page.getByLabel('Main').getByRole('link', { name: 'Profile' }).click();
+  // Profile lives behind the nav's "More" disclosure (2026-09-06 UI review).
+  const more = await openMore(page);
+  await more.getByRole('link', { name: 'Profile' }).click();
   await expect(page.getByRole('heading', { name: 'Profile' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Calendar feed' })).toBeVisible();
 
