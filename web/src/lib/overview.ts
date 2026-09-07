@@ -39,14 +39,23 @@
  * calls out (`${weekday}-${slug(name)}` can repeat across published years).
  *
  * The Month/Year grids also carry a *series* channel (plan §21 "Calendar
- * series bands"), independent of the member-status colour above: each day
- * whose sessions belong to a series gets a left-edge stripe, alternating
- * between two tints down a weekday column so consecutive occurrences of one
- * series read as one visual band and the next series flips — see
- * `computeSeriesBands` for the exact rule. Naming a series band *does* need
- * a lookup against the year-tagged `series` array (unlike the title/format
- * denormalisation above), so it uses the same year-qualified pattern as
- * `lib/card.ts#cardSessionTitle` — a bare `seriesId` match is not safe.
+ * series rails", replacing an earlier per-cell stripe that shipped
+ * 2026-09-08 and proved unreadable on real data — "can't tell where one
+ * series ends and another starts"): a series occupies a consecutive run of
+ * weeks in one weekday column, and the whole run is meant to read as one
+ * continuous bracketed bar (rendered by the screen, bridging the grid's
+ * row-gap — see `CalendarScreen.tsx`), broken only where one series ends
+ * and the next begins. This module only computes the *data* a renderer
+ * needs for that: per cell, which alternating tint (`computeSeriesBands`,
+ * unchanged from the stripe version) and which position in the series' true
+ * full run (`computeSeriesRunPositions`) — start/middle/end/solo, decided
+ * from *every* session the series has, not just the ones landing in a given
+ * displayed month, so a run that continues past a month boundary gets an
+ * uncapped `middle`/`start` at that edge rather than a false "end" cap.
+ * Naming a series *does* need a lookup against the year-tagged `series`
+ * array (unlike the title/format denormalisation above), so it uses the
+ * same year-qualified pattern as `lib/card.ts#cardSessionTitle` — a bare
+ * `seriesId` match is not safe.
  */
 import { addDaysNZ, todayNZ, weekdayOfNZ, type Entry, type IsoDate, type Series, type Session, type Weekday } from '@obc/shared';
 
@@ -152,27 +161,29 @@ export function buildAgenda(fromDate: IsoDate, days: number, sessions: readonly 
   return result;
 }
 
-/* ------------------------------ series bands ------------------------------ */
+/* ------------------------------ series rails ------------------------------ */
 
 export type SeriesBand = 'a' | 'b';
 
 /**
- * Alternating stripe assignment (plan §21 "Calendar series bands"): per
- * weekday, per year, order that weekday's series by their *first* session
- * date and alternate band A/B by that order's index — so consecutive
- * occurrences of one series (same weekday, same series, week after week)
- * share a tint, and the next series on that weekday flips to the other
- * tint, the next one flips back, and so on. Parity restarts every year
- * (`Series` docs already live one level under `programmes/{year}`, so this
- * falls out naturally) — carrying a running parity across a year boundary
- * would couple two independently-published years for no real benefit.
+ * Alternating tint assignment (plan §21 "Calendar series rails", tint logic
+ * unchanged from the original stripe attempt — only the rendering was the
+ * problem): per weekday, per year, order that weekday's series by their
+ * *first* session date and alternate band A/B by that order's index — so
+ * consecutive occurrences of one series (same weekday, same series, week
+ * after week) share a tint, and the next series on that weekday flips to
+ * the other tint, the next one flips back, and so on. Parity restarts every
+ * year (`Series` docs already live one level under `programmes/{year}`, so
+ * this falls out naturally) — carrying a running parity across a year
+ * boundary would couple two independently-published years for no real
+ * benefit.
  *
  * Returns a lookup keyed `${year}:${seriesId}` — `seriesId` collides across
  * years (plan §21 B3: `${weekday}-${slug(name)}`), so any consumer must key
  * on the pair, never the bare id.
  *
  * Sessions with `seriesId == null` (one-off sessions, e.g. Holiday Bridge)
- * never enter this map — the caller treats "no entry" as "no stripe".
+ * never enter this map — the caller treats "no entry" as "no rail".
  */
 export function computeSeriesBands(sessions: readonly Session[]): Map<string, SeriesBand> {
   // `${year}:${weekday}` -> seriesId -> earliest date seen for that series.
@@ -205,6 +216,59 @@ export function computeSeriesBands(sessions: readonly Session[]): Map<string, Se
   return bands;
 }
 
+/** A cell's place in its series' true full run (plan §21 "Calendar series rails"). */
+export type SeriesRunPosition = 'start' | 'middle' | 'end' | 'solo';
+
+/** The rail info a day cell needs: which tint, and where it sits in its series' run. */
+export interface SeriesRun {
+  band: SeriesBand;
+  position: SeriesRunPosition;
+}
+
+/**
+ * Ordinal position of every series session within its own *complete* date
+ * list (all of that series' sessions in the year, not clipped to any one
+ * displayed month) — the first date is `start`, the last is `end`, everything
+ * between is `middle`, and a series with exactly one session is `solo`.
+ * Keyed `${year}:${seriesId}:${date}` (the same `${year}:${seriesId}`
+ * collision-safety as `computeSeriesBands`, plus the date since a run has one
+ * position per session).
+ *
+ * This is deliberately ordinal-only (no gap/consecutiveness check): the
+ * product intent (plan §21) is that a series occupies *consecutive* weeks,
+ * so first/last-by-date is equivalent to first/last-by-week for every real
+ * series; a series with an actual skipped week is out of scope here.
+ */
+export function computeSeriesRunPositions(sessions: readonly Session[]): Map<string, SeriesRunPosition> {
+  // `${year}:${seriesId}` -> ascending, de-duplicated dates.
+  const datesByGroup = new Map<string, Set<IsoDate>>();
+  for (const s of sessions) {
+    if (!s.seriesId) continue;
+    const year = Number(s.date.slice(0, 4));
+    const key = `${year}:${s.seriesId}`;
+    let dates = datesByGroup.get(key);
+    if (!dates) {
+      dates = new Set<IsoDate>();
+      datesByGroup.set(key, dates);
+    }
+    dates.add(s.date);
+  }
+
+  const positions = new Map<string, SeriesRunPosition>();
+  for (const [key, dateSet] of datesByGroup) {
+    const sorted = [...dateSet].sort();
+    sorted.forEach((date, index) => {
+      let position: SeriesRunPosition;
+      if (sorted.length === 1) position = 'solo';
+      else if (index === 0) position = 'start';
+      else if (index === sorted.length - 1) position = 'end';
+      else position = 'middle';
+      positions.set(`${key}:${date}`, position);
+    });
+  }
+  return positions;
+}
+
 /** Year-qualified series name lookup — mirrors `lib/card.ts#cardSessionTitle`; falls back to the session's own denormalised `seriesName`/`title` if the series doc isn't loaded. */
 function seriesNameFor(seriesId: string, year: number, series: readonly Tagged<Series>[], fallback: Session): string {
   const found = series.find((sr) => sr.id === seriesId && (sr.year == null || sr.year === year));
@@ -220,12 +284,12 @@ export interface MonthDayCell {
   /** That day's bookable sessions — empty for a `none` day. */
   sessions: Session[];
   /**
-   * The stripe for this day, from the *first* of `sessions`' series (plan
-   * §21: rare multi-series days just use the first — documented, not a bug).
+   * The rail for this day, from the *first* of `sessions`' series (plan §21:
+   * rare multi-series days just use the first — documented, not a bug).
    * `null` for a `none` day or a day whose first session is a one-off
-   * (`seriesId == null`).
+   * (`seriesId == null`) — no entry means "no rail", not "rail band a".
    */
-  seriesBand: SeriesBand | null;
+  seriesRun: SeriesRun | null;
   /** Every distinct series name among that day's sessions, in session order — feeds the aria-label/title (WCAG 1.4.1); empty when none. */
   seriesNames: string[];
 }
@@ -294,6 +358,7 @@ export function buildMonthGrid(
   today: IsoDate = todayNZ(),
 ): MonthGrid {
   const bands = computeSeriesBands(sessions);
+  const runPositions = computeSeriesRunPositions(sessions);
   const cells: Array<MonthDayCell | null> = [];
   // `seriesId` -> ascending dates, restricted to this month, for the key.
   const keyDatesBySeries = new Map<string, IsoDate[]>();
@@ -311,11 +376,17 @@ export function buildMonthGrid(
 
     const seriesSessions = daySessions.filter((s) => s.seriesId != null);
     const seriesNames = [...new Set(seriesSessions.map((s) => seriesNameFor(s.seriesId!, year, series, s)))];
-    // Multi-session days are rare; when one happens, the stripe follows the
+    // Multi-session days are rare; when one happens, the rail follows the
     // *first* session's series (whatever that is, one-off included) — kept
     // simple rather than trying to rank same-day sessions.
     const first = daySessions[0];
-    const seriesBand = first?.seriesId ? (bands.get(`${year}:${first.seriesId}`) ?? null) : null;
+    const seriesRun: SeriesRun | null = first?.seriesId
+      ? (() => {
+          const band = bands.get(`${year}:${first.seriesId}`);
+          const position = runPositions.get(`${year}:${first.seriesId}:${first.date}`);
+          return band && position ? { band, position } : null;
+        })()
+      : null;
 
     for (const s of seriesSessions) {
       const dates = keyDatesBySeries.get(s.seriesId!) ?? [];
@@ -329,7 +400,7 @@ export function buildMonthGrid(
       dayOfMonth: day,
       status: dayStatus(date, sessions, entries, today),
       sessions: daySessions,
-      seriesBand,
+      seriesRun,
       seriesNames,
     });
   }

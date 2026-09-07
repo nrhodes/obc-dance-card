@@ -27,8 +27,8 @@
  * `weekdayOfNZ`), not hardcoded, so this spec keeps working on whatever real
  * date it runs — including a second, back-to-back run with no re-seed.
  *
- * A second test below covers the Month view's series bands (plan §21
- * "Calendar series bands"), against the seed's fixed 2027 Monday-series
+ * A second test below covers the Month view's series rails (plan §21
+ * "Calendar series rails"), against the seed's fixed 2027 Monday-series
  * sequence — Marion Taylor Pairs (Jan) is the first Monday series of that
  * year, so it always lands on band A regardless of when this spec runs.
  */
@@ -127,7 +127,7 @@ test('Calendar overview + bulk "Set availability…" unavailable/clear round-tri
   await expect(page.getByRole('button', { name: "I'm looking for a partner" })).toBeVisible();
 });
 
-test('Month view shows series bands and the series key for a seeded series (plan §21 "Calendar series bands")', async ({ page }) => {
+test('Month view shows series rails and the series key for a seeded series (plan §21 "Calendar series rails")', async ({ page }) => {
   test.setTimeout(60_000);
 
   // Marion Taylor Pairs is the seed's fixed 2027 programme's first Monday
@@ -151,14 +151,17 @@ test('Month view shows series bands and the series key for a seeded series (plan
   await expect(page.getByRole('heading', { name: 'January 2027' })).toBeVisible();
 
   // Every day cell in the series carries the series name in its
-  // aria-label/title (WCAG 1.4.1 — colour is never the only signal) and the
-  // matching band class; a one-off day (2027-01-04, Holiday Bridge) gets
-  // neither.
+  // aria-label/title (WCAG 1.4.1 — colour is never the only signal) and a
+  // rail segment in the matching band/position; a one-off day (2027-01-04,
+  // Holiday Bridge) gets neither. 2027-01-11 is Marion Taylor Pairs' TRUE
+  // first session (band A, its year's first Monday series) — a `start` cap.
   const marionCell = page.getByRole('button', { name: /Mon 11 Jan 2027.*Marion Taylor Pairs/ });
   await expect(marionCell).toBeVisible();
-  await expect(marionCell).toHaveClass(/series-band-a/);
+  const marionRail = marionCell.locator('.month-cell-rail');
+  await expect(marionRail).toHaveClass(/series-rail-a/);
+  await expect(marionRail).toHaveClass(/series-rail-start/);
   const holidayCell = page.getByRole('button', { name: /Mon 4 Jan 2027/ });
-  await expect(holidayCell).not.toHaveClass(/series-band-/);
+  await expect(holidayCell.locator('.month-cell-rail')).toHaveCount(0);
 
   // The Month key lists the series, first-date order, with its January dates.
   await expect(page.getByRole('heading', { name: 'Series this month' })).toBeVisible();

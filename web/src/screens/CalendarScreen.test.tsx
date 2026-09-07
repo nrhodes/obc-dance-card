@@ -149,7 +149,7 @@ describe('CalendarScreen', () => {
     expect(screen.getByRole('tab', { name: 'Month' }).getAttribute('aria-selected')).toBe('true');
   });
 
-  it('Month mode shows series stripes, the series key, and series names in cell labels', async () => {
+  it('Month mode shows series rails, the series key, and series names in cell labels', async () => {
     setup({
       sessions: [
         session({ id: 's-jan-11', date: '2027-01-11', seriesId: 'monday-pairs', title: 'Monday Pairs' }),
@@ -168,15 +168,21 @@ describe('CalendarScreen', () => {
     await user.click(screen.getByRole('tab', { name: 'Month' }));
 
     // Two occurrences of the first series (band A) alternate to the second
-    // series (band B) — see `overview.ts#computeSeriesBands`.
+    // series (band B) — see `overview.ts#computeSeriesBands`. Jan 18 is
+    // `monday-pairs`' true last session (`end`); Jan 25 is `campbell`'s
+    // only session (`solo`).
     const mondayPairsCell = screen.getByRole('button', { name: /Mon 18 Jan 2027.*Monday Pairs/ });
-    expect(mondayPairsCell.className).toContain('series-band-a');
+    const mondayPairsRail = mondayPairsCell.querySelector('.month-cell-rail');
+    expect(mondayPairsRail?.className).toContain('series-rail-a');
+    expect(mondayPairsRail?.className).toContain('series-rail-end');
     const campbellCell = screen.getByRole('button', { name: /Mon 25 Jan 2027.*Campbell Cave Pairs/ });
-    expect(campbellCell.className).toContain('series-band-b');
+    const campbellRail = campbellCell.querySelector('.month-cell-rail');
+    expect(campbellRail?.className).toContain('series-rail-b');
+    expect(campbellRail?.className).toContain('series-rail-solo');
 
-    // A one-off (seriesId null) day gets no stripe and no series name.
+    // A one-off (seriesId null) day gets no rail and no series name.
     const holidayCell = screen.getByRole('button', { name: /Mon 4 Jan 2027/ });
-    expect(holidayCell.className).not.toMatch(/series-band-/);
+    expect(holidayCell.querySelector('.month-cell-rail')).toBeNull();
     expect(holidayCell.getAttribute('aria-label')).not.toMatch(/Monday Pairs|Campbell/);
 
     // The Month key lists each series, first-date order, with its dates that month.
