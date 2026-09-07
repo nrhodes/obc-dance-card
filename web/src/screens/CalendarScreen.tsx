@@ -28,6 +28,8 @@ import {
   buildYearOverview,
   type DayStatus,
   type MonthDayCell,
+  type MonthSeriesKeyEntry,
+  type SeriesBand,
 } from '../lib/overview';
 import { SubscriptionError } from '../components/SubscriptionError';
 import { SetAvailabilityDialog, type BulkAvailabilityStatus } from '../components/SetAvailabilityDialog';
@@ -45,7 +47,11 @@ const MONTH_NAMES = [
   'January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December',
 ];
+const SHORT_MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const WEEKDAY_HEADER = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
+
+/** Stripe tints for the Month/Year series key/swatches (plan §21) — a fixed a/b -> class map, kept next to `STATUS_META` rather than computed inline. */
+const SERIES_BAND_CLASS: Record<SeriesBand, string> = { a: 'series-band-a', b: 'series-band-b' };
 
 const STATUS_META: Record<DayStatus, { label: string; glyph: string; className: string }> = {
   none: { label: 'No session', glyph: '', className: 'day-status-none' },
@@ -68,7 +74,7 @@ function sessionYear(session: Session): number {
 
 export function CalendarScreen() {
   const navigate = useNavigate();
-  const { sessions, years, loading: programmeLoading, error: programmeError } = useProgramme();
+  const { sessions, series, years, loading: programmeLoading, error: programmeError } = useProgramme();
   const { entries, loading: entriesLoading, error: entriesError } = useMyEntries();
   const { onBehalfOfMemberId, actingAsName } = useEffectiveMember();
 
@@ -196,8 +202,8 @@ export function CalendarScreen() {
   const lastShownDate = addDaysNZ(listFrom, daysShown - 1);
   const canShowMore = lastShownDate < horizonEnd;
 
-  const monthWeeks = buildMonthGrid(viewYear, viewMonth, sessions, entries, today);
-  const yearOverview = buildYearOverview(yearViewYear, sessions, entries, today);
+  const { weeks: monthWeeks, seriesKey: monthSeriesKey } = buildMonthGrid(viewYear, viewMonth, sessions, entries, series, today);
+  const yearOverview = buildYearOverview(yearViewYear, sessions, entries, series, today);
 
   return (
     <div className="stack">
@@ -306,6 +312,8 @@ export function CalendarScreen() {
             ))}
           </div>
 
+          {monthSeriesKey.length > 0 && <MonthSeriesKey entries={monthSeriesKey} />}
+
           <Legend />
         </div>
       )}
@@ -386,12 +394,21 @@ function DayCell({
   const meta = STATUS_META[cell.status];
   const isToday = cell.date === today;
   const clickable = cell.sessions.length > 0;
+  const bandClass = cell.seriesBand ? ` ${SERIES_BAND_CLASS[cell.seriesBand]}` : '';
+  const seriesSuffix = cell.seriesNames.length > 0 ? ` — ${cell.seriesNames.join(', ')}` : '';
+  // Series names never substitute for the status colour/glyph (WCAG
+  // 1.4.1) — they're appended to the same label the Legend already spells
+  // out, both for the aria-label and (per plan §21) a `title` tooltip; the
+  // Month key (below the grid) is the sighted-user decode ring in Month
+  // view, but Year view has no key, so the label/tooltip carry it there.
+  const label = `${formatDateNZ(cell.date)}${isToday ? ' (today)' : ''} — ${meta.label}${seriesSuffix}`;
   return (
     <button
       type="button"
-      className={`month-cell ${meta.className}${isToday ? ' month-cell-today' : ''}${compact ? ' month-cell-compact' : ''}`}
+      className={`month-cell ${meta.className}${isToday ? ' month-cell-today' : ''}${compact ? ' month-cell-compact' : ''}${bandClass}`}
       disabled={!clickable}
-      aria-label={`${formatDateNZ(cell.date)}${isToday ? ' (today)' : ''} — ${meta.label}`}
+      aria-label={label}
+      title={label}
       onClick={() => onSelect(cell)}
     >
       <span className="month-cell-day">{cell.dayOfMonth}</span>
@@ -401,6 +418,37 @@ function DayCell({
         {meta.glyph || '\u00A0'}
       </span>
     </button>
+  );
+}
+
+/**
+ * The Month view's series key (plan §21): below the grid, above the status
+ * Legend, one row per series with a session in the displayed month — in
+ * first-date order — a stripe swatch matching that series' band tint, the
+ * series name, and its session dates that month, e.g. "5, 12, 19, 26 Jan".
+ * The caller omits this entirely when the month has no series sessions.
+ * Year view gets no equivalent (too dense with 12 months on screen at
+ * once) — its cells' aria-label/title carry the series name instead.
+ */
+function MonthSeriesKey({ entries }: { entries: MonthSeriesKeyEntry[] }) {
+  return (
+    <div className="calendar-series-key">
+      <h3 className="calendar-series-key-heading">Series this month</h3>
+      <ul className="calendar-series-key-list">
+        {entries.map((entry) => {
+          const month = SHORT_MONTH_NAMES[Number(entry.dates[0]!.slice(5, 7)) - 1];
+          const days = entry.dates.map((d) => Number(d.slice(8, 10))).join(', ');
+          return (
+            <li className="calendar-series-key-item" key={entry.seriesId}>
+              <span className={`calendar-series-key-swatch ${SERIES_BAND_CLASS[entry.band]}`} aria-hidden="true" />
+              <span>
+                {entry.name} — {days} {month}
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }
 

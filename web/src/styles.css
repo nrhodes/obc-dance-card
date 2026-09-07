@@ -53,6 +53,21 @@
   --color-status-unavailable-text: #f4f4f5;
   --color-status-open-bg: #ff9838;
   --color-status-open-text: #4a2500;
+
+  /* Series-band stripes (plan §21 "Calendar series bands"): a channel
+     separate from the member-status palette above (never mixed with it —
+     the stripe sits at the cell's left edge, the status owns the fill).
+     Two alternating navy-family tints, reused down a weekday column so
+     consecutive occurrences of one series read as one band and the next
+     series flips. These are supplementary UI cues, redundant with the
+     series name in the aria-label/title/Month-key (WCAG 1.4.1 never
+     depends on them alone), so the usual AA text-contrast rules don't
+     apply — they only need to stay distinguishable from each other and
+     visible against every status background, including the one dark
+     background (Unavailable) — see `.series-band-a`/`.series-band-b`'s
+     `--color-bg` separator below. */
+  --series-band-a: #1b3a57;
+  --series-band-b: #7fa3c0;
 }
 
 * {
@@ -800,6 +815,35 @@ td {
   box-shadow: inset 0 0 0 5px var(--color-bg);
 }
 
+/*
+ * Series-band stripes (plan §21). Painted as `background-image` — a
+ * hard-stopped gradient, not `background`/`background-color` — so it
+ * layers on top of `.day-status-*`'s `background-color` (a different
+ * longhand; setting it here never resets that colour) without needing the
+ * "which rule wins" care the comment above `.month-cell` warns about, and
+ * so it coexists with `.month-cell-today`'s `box-shadow` ring (an
+ * unrelated property) on a day cell that's both today and in a series.
+ * 4px stripe + a 1px `--color-bg` separator (3px + 1px in the compact Year
+ * grid) so band A (navy) still reads as a distinct edge on the one dark
+ * status background (Unavailable) instead of blending into it; the rest of
+ * the gradient is transparent so the status colour still fills the cell.
+ */
+.month-cell.series-band-a {
+  background-image: linear-gradient(to right, var(--series-band-a) 0 4px, var(--color-bg) 4px 5px, transparent 5px);
+}
+
+.month-cell.series-band-b {
+  background-image: linear-gradient(to right, var(--series-band-b) 0 4px, var(--color-bg) 4px 5px, transparent 5px);
+}
+
+.month-cell-compact.series-band-a {
+  background-image: linear-gradient(to right, var(--series-band-a) 0 3px, var(--color-bg) 3px 4px, transparent 4px);
+}
+
+.month-cell-compact.series-band-b {
+  background-image: linear-gradient(to right, var(--series-band-b) 0 3px, var(--color-bg) 3px 4px, transparent 4px);
+}
+
 .month-cell-day {
   font-size: 0.95rem;
   line-height: 1.1;
@@ -850,6 +894,55 @@ td {
 .year-month-card h3 {
   margin: 0 0 var(--space-1);
   font-size: 1.05rem;
+}
+
+/*
+ * Month view's series key (plan §21) — the sighted-user decode ring for the
+ * grid's stripes, sitting between the grid and the status Legend. Year view
+ * has no equivalent (too dense with 12 months on screen); its cells' own
+ * aria-label/title carry the series name instead (WCAG 1.4.1).
+ */
+.calendar-series-key {
+  margin-top: var(--space-2);
+}
+
+.calendar-series-key-heading {
+  margin-bottom: var(--space-1);
+}
+
+.calendar-series-key-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  /* No bullets — the stripe swatch is the marker. */
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.calendar-series-key-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  /* Long series names + a full month's dates must wrap, not overflow, at
+     the 320px/200%-zoom reflow probe (a11y.spec.ts). */
+  flex-wrap: wrap;
+}
+
+.calendar-series-key-swatch {
+  flex: 0 0 auto;
+  display: inline-block;
+  width: 14px;
+  height: 1.1em;
+  border-radius: 2px;
+}
+
+.calendar-series-key-swatch.series-band-a {
+  background: var(--series-band-a);
+}
+
+.calendar-series-key-swatch.series-band-b {
+  background: var(--series-band-b);
 }
 
 .calendar-legend {

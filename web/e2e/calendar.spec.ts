@@ -26,6 +26,11 @@
  * date math the seed uses (`@obc/shared`'s `todayNZ`/`addDaysNZ`/
  * `weekdayOfNZ`), not hardcoded, so this spec keeps working on whatever real
  * date it runs — including a second, back-to-back run with no re-seed.
+ *
+ * A second test below covers the Month view's series bands (plan §21
+ * "Calendar series bands"), against the seed's fixed 2027 Monday-series
+ * sequence — Marion Taylor Pairs (Jan) is the first Monday series of that
+ * year, so it always lands on band A regardless of when this spec runs.
  */
 import type { Page } from '@playwright/test';
 import { addDaysNZ, todayNZ, weekdayOfNZ } from '@obc/shared';
@@ -120,4 +125,42 @@ test('Calendar overview + bulk "Set availability…" unavailable/clear round-tri
   await expect(page.getByRole('heading', { name: 'Spring Pairs' })).toBeVisible();
   await expect(page.getByText("You've marked yourself unavailable for this session.")).toHaveCount(0);
   await expect(page.getByRole('button', { name: "I'm looking for a partner" })).toBeVisible();
+});
+
+test('Month view shows series bands and the series key for a seeded series (plan §21 "Calendar series bands")', async ({ page }) => {
+  test.setTimeout(60_000);
+
+  // Marion Taylor Pairs is the seed's fixed 2027 programme's first Monday
+  // series (11/18/25 Jan, 01 Feb) — always the first Monday series that
+  // year, so it's always band A regardless of when this spec runs. Navigate
+  // there from whatever month the Month view opens on (today's) via the
+  // view's own Prev/Next, rather than hardcoding a click count.
+  const targetYear = FIXED_YEAR;
+  const targetMonth = 1;
+  const monthsAhead = (targetYear - currentYear) * 12 + (targetMonth - Number(todayNZ().slice(5, 7)));
+  test.skip(monthsAhead < 0 || monthsAhead > 36, 'Too far from Jan 2027 to reach via Prev/Next in this spec.');
+
+  await signIn(page);
+
+  await page.getByLabel('Main').getByRole('link', { name: 'Calendar' }).click();
+  await expect(page.getByRole('heading', { name: 'Calendar' })).toBeVisible();
+  await page.getByRole('tab', { name: 'Month' }).click();
+  for (let i = 0; i < monthsAhead; i++) {
+    await page.getByRole('button', { name: /Next/ }).click();
+  }
+  await expect(page.getByRole('heading', { name: 'January 2027' })).toBeVisible();
+
+  // Every day cell in the series carries the series name in its
+  // aria-label/title (WCAG 1.4.1 — colour is never the only signal) and the
+  // matching band class; a one-off day (2027-01-04, Holiday Bridge) gets
+  // neither.
+  const marionCell = page.getByRole('button', { name: /Mon 11 Jan 2027.*Marion Taylor Pairs/ });
+  await expect(marionCell).toBeVisible();
+  await expect(marionCell).toHaveClass(/series-band-a/);
+  const holidayCell = page.getByRole('button', { name: /Mon 4 Jan 2027/ });
+  await expect(holidayCell).not.toHaveClass(/series-band-/);
+
+  // The Month key lists the series, first-date order, with its January dates.
+  await expect(page.getByRole('heading', { name: 'Series this month' })).toBeVisible();
+  await expect(page.getByText('Marion Taylor Pairs — 11, 18, 25 Jan')).toBeVisible();
 });

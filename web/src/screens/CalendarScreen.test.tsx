@@ -2,7 +2,7 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Entry, Session } from '@obc/shared';
+import type { Entry, Series, Session } from '@obc/shared';
 import type { ProgrammeContextValue } from '../programme/ProgrammeContext';
 import { CalendarScreen } from './CalendarScreen';
 
@@ -66,22 +66,41 @@ function entry(overrides: Partial<Entry> = {}): Entry {
   };
 }
 
-function programmeValue(sessions: Session[]): ProgrammeContextValue {
+function seriesFixture(overrides: Partial<Series> = {}): Series {
+  return {
+    id: 'monday-pairs',
+    weekday: 'monday',
+    name: 'Monday Pairs',
+    scoring: 'Scr',
+    format: 'Pairs',
+    bestOf: null,
+    allowSubstitute: true,
+    order: 0,
+    sessionIds: [],
+    teamMin: 4,
+    teamMax: 6,
+    createdAt: '',
+    updatedAt: '',
+    ...overrides,
+  };
+}
+
+function programmeValue(sessions: Session[], series: Series[] = []): ProgrammeContextValue {
   return {
     loading: false,
     error: null,
     years: [2027],
     byYear: [],
     weekdays: [],
-    series: [],
+    series: series.map((s) => ({ ...s, year: 2027 })),
     sessions: sessions.map((s) => ({ ...s, year: 2027 })),
     year: 2027,
     programme: { id: '2027', year: 2027, status: 'published', createdAt: '', updatedAt: '' },
   };
 }
 
-function setup({ sessions, entries }: { sessions?: Session[]; entries?: Entry[] } = {}): void {
-  useProgrammeMock.mockReturnValue(programmeValue(sessions ?? [session()]));
+function setup({ sessions, entries, series }: { sessions?: Session[]; entries?: Entry[]; series?: Series[] } = {}): void {
+  useProgrammeMock.mockReturnValue(programmeValue(sessions ?? [session()], series));
   useMyEntriesMock.mockReturnValue({ entries: entries ?? [], loading: false, error: null });
   useEffectiveMemberMock.mockReturnValue({ effectiveMemberId: 'member-a', onBehalfOfMemberId: undefined, actingAsName: null });
 }
@@ -128,6 +147,51 @@ describe('CalendarScreen', () => {
     await user.click(screen.getByRole('tab', { name: 'Month' }));
     expect(screen.getByRole('heading', { name: 'January 2027' })).toBeTruthy();
     expect(screen.getByRole('tab', { name: 'Month' }).getAttribute('aria-selected')).toBe('true');
+  });
+
+  it('Month mode shows series stripes, the series key, and series names in cell labels', async () => {
+    setup({
+      sessions: [
+        session({ id: 's-jan-11', date: '2027-01-11', seriesId: 'monday-pairs', title: 'Monday Pairs' }),
+        session({ id: 's-jan-18', date: '2027-01-18', seriesId: 'monday-pairs', title: 'Monday Pairs' }),
+        session({ id: 's-jan-25', date: '2027-01-25', seriesId: 'campbell', title: 'Campbell Cave Pairs' }),
+        session({ id: 's-jan-04', date: '2027-01-04', seriesId: null, kind: 'holidayBridge', title: 'Holiday Bridge' }),
+      ],
+      series: [
+        seriesFixture({ id: 'monday-pairs', name: 'Monday Pairs', order: 0 }),
+        seriesFixture({ id: 'campbell', name: 'Campbell Cave Pairs', order: 1 }),
+      ],
+    });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderScreen();
+
+    await user.click(screen.getByRole('tab', { name: 'Month' }));
+
+    // Two occurrences of the first series (band A) alternate to the second
+    // series (band B) — see `overview.ts#computeSeriesBands`.
+    const mondayPairsCell = screen.getByRole('button', { name: /Mon 18 Jan 2027.*Monday Pairs/ });
+    expect(mondayPairsCell.className).toContain('series-band-a');
+    const campbellCell = screen.getByRole('button', { name: /Mon 25 Jan 2027.*Campbell Cave Pairs/ });
+    expect(campbellCell.className).toContain('series-band-b');
+
+    // A one-off (seriesId null) day gets no stripe and no series name.
+    const holidayCell = screen.getByRole('button', { name: /Mon 4 Jan 2027/ });
+    expect(holidayCell.className).not.toMatch(/series-band-/);
+    expect(holidayCell.getAttribute('aria-label')).not.toMatch(/Monday Pairs|Campbell/);
+
+    // The Month key lists each series, first-date order, with its dates that month.
+    expect(screen.getByRole('heading', { name: 'Series this month' })).toBeTruthy();
+    expect(screen.getByText('Monday Pairs — 11, 18 Jan')).toBeTruthy();
+    expect(screen.getByText('Campbell Cave Pairs — 25 Jan')).toBeTruthy();
+  });
+
+  it('Month mode omits the series key when the month has no series sessions', async () => {
+    setup({ sessions: [session({ seriesId: null, kind: 'holidayBridge', title: 'Holiday Bridge' })] });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderScreen();
+
+    await user.click(screen.getByRole('tab', { name: 'Month' }));
+    expect(screen.queryByRole('heading', { name: 'Series this month' })).toBeNull();
   });
 
   it('switches to Year mode and shows a year picker with the loaded year', async () => {
