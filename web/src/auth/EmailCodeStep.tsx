@@ -30,7 +30,9 @@ export function EmailCodeStep({
 }: EmailCodeStepProps) {
   const { state, sendCode, verify } = useEmailCodeFlow();
   const [code, setCode] = useState('');
-  const [now, setNow] = useState(Date.now());
+  // Lazy initializer: `useState(Date.now())` would re-evaluate Date.now() on
+  // every render (react-hooks 7 `purity` rule catch on the 5.2->7.1 upgrade).
+  const [now, setNow] = useState(() => Date.now());
   const sentOnce = useRef(false);
 
   useEffect(() => {

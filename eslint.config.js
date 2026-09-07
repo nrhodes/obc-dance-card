@@ -36,6 +36,18 @@ export default tseslint.config(
     },
     rules: {
       ...reactHooks.configs.recommended.rules,
+      // react-hooks 7's compiler-derived rules are kept ON (they caught two
+      // real render-purity issues on upgrade) with one exception:
+      // `set-state-in-effect` flags every synchronous setState inside an
+      // effect. This codebase uses that deliberately and consistently in two
+      // shapes — subscription hooks/providers resetting state at the top of a
+      // re-subscribe effect (loading=true, items=[] before onSnapshot), and
+      // screens correcting an initial guess once live data arrives. Both are
+      // correct here; the "cascading render" cost is a single extra render at
+      // club-scale data. Fifteen scattered inline disables would say less
+      // than this one documented choice. Revisit if the app ever adopts the
+      // React Compiler, which optimises the endorsed alternatives.
+      'react-hooks/set-state-in-effect': 'off',
       'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
       'no-restricted-syntax': [
         'error',
