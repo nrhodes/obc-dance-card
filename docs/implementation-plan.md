@@ -1234,6 +1234,77 @@ the real schedule, not a synthetic one.
 > the cohort rows added to `members.rules.test.ts`/`entries.rules.test.ts`/
 > `teams.rules.test.ts`, and `web/e2e/review-cohort.spec.ts`.
 
+### B10. Calendar: series bands (Month/Year views) (captured + implemented 2026-09-08)
+
+**Intent.** In Month/Year, see which sessions belong to the same series at a glance —
+"perhaps shading, like alternating light/dark rows in Excel" (Neil) — without touching
+the existing member-status day-cell colour, which is machine-validated (plan §21 B4's
+palette comment) and must stay untouched.
+
+> **Status: implemented 2026-09-08.** A left-edge stripe on every Month/Year day cell
+> whose session(s) belong to a series — 4px in Month, 3px in the compact Year grid — using
+> two new tokens, `--series-band-a` (`#1b3a57`, navy) and `--series-band-b` (`#7fa3c0`,
+> lighter blue), a channel entirely separate from the status background (never mixed with
+> it: the stripe is a `background-image` hard-stopped gradient, the status is
+> `background-color` — different longhands, so neither rule can clobber the other, and
+> both coexist with `.month-cell-today`'s `box-shadow` ring). A 1px `--color-bg` separator
+> sits between the stripe and the rest of the cell so band A still reads as a distinct
+> edge against the one dark status background (Unavailable, `#3f3f46`), where a plain
+> navy-on-charcoal stripe would nearly vanish.
+>
+> **Alternation** (`web/src/lib/overview.ts#computeSeriesBands`, pure + unit-tested): per
+> weekday, per year, order that weekday's series by first session date and alternate
+> band A/B by index — so consecutive occurrences of one series down a weekday column
+> share a tint and the next series flips (a third flips back to A). Parity restarts every
+> year (`Series` docs already live under `programmes/{year}`, so this falls out for
+> free) — carrying a running parity across a year boundary would couple two
+> independently-published years for no real benefit. Keyed `${year}:${seriesId}` since
+> `seriesId` collides across years (plan §21 B3). One-off sessions (`seriesId == null`,
+> e.g. Holiday Bridge) get no entry in the map and no stripe — absence marks "not part of
+> a series". On the rare multi-session day, the stripe follows the *first* session's
+> series (whatever that is, one-off included) — documented, not a bug — while the
+> aria-label/title/Month-key still list every distinct series name that day.
+>
+> `buildMonthGrid`/`buildYearOverview` both gained a `series` parameter (the year-tagged
+> array `useProgramme()` already provides) — a series *name* lookup, unlike the
+> title/format `Session` already denormalises, must be year-qualified (the same pattern as
+> `lib/card.ts#cardSessionTitle`), with a fallback to the session's own denormalised
+> `seriesName`/`title` if the series doc isn't in the loaded set. `MonthDayCell` gained
+> `seriesBand: 'a' | 'b' | null` and `seriesNames: string[]`; `buildMonthGrid` now returns
+> `{ weeks, seriesKey }` instead of a bare `MonthWeek[]`.
+>
+> **Month key**: below the grid, above the status Legend, a compact list — one row per
+> series with a session in the displayed month, first-date order, a stripe-tint swatch +
+> name + that month's dates ("Marion Taylor Pairs — 11, 18, 25 Jan") — omitted entirely
+> when the month has no series sessions. Year view gets no key (12 months on screen at
+> once is too dense); its cells' `aria-label`/`title` carry the series name instead.
+>
+> **Never colour-alone** (WCAG 1.4.1): every day cell's `aria-label` (and a matching
+> `title` tooltip) gains the series name(s) when present, e.g. "Mon 12 Jan 2027 — Booked —
+> Marion Taylor Pairs" — the stripe tokens are supplementary UI cues only, redundant with
+> this text, so the usual AA text-contrast rules don't apply to them (they just need to
+> stay distinguishable from each other and visible on every status background).
+>
+> See `web/src/lib/overview.ts` (`computeSeriesBands`, `MonthSeriesKeyEntry`,
+> `MonthGrid`), `web/src/screens/CalendarScreen.tsx` (`DayCell`, `MonthSeriesKey`),
+> `web/src/styles.css` (`--series-band-*`, `.series-band-a/b`,
+> `.calendar-series-key-*`); unit tests in `overview.test.ts`
+> (parity/alternation/one-off/multi-series/cross-year-restart/key-ordering cases) and
+> `CalendarScreen.test.tsx`; e2e addition in `web/e2e/calendar.spec.ts` against the
+> seed's fixed 2027 Monday-series sequence (Marion Taylor Pairs -> Campbell Cave Pairs).
+>
+> **iOS handoff**: `ios/OBCDanceCard/Calendar/CalendarView.swift`'s Month/Year day cells
+> need the same stripe — leading edge, same two tints (`#1b3a57`/`#7fa3c0`), same 1px
+> separator against the dark Unavailable background, and the *same* parity rule (mirror
+> `computeSeriesBands`: per weekday per year, order by first session date, alternate
+> A/B, restart per year, keyed by `${year}:${seriesId}`) so a member sees the same band on
+> the same day in both apps. Series names for the aria/VoiceOver label and (optionally) an
+> `.accessibilityHint`/tooltip-equivalent should come from the year-tagged `series` array
+> the iOS programme store already loads, with the same year-qualified lookup (`seriesId`
+> collides across years there too). The Month view's series key is optional at the Mac
+> session's discretion — the stripe + accessible label are the load-bearing parts; the key
+> is a sighted-user convenience only.
+
 ### Cross-cutting notes for the backlog
 
 - **B3 is a prerequisite** for B1, B4, and the value of B2 (bulk-setting across the

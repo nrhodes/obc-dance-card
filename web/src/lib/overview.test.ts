@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { Entry, Session } from '@obc/shared';
-import { buildAgenda, buildMonthGrid, buildYearOverview, dayStatus, sessionMemberStatus } from './overview';
+import type { Entry, Series, Session } from '@obc/shared';
+import { buildAgenda, buildMonthGrid, buildYearOverview, computeSeriesBands, dayStatus, sessionMemberStatus } from './overview';
 
 function session(overrides: Partial<Session> = {}): Session {
   return {
@@ -11,6 +11,25 @@ function session(overrides: Partial<Session> = {}): Session {
     kind: 'series',
     title: 'Monday Pairs',
     partnerRequired: true,
+    createdAt: '',
+    updatedAt: '',
+    ...overrides,
+  };
+}
+
+function series(overrides: Partial<Series> = {}): Series {
+  return {
+    id: 'monday-pairs',
+    weekday: 'monday',
+    name: 'Monday Pairs',
+    scoring: 'Scr',
+    format: 'Pairs',
+    bestOf: null,
+    allowSubstitute: true,
+    order: 0,
+    sessionIds: [],
+    teamMin: 4,
+    teamMax: 6,
     createdAt: '',
     updatedAt: '',
     ...overrides,
@@ -157,7 +176,7 @@ describe('buildAgenda', () => {
 
 describe('buildMonthGrid', () => {
   it('produces Mon-Fri weeks only (no weekend columns), 5 wide, every week', () => {
-    const weeks = buildMonthGrid(2027, 1, [], [], '2027-01-01');
+    const { weeks } = buildMonthGrid(2027, 1, [], [], [], '2027-01-01');
     for (const week of weeks) {
       expect(week).toHaveLength(5);
     }
@@ -165,7 +184,7 @@ describe('buildMonthGrid', () => {
 
   it('pads the leading week so day 1 lands in the correct weekday column', () => {
     // 2027-01-01 is a Friday -> column index 4 (Mon=0..Fri=4).
-    const weeks = buildMonthGrid(2027, 1, [], [], '2027-01-01');
+    const { weeks } = buildMonthGrid(2027, 1, [], [], [], '2027-01-01');
     const firstWeek = weeks[0]!;
     expect(firstWeek[0]).toBeNull();
     expect(firstWeek[1]).toBeNull();
@@ -178,7 +197,7 @@ describe('buildMonthGrid', () => {
     // February 2027 (28 days, non-leap) starts on a Monday, so it's exactly
     // 4 clean Mon-Fri/Sat-Sun weeks: 20 weekday cells, 8 weekend days that
     // never get a cell at all (not even a `null` padding slot).
-    const weeks = buildMonthGrid(2027, 2, [], [], '2027-02-01');
+    const { weeks } = buildMonthGrid(2027, 2, [], [], [], '2027-02-01');
     const totalDayCells = weeks.flat().filter((c) => c != null).length;
     expect(totalDayCells).toBe(20);
     expect(weeks.every((week) => week.length === 5)).toBe(true);
@@ -187,7 +206,7 @@ describe('buildMonthGrid', () => {
   it('carries the right day-status per cell, from sessions/entries', () => {
     const sessions = [session({ date: '2027-01-11' })];
     const entries = [entry({ status: 'confirmed' })];
-    const weeks = buildMonthGrid(2027, 1, sessions, entries, '2027-01-01');
+    const { weeks } = buildMonthGrid(2027, 1, sessions, entries, [], '2027-01-01');
     const cell = weeks.flat().find((c) => c?.date === '2027-01-11');
     expect(cell?.status).toBe('booked');
     expect(cell?.sessions).toEqual(sessions);
@@ -196,32 +215,151 @@ describe('buildMonthGrid', () => {
   it('crosses a month boundary correctly (e.g. April -> May)', () => {
     // 2027-04-30 is a Friday (the last weekday of April); 2027-05-01/02 fall
     // on the weekend, so May's grid picks back up on Monday the 3rd.
-    const aprilWeeks = buildMonthGrid(2027, 4, [], [], '2027-04-01');
+    const aprilWeeks = buildMonthGrid(2027, 4, [], [], [], '2027-04-01').weeks;
     const lastAprilCell = aprilWeeks.flat().filter((c) => c != null).pop();
     expect(lastAprilCell?.date).toBe('2027-04-30');
-    const mayWeeks = buildMonthGrid(2027, 5, [], [], '2027-05-01');
+    const mayWeeks = buildMonthGrid(2027, 5, [], [], [], '2027-05-01').weeks;
     const firstMayCell = mayWeeks.flat().find((c) => c != null);
     expect(firstMayCell?.date).toBe('2027-05-03');
+  });
+
+  describe('series bands', () => {
+    it('a one-off (seriesId null) day gets no stripe and no series names', () => {
+      const sessions = [session({ id: 'holiday', date: '2027-01-11', seriesId: null, kind: 'holidayBridge', title: 'Holiday Bridge' })];
+      const { weeks } = buildMonthGrid(2027, 1, sessions, [], [], '2027-01-01');
+      const cell = weeks.flat().find((c) => c?.date === '2027-01-11');
+      expect(cell?.seriesBand).toBeNull();
+      expect(cell?.seriesNames).toEqual([]);
+    });
+
+    it('a series day gets band A when it is the only series on that weekday', () => {
+      const sessions = [session({ date: '2027-01-11' })];
+      const { weeks } = buildMonthGrid(2027, 1, sessions, [], [series()], '2027-01-01');
+      const cell = weeks.flat().find((c) => c?.date === '2027-01-11');
+      expect(cell?.seriesBand).toBe('a');
+      expect(cell?.seriesNames).toEqual(['Monday Pairs']);
+    });
+
+    it('two series on one weekday alternate a/b by first-session-date order, a third flips back to a', () => {
+      const sessions = [
+        session({ id: 's1', date: '2027-01-11', seriesId: 'monday-pairs' }),
+        session({ id: 's2', date: '2027-01-18', seriesId: 'monday-pairs' }),
+        session({ id: 's3', date: '2027-01-25', seriesId: 'campbell', title: 'Campbell Cave Pairs' }),
+        session({ id: 's4', date: '2027-02-01', seriesId: 'campbell', title: 'Campbell Cave Pairs' }),
+        session({ id: 's5', date: '2027-02-08', seriesId: 'milton', title: 'Milton Pairs' }),
+      ];
+      const { weeks: janWeeks } = buildMonthGrid(2027, 1, sessions, [], [], '2027-01-01');
+      const { weeks: febWeeks } = buildMonthGrid(2027, 2, sessions, [], [], '2027-01-01');
+      const cellFor = (weeks: typeof janWeeks, date: string) => weeks.flat().find((c) => c?.date === date);
+      expect(cellFor(janWeeks, '2027-01-11')?.seriesBand).toBe('a'); // monday-pairs: first series that weekday
+      expect(cellFor(janWeeks, '2027-01-18')?.seriesBand).toBe('a'); // same series, same band
+      expect(cellFor(janWeeks, '2027-01-25')?.seriesBand).toBe('b'); // campbell: second series that weekday, flips
+      expect(cellFor(febWeeks, '2027-02-01')?.seriesBand).toBe('b'); // still campbell
+      expect(cellFor(febWeeks, '2027-02-08')?.seriesBand).toBe('a'); // milton: third series, flips back
+    });
+
+    it('parity restarts per year', () => {
+      const sessions = [
+        session({ id: 's1', date: '2027-01-11', seriesId: 'monday-pairs' }),
+        session({ id: 's2', date: '2027-01-18', seriesId: 'campbell', title: 'Campbell Cave Pairs' }),
+        // A new year: the *first* Monday series of 2028 gets band A again,
+        // even though it would have been band B if parity carried over.
+        session({ id: 's3', date: '2028-01-10', seriesId: 'campbell-2028', title: 'Campbell 2028' }),
+      ];
+      const { weeks } = buildMonthGrid(2028, 1, sessions, [], [], '2028-01-01');
+      const cell = weeks.flat().find((c) => c?.date === '2028-01-10');
+      expect(cell?.seriesBand).toBe('a');
+    });
+
+    it('a multi-series day takes the first session for its stripe', () => {
+      const sessions = [
+        session({ id: 's1', date: '2027-01-11', seriesId: 'monday-pairs' }),
+        session({ id: 's2', date: '2027-01-11', seriesId: 'campbell', title: 'Campbell Cave Pairs' }),
+        session({ id: 's3', date: '2027-01-18', seriesId: 'campbell', title: 'Campbell Cave Pairs' }),
+      ];
+      const { weeks } = buildMonthGrid(2027, 1, sessions, [], [], '2027-01-01');
+      const cell = weeks.flat().find((c) => c?.date === '2027-01-11');
+      // `campbell` is the second series that weekday (band b), but the
+      // stripe follows `sessions[0]` (`s1`, monday-pairs, band a) since it
+      // is first in the day's session list — the documented simplification.
+      expect(cell?.seriesBand).toBe('a');
+      expect(cell?.seriesNames.sort()).toEqual(['Campbell Cave Pairs', 'Monday Pairs']);
+    });
+
+    it('falls back to a session\'s own seriesName/title when the series doc is not in the loaded set', () => {
+      const sessions = [session({ date: '2027-01-11', seriesId: 'unknown-series', seriesName: 'Denormalised Name' })];
+      const { weeks } = buildMonthGrid(2027, 1, sessions, [], [], '2027-01-01');
+      const cell = weeks.flat().find((c) => c?.date === '2027-01-11');
+      expect(cell?.seriesNames).toEqual(['Denormalised Name']);
+    });
+
+    it('only matches a series doc from the same year (seriesId can collide across years)', () => {
+      const sessions = [session({ date: '2027-01-11', seriesId: 'monday-pairs' })];
+      const wrongYearSeries = { ...series({ name: 'Wrong Year Series' }), year: 2099 };
+      const { weeks } = buildMonthGrid(2027, 1, sessions, [], [wrongYearSeries], '2027-01-01');
+      const cell = weeks.flat().find((c) => c?.date === '2027-01-11');
+      // Falls back to the session's own denormalised title, not the
+      // wrong-year series doc's name.
+      expect(cell?.seriesNames).toEqual(['Monday Pairs']);
+    });
+  });
+
+  describe('series key', () => {
+    it('is empty when the month has no series sessions', () => {
+      const sessions = [session({ date: '2027-01-11', seriesId: null, kind: 'holidayBridge', title: 'Holiday Bridge' })];
+      const { seriesKey } = buildMonthGrid(2027, 1, sessions, [], [], '2027-01-01');
+      expect(seriesKey).toEqual([]);
+    });
+
+    it('lists each series once, first-date order, with that month\'s dates ascending', () => {
+      const sessions = [
+        session({ id: 's1', date: '2027-01-25', seriesId: 'campbell', title: 'Campbell Cave Pairs' }),
+        session({ id: 's2', date: '2027-01-11', seriesId: 'monday-pairs' }),
+        session({ id: 's3', date: '2027-01-18', seriesId: 'monday-pairs' }),
+      ];
+      const { seriesKey } = buildMonthGrid(2027, 1, sessions, [], [], '2027-01-01');
+      expect(seriesKey).toEqual([
+        { seriesId: 'monday-pairs', name: 'Monday Pairs', band: 'a', dates: ['2027-01-11', '2027-01-18'] },
+        { seriesId: 'campbell', name: 'Campbell Cave Pairs', band: 'b', dates: ['2027-01-25'] },
+      ]);
+    });
+  });
+});
+
+describe('computeSeriesBands', () => {
+  it('returns an empty map when there are no series sessions', () => {
+    expect(computeSeriesBands([])).toEqual(new Map());
+    expect(computeSeriesBands([session({ seriesId: null, kind: 'holidayBridge' })])).toEqual(new Map());
+  });
+
+  it('keys by `${year}:${seriesId}`, tolerating the same seriesId in two different years', () => {
+    const sessions = [
+      session({ id: 's1', date: '2027-01-11', seriesId: 'monday-pairs' }),
+      session({ id: 's2', date: '2028-01-10', seriesId: 'monday-pairs' }),
+    ];
+    const bands = computeSeriesBands(sessions);
+    expect(bands.get('2027:monday-pairs')).toBe('a');
+    expect(bands.get('2028:monday-pairs')).toBe('a');
   });
 });
 
 describe('buildYearOverview', () => {
   it('builds all 12 months', () => {
-    const overview = buildYearOverview(2027, [], [], '2027-01-01');
+    const overview = buildYearOverview(2027, [], [], [], '2027-01-01');
     expect(overview.map((m) => m.month)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
   });
 
   it('reflects a booked session in the right month/day cell', () => {
     const sessions = [session({ id: 's-2027-03-08', date: '2027-03-08', weekday: 'monday' })];
     const entries = [entry({ sessionId: 's-2027-03-08', status: 'confirmed' })];
-    const overview = buildYearOverview(2027, sessions, entries, '2027-01-01');
+    const overview = buildYearOverview(2027, sessions, entries, [], '2027-01-01');
     const march = overview.find((m) => m.month === 3)!;
     const cell = march.weeks.flat().find((c) => c?.date === '2027-03-08');
     expect(cell?.status).toBe('booked');
   });
 
   it('pads every month to exactly 6 week rows so the year grid lines up', () => {
-    const overview = buildYearOverview(2026, [], [], '2026-01-01');
+    const overview = buildYearOverview(2026, [], [], [], '2026-01-01');
     for (const m of overview) {
       expect(m.weeks).toHaveLength(6);
     }
