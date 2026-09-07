@@ -16,7 +16,12 @@ const THROTTLE_MS = 60_000;
 
 export function useIdleSignOut(signOut: () => void | Promise<void>): void {
   const signOutRef = useRef(signOut);
-  signOutRef.current = signOut;
+  // Latest-callback ref, updated in an effect rather than during render
+  // (react-hooks 7 `refs` rule; the React-docs-sanctioned shape). Consumers
+  // only read `.current` from timers/listeners, which fire after effects.
+  useEffect(() => {
+    signOutRef.current = signOut;
+  }, [signOut]);
 
   useEffect(() => {
     if (typeof localStorage === 'undefined') return;
