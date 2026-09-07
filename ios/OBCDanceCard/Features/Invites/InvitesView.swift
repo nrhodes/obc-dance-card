@@ -47,7 +47,9 @@ struct InvitesView: View {
                 }
             }
 
-            Section("Recently resolved") {
+            // A header view rather than `Section("…")`: the string form
+            // truncates to "RECENTLY RESOLV…" at accessibility text sizes.
+            Section {
                 if !invites.loading && invites.resolved.isEmpty {
                     Text("Nothing yet.").foregroundStyle(.secondary)
                 }
@@ -56,6 +58,8 @@ struct InvitesView: View {
                          + "\(scopeLabel(invite)) — \(invite.status.rawValue)")
                         .font(.subheadline)
                 }
+            } header: {
+                Text("Recently resolved").fixedSize(horizontal: false, vertical: true)
             }
         }
         .navigationTitle("Invites")
