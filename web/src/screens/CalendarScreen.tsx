@@ -30,6 +30,7 @@ import {
   type MonthDayCell,
   type MonthSeriesKeyEntry,
   type SeriesBand,
+  type SeriesRun,
 } from '../lib/overview';
 import { SubscriptionError } from '../components/SubscriptionError';
 import { SetAvailabilityDialog, type BulkAvailabilityStatus } from '../components/SetAvailabilityDialog';
@@ -50,8 +51,20 @@ const MONTH_NAMES = [
 const SHORT_MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const WEEKDAY_HEADER = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
 
-/** Stripe tints for the Month/Year series key/swatches (plan §21) — a fixed a/b -> class map, kept next to `STATUS_META` rather than computed inline. */
+/** Tint class for the Month key's swatch (plan §21) — a fixed a/b -> class map, kept next to `STATUS_META` rather than computed inline. */
 const SERIES_BAND_CLASS: Record<SeriesBand, string> = { a: 'series-band-a', b: 'series-band-b' };
+
+/**
+ * Class list for a day cell's rail segment (plan §21 "Calendar series
+ * rails"): the tint (`series-rail-a`/`-b`) plus this cell's position in its
+ * series' true run (`series-rail-start`/`-middle`/`-end`/`-solo`) — the CSS
+ * for each position decides whether the bar bridges the grid's row-gap
+ * (start/middle, continuing) or caps with a rounded end (end/solo, the
+ * break that marks a series boundary).
+ */
+function railClassName(run: SeriesRun): string {
+  return `month-cell-rail series-rail-${run.band} series-rail-${run.position}`;
+}
 
 const STATUS_META: Record<DayStatus, { label: string; glyph: string; className: string }> = {
   none: { label: 'No session', glyph: '', className: 'day-status-none' },
@@ -394,7 +407,6 @@ function DayCell({
   const meta = STATUS_META[cell.status];
   const isToday = cell.date === today;
   const clickable = cell.sessions.length > 0;
-  const bandClass = cell.seriesBand ? ` ${SERIES_BAND_CLASS[cell.seriesBand]}` : '';
   const seriesSuffix = cell.seriesNames.length > 0 ? ` — ${cell.seriesNames.join(', ')}` : '';
   // Series names never substitute for the status colour/glyph (WCAG
   // 1.4.1) — they're appended to the same label the Legend already spells
@@ -405,12 +417,19 @@ function DayCell({
   return (
     <button
       type="button"
-      className={`month-cell ${meta.className}${isToday ? ' month-cell-today' : ''}${compact ? ' month-cell-compact' : ''}${bandClass}`}
+      className={`month-cell ${meta.className}${isToday ? ' month-cell-today' : ''}${compact ? ' month-cell-compact' : ''}`}
       disabled={!clickable}
       aria-label={label}
       title={label}
       onClick={() => onSelect(cell)}
     >
+      {/* The series rail (plan §21): an absolutely-positioned bar in the
+          cell's reserved left lane (`.month-cell`'s left padding), a
+          sibling of the day number/glyph rather than a class on the cell
+          itself, because it needs to extend past the cell's own box — into
+          the grid's row-gap, to bridge into the next week's cell — a thing
+          only a real element can do, not a `background-image`. */}
+      {cell.seriesRun && <span className={railClassName(cell.seriesRun)} aria-hidden="true" />}
       <span className="month-cell-day">{cell.dayOfMonth}</span>
       {/* Always rendered (nbsp when statusless) so every cell is two lines
           tall — otherwise glyph-less cells are shorter and rows misalign. */}
@@ -424,7 +443,7 @@ function DayCell({
 /**
  * The Month view's series key (plan §21): below the grid, above the status
  * Legend, one row per series with a session in the displayed month — in
- * first-date order — a stripe swatch matching that series' band tint, the
+ * first-date order — a rounded-bar swatch matching that series' rail tint, the
  * series name, and its session dates that month, e.g. "5, 12, 19, 26 Jan".
  * The caller omits this entirely when the month has no series sessions.
  * Year view gets no equivalent (too dense with 12 months on screen at

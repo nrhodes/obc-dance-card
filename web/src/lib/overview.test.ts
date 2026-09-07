@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Entry, Series, Session } from '@obc/shared';
-import { buildAgenda, buildMonthGrid, buildYearOverview, computeSeriesBands, dayStatus, sessionMemberStatus } from './overview';
+import { buildAgenda, buildMonthGrid, buildYearOverview, computeSeriesBands, computeSeriesRunPositions, dayStatus, sessionMemberStatus } from './overview';
 
 function session(overrides: Partial<Session> = {}): Session {
   return {
@@ -223,21 +223,59 @@ describe('buildMonthGrid', () => {
     expect(firstMayCell?.date).toBe('2027-05-03');
   });
 
-  describe('series bands', () => {
-    it('a one-off (seriesId null) day gets no stripe and no series names', () => {
+  describe('series rails', () => {
+    it('a one-off (seriesId null) day gets no rail and no series names', () => {
       const sessions = [session({ id: 'holiday', date: '2027-01-11', seriesId: null, kind: 'holidayBridge', title: 'Holiday Bridge' })];
       const { weeks } = buildMonthGrid(2027, 1, sessions, [], [], '2027-01-01');
       const cell = weeks.flat().find((c) => c?.date === '2027-01-11');
-      expect(cell?.seriesBand).toBeNull();
+      expect(cell?.seriesRun).toBeNull();
       expect(cell?.seriesNames).toEqual([]);
     });
 
-    it('a series day gets band A when it is the only series on that weekday', () => {
+    it('a lone session (the only one its series ever has) is solo, band A when it is the only series on that weekday', () => {
       const sessions = [session({ date: '2027-01-11' })];
       const { weeks } = buildMonthGrid(2027, 1, sessions, [], [series()], '2027-01-01');
       const cell = weeks.flat().find((c) => c?.date === '2027-01-11');
-      expect(cell?.seriesBand).toBe('a');
+      expect(cell?.seriesRun).toEqual({ band: 'a', position: 'solo' });
       expect(cell?.seriesNames).toEqual(['Monday Pairs']);
+    });
+
+    it('a multi-session series gets start/middle/.../end positions in date order', () => {
+      const sessions = [
+        session({ id: 's1', date: '2027-01-11', seriesId: 'monday-pairs' }),
+        session({ id: 's2', date: '2027-01-18', seriesId: 'monday-pairs' }),
+        session({ id: 's3', date: '2027-01-25', seriesId: 'monday-pairs' }),
+        session({ id: 's4', date: '2027-02-01', seriesId: 'monday-pairs' }),
+      ];
+      const { weeks: janWeeks } = buildMonthGrid(2027, 1, sessions, [], [], '2027-01-01');
+      const { weeks: febWeeks } = buildMonthGrid(2027, 2, sessions, [], [], '2027-01-01');
+      const cellFor = (weeks: typeof janWeeks, date: string) => weeks.flat().find((c) => c?.date === date);
+      expect(cellFor(janWeeks, '2027-01-11')?.seriesRun?.position).toBe('start');
+      expect(cellFor(janWeeks, '2027-01-18')?.seriesRun?.position).toBe('middle');
+      expect(cellFor(janWeeks, '2027-01-25')?.seriesRun?.position).toBe('middle');
+      expect(cellFor(febWeeks, '2027-02-01')?.seriesRun?.position).toBe('end');
+    });
+
+    it('a run that continues past a month boundary gets an uncapped `middle` at that edge on both sides, not a false end/start cap', () => {
+      // A 5-session run spanning Jan into Feb: Jan's grid must NOT cap
+      // 01-25 as `end` (the run keeps going into February), and Feb's grid
+      // must NOT cap 02-01 as `start` (it's a continuation, not a new run)
+      // — only the series' TRUE first (01-11) and TRUE last (02-08)
+      // sessions get caps.
+      const sessions = [
+        session({ id: 's1', date: '2027-01-11', seriesId: 'monday-pairs' }),
+        session({ id: 's2', date: '2027-01-18', seriesId: 'monday-pairs' }),
+        session({ id: 's3', date: '2027-01-25', seriesId: 'monday-pairs' }),
+        session({ id: 's4', date: '2027-02-01', seriesId: 'monday-pairs' }),
+        session({ id: 's5', date: '2027-02-08', seriesId: 'monday-pairs' }),
+      ];
+      const januaryWeeks = buildMonthGrid(2027, 1, sessions, [], [], '2027-01-01').weeks;
+      const februaryWeeks = buildMonthGrid(2027, 2, sessions, [], [], '2027-01-01').weeks;
+      const cellFor = (weeks: typeof januaryWeeks, date: string) => weeks.flat().find((c) => c?.date === date);
+      expect(cellFor(januaryWeeks, '2027-01-11')?.seriesRun?.position).toBe('start'); // true first session
+      expect(cellFor(januaryWeeks, '2027-01-25')?.seriesRun?.position).toBe('middle'); // last cell shown in Jan, but run continues
+      expect(cellFor(februaryWeeks, '2027-02-01')?.seriesRun?.position).toBe('middle'); // first cell shown in Feb, but run continued from Jan
+      expect(cellFor(februaryWeeks, '2027-02-08')?.seriesRun?.position).toBe('end'); // true last session
     });
 
     it('two series on one weekday alternate a/b by first-session-date order, a third flips back to a', () => {
@@ -251,11 +289,11 @@ describe('buildMonthGrid', () => {
       const { weeks: janWeeks } = buildMonthGrid(2027, 1, sessions, [], [], '2027-01-01');
       const { weeks: febWeeks } = buildMonthGrid(2027, 2, sessions, [], [], '2027-01-01');
       const cellFor = (weeks: typeof janWeeks, date: string) => weeks.flat().find((c) => c?.date === date);
-      expect(cellFor(janWeeks, '2027-01-11')?.seriesBand).toBe('a'); // monday-pairs: first series that weekday
-      expect(cellFor(janWeeks, '2027-01-18')?.seriesBand).toBe('a'); // same series, same band
-      expect(cellFor(janWeeks, '2027-01-25')?.seriesBand).toBe('b'); // campbell: second series that weekday, flips
-      expect(cellFor(febWeeks, '2027-02-01')?.seriesBand).toBe('b'); // still campbell
-      expect(cellFor(febWeeks, '2027-02-08')?.seriesBand).toBe('a'); // milton: third series, flips back
+      expect(cellFor(janWeeks, '2027-01-11')?.seriesRun).toEqual({ band: 'a', position: 'start' }); // monday-pairs: first series that weekday
+      expect(cellFor(janWeeks, '2027-01-18')?.seriesRun).toEqual({ band: 'a', position: 'end' }); // same series, same band, its true last session
+      expect(cellFor(janWeeks, '2027-01-25')?.seriesRun).toEqual({ band: 'b', position: 'start' }); // campbell: second series that weekday, flips, its true first
+      expect(cellFor(febWeeks, '2027-02-01')?.seriesRun).toEqual({ band: 'b', position: 'end' }); // still campbell, its true last
+      expect(cellFor(febWeeks, '2027-02-08')?.seriesRun).toEqual({ band: 'a', position: 'solo' }); // milton: third series, flips back, its only session
     });
 
     it('parity restarts per year', () => {
@@ -268,10 +306,10 @@ describe('buildMonthGrid', () => {
       ];
       const { weeks } = buildMonthGrid(2028, 1, sessions, [], [], '2028-01-01');
       const cell = weeks.flat().find((c) => c?.date === '2028-01-10');
-      expect(cell?.seriesBand).toBe('a');
+      expect(cell?.seriesRun?.band).toBe('a');
     });
 
-    it('a multi-series day takes the first session for its stripe', () => {
+    it('a multi-series day takes the first session for its rail', () => {
       const sessions = [
         session({ id: 's1', date: '2027-01-11', seriesId: 'monday-pairs' }),
         session({ id: 's2', date: '2027-01-11', seriesId: 'campbell', title: 'Campbell Cave Pairs' }),
@@ -280,9 +318,10 @@ describe('buildMonthGrid', () => {
       const { weeks } = buildMonthGrid(2027, 1, sessions, [], [], '2027-01-01');
       const cell = weeks.flat().find((c) => c?.date === '2027-01-11');
       // `campbell` is the second series that weekday (band b), but the
-      // stripe follows `sessions[0]` (`s1`, monday-pairs, band a) since it
-      // is first in the day's session list — the documented simplification.
-      expect(cell?.seriesBand).toBe('a');
+      // rail follows `sessions[0]` (`s1`, monday-pairs, band a, its lone
+      // session so `solo`) since it is first in the day's session list —
+      // the documented simplification.
+      expect(cell?.seriesRun).toEqual({ band: 'a', position: 'solo' });
       expect(cell?.seriesNames.sort()).toEqual(['Campbell Cave Pairs', 'Monday Pairs']);
     });
 
@@ -340,6 +379,43 @@ describe('computeSeriesBands', () => {
     const bands = computeSeriesBands(sessions);
     expect(bands.get('2027:monday-pairs')).toBe('a');
     expect(bands.get('2028:monday-pairs')).toBe('a');
+  });
+});
+
+describe('computeSeriesRunPositions', () => {
+  it('returns an empty map when there are no series sessions', () => {
+    expect(computeSeriesRunPositions([])).toEqual(new Map());
+    expect(computeSeriesRunPositions([session({ seriesId: null, kind: 'holidayBridge' })])).toEqual(new Map());
+  });
+
+  it('a series with one session is `solo`', () => {
+    const positions = computeSeriesRunPositions([session({ date: '2027-01-11', seriesId: 'monday-pairs' })]);
+    expect(positions.get('2027:monday-pairs:2027-01-11')).toBe('solo');
+  });
+
+  it('a series with several sessions is start/middle/.../end in date order, regardless of input order', () => {
+    const sessions = [
+      session({ id: 's3', date: '2027-01-25', seriesId: 'monday-pairs' }),
+      session({ id: 's1', date: '2027-01-11', seriesId: 'monday-pairs' }),
+      session({ id: 's2', date: '2027-01-18', seriesId: 'monday-pairs' }),
+    ];
+    const positions = computeSeriesRunPositions(sessions);
+    expect(positions.get('2027:monday-pairs:2027-01-11')).toBe('start');
+    expect(positions.get('2027:monday-pairs:2027-01-18')).toBe('middle');
+    expect(positions.get('2027:monday-pairs:2027-01-25')).toBe('end');
+  });
+
+  it('keys by `${year}:${seriesId}:${date}`, tolerating the same seriesId in two different years', () => {
+    const sessions = [
+      session({ id: 's1', date: '2027-01-11', seriesId: 'monday-pairs' }),
+      session({ id: 's2', date: '2027-01-18', seriesId: 'monday-pairs' }),
+      session({ id: 's3', date: '2028-01-10', seriesId: 'monday-pairs' }),
+    ];
+    const positions = computeSeriesRunPositions(sessions);
+    expect(positions.get('2027:monday-pairs:2027-01-11')).toBe('start');
+    // A different year's series of the same id is an independent run, not
+    // a third session appended to 2027's — it's `solo`, not `end`.
+    expect(positions.get('2028:monday-pairs:2028-01-10')).toBe('solo');
   });
 });
 
