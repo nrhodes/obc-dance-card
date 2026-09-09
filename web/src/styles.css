@@ -887,12 +887,18 @@ td {
   transform: translateX(-50%);
   width: 16px;
   /* `bottom` is measured from the cell's PADDING box, but the visible gap
-     runs between the two cells' BORDER boxes — so without the extra 2px (the
-     cell's border width) the spine stops short of the cell below and leaves a
-     white sliver (Neil, 2026-09-09). +2px lands its bottom exactly on the
-     next cell's top edge; its top sits on this cell's bottom edge. */
+     runs between the two cells' BORDER boxes — so the spine must also clear
+     the cell border on each end or it stops short and leaves a white sliver.
+     The border differs by view (2px Month, 1px compact Year — Neil, 2026-09-09
+     saw the Year spines short at the top), and 1fr columns put cells on
+     fractional pixels, so instead of pinning to one border width we let the
+     spine overlap a couple of px into both cells: `bottom` pushes it a border
+     past the gap, and the +4px height lets its top ride a touch up into the
+     owner cell. The overlap lands in the cells' bottom padding (below the
+     centred day number/glyph), invisible over their background, and no border
+     width or rounding can leave a gap at either end. */
   bottom: calc(-1 * var(--month-grid-row-gap) - 2px);
-  height: var(--month-grid-row-gap);
+  height: calc(var(--month-grid-row-gap) + 4px);
   background: var(--color-primary);
   border-radius: 2px;
   pointer-events: none;
