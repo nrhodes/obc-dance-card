@@ -1234,7 +1234,7 @@ the real schedule, not a synthetic one.
 > the cohort rows added to `members.rules.test.ts`/`entries.rules.test.ts`/
 > `teams.rules.test.ts`, and `web/e2e/review-cohort.spec.ts`.
 
-### B10. Calendar: series rails (Month/Year views) (captured + implemented 2026-09-08, redesigned same day)
+### B10. Calendar: series visibility (Month/Year views) (captured + implemented 2026-09-08, redesigned twice — pending Neil's sign-off on real 2026 data, branch `series-fusion`)
 
 **Intent.** In Month/Year, see which sessions belong to the same series at a glance —
 "perhaps shading, like alternating light/dark rows in Excel" (Neil) — without touching
@@ -1249,100 +1249,100 @@ palette comment) and must stay untouched.
 > next simply doesn't read as a *run* — each cell looked like an independent tick mark,
 > not part of a group.
 >
-> **Status: redesigned 2026-09-08 — continuous rails.** A series occupies a consecutive
-> run of weeks in one weekday column; the fix renders that run as one unbroken vertical
-> bar — a **rail** — down the column, bridging the grid's own row-gap between weeks so
-> the whole run reads as a single bracketed group at a glance. The rail **breaks** (a
-> plain gap, no line drawn across it) exactly where one series' run ends and the next
-> begins, and the tint alternates there too — the structural break is now doing most of
-> the "where does this series end" work that the old stripe left entirely to colour.
-> Widths grew to make the cue legible rather than decorative: 8px in Month, 6px in the
-> compact Year grid (vs. 4px/3px before).
+> **Second attempt (shipped 2026-09-08, replaced 2026-09-09) — continuous rails.** A
+> series' consecutive-week run rendered as one unbroken vertical bar bridging the grid's
+> row-gap, alternating tint (navy `#1b3a57`/`#3d6d94`) per weekday per year, breaking (gap
+> + tint flip) at a series boundary. This read better on the seed's small 2027 fixture, but
+> Neil's screenshot review of the real, denser production programme found the same
+> underlying complaint again at Year-view scale: with many series packed into a small
+> grid, a thin coloured bar next to the cell still doesn't read as "this cell and that cell
+> are the same thing" — colour-coded adjacency is a weak grouping cue once there are more
+> than a couple of bands in view.
+>
+> **Status: redesigned 2026-09-09 — series FUSION (grouping by shape, not colour).**
+> Consecutive same-series cells in one weekday column are made to look like they were cut
+> from ONE tall rounded rectangle: their touching corners square off and a connector spans
+> the full cell width across the row-gap between them, continuing the cells' shared border
+> unbroken. A run of N weeks reads as one slab containing N day-cells; a one-off
+> (`seriesId == null`) stays a free-standing rounded cell, visually distinct by *not* being
+> fused to anything. Between different series (or series -> one-off -> series) the normal
+> row-gap is untouched — the plain white gap *is* the boundary, same principle as the rail
+> version's "break", just with no colour doing any of the grouping work any more. All tint
+> machinery (`--series-band-a/b`, `computeSeriesBands`) is deleted outright; run positions
+> (`start`/`middle`/`end`/`solo`, `computeSeriesRunPositions`) are unchanged and still
+> unit-tested — fusion only needed a place *to* fuse, which that data already gave it.
 >
 > **Rendering mechanics** (`web/src/screens/CalendarScreen.tsx`'s `DayCell`,
-> `web/src/styles.css`'s `.month-cell-rail` rules). A rail is a real absolutely-positioned
-> element (`<span class="month-cell-rail …">`), not a background image — a background can
-> never paint outside its own box, and bridging the gap between two grid rows needs
-> exactly that. `.month-cell` is `position: relative` and reserves a left "rail lane" via
-> padding (14px full / 8px compact) applied to *every* cell, railed or not, so the day
-> number/glyph never shift depending on whether a given cell happens to carry a rail. A
-> `start`/`middle` cell's rail extends `calc(-1 * var(--month-grid-row-gap))` past its own
-> bottom edge — i.e. exactly the grid's row-gap (4px) — so it visually joins the next
-> row's segment with no seam; `middle`/`end` cells sit flush (`top: 0`, no rounding) at
-> their own top edge to receive that incoming bridge. `end`/`solo` cells stop short
-> instead (inset from the bottom, rounded) — deliberately **not** extending into the gap,
-> which is what makes that gap read as a break rather than a continuation. `solo`/`start`
-> get a rounded top cap the same way. One gotcha worth recording: `.month-grid` sets
-> `overflow-x: auto` for a narrow-viewport fallback, and CSS quietly computes
-> `overflow-y` as `auto` too whenever `overflow-x` isn't `visible` — so the bottom row's
-> bridging rail (a run that continues past the last displayed week) would get clipped
-> without `.month-grid`'s added `padding-bottom: 8px`, which gives that bridge room to
-> sit inside the box instead of past its edge.
->
-> **Position data** (`web/src/lib/overview.ts#computeSeriesRunPositions`, pure +
-> unit-tested): a cell's position — `start` | `middle` | `end` | `solo` — is computed from
-> a series' *complete* date list (every session it has, keyed `${year}:${seriesId}`, not
-> clipped to whatever month happens to be displayed), so a run that continues past a month
-> boundary gets an uncapped `middle` at that edge on both sides rather than a false
-> end-then-start cap pair — this is the one behaviour a per-cell-only stripe couldn't get
-> right even in principle. A series with exactly one session is `solo` (both caps, no
-> extension either direction). `MonthDayCell.seriesBand` was replaced by
-> `seriesRun: { band: 'a' | 'b'; position: SeriesRunPosition } | null` — `null` for a
-> `none` day or a one-off (`seriesId == null`) session, same "absence means no rail"
-> convention as before. The **tint alternation itself is unchanged**
-> (`computeSeriesBands`: per weekday per year, order by first session date, alternate A/B,
-> restart per year) — only the rendering was ever the problem, not the parity rule, so it
-> ships as-is with its original tests intact.
->
-> **Contrast.** Rails sit in the reserved lane against the **card/page background**, not
-> on top of the status colour any more (crossing the row-gap, that lane is genuinely
-> outside every cell's box, so it's unambiguously against white) — this, not just the
-> extra width, is most of why the redesign reads better than the stripe on real data.
-> `--series-band-a` (`#1b3a57`, navy) is unchanged — 11.7:1 against white. The original
-> `--series-band-b` (`#7fa3c0`) measured only ~2.65:1 against white, exactly the
-> low-contrast pastel that vanishes at a few px — darkened to `#3d6d94` (~5.5:1 against
-> white, ~2.1:1 against band A: distinct in both lightness and hue from the background and
-> from band A). The old 1px `--color-bg` separator hack (needed only because the stripe sat
-> on top of the status colour) is gone — nothing replaces it, because the rail no longer
-> has that problem.
+> `web/src/styles.css`). `.month-cell` keeps `position: relative` (needed for the
+> connector) but its rail-lane left-padding reservation is gone — cells are symmetric
+> `padding: 4px` (`1px` compact) again. Corner squaring is two independent classes read
+> straight off `SeriesRunPosition`: `.month-cell-fused-top` (on `middle`/`end` — a fused
+> neighbour is above) zeroes the top corner radii, `.month-cell-fused-bottom` (on
+> `start`/`middle` — a fused neighbour is below) zeroes the bottom ones; `solo`/`null` get
+> neither and keep the default 8px (2px compact) rounding on all four corners. The
+> connector (`.month-cell-connector`, rendered only for `start`/`middle`, i.e. exactly the
+> cells that carry `-fused-bottom`) is a full-width sibling span — `left: 0; right: 0` so
+> its border-box matches `.month-cell`'s own exactly, `bottom: calc(-1 * var(--month-grid-
+> row-gap)); height: var(--month-grid-row-gap)` to sit precisely in the row-gap. **Knitting
+> two different status colours**: the connector cannot extend either cell's `.day-status-*`
+> fill across the gap (a booked week and an open week in the same series have different
+> backgrounds), so instead of a background it paints `border-left`/`border-right: 2px solid
+> var(--color-border)` (1px compact) with a fully transparent middle — the shared FRAME
+> (the two cells' own 2px borders) continues unbroken through the gap while the interior of
+> the gap stays plain card/page-coloured, exactly like the space between any two ordinary
+> cards. Each cell keeps its own full border on every side, including the fused edges —
+> inside a slab those read as subtle internal week-dividers (like row lines inside one
+> Excel band), which is desirable, not a bug. `.month-grid`'s `overflow-x: auto` +
+> `padding-bottom: 8px` (needed because `overflow-x: auto` forces `overflow-y: auto` too,
+> which would otherwise clip a bottom-row connector) is unchanged — same geometry as the
+> rail version, still sufficient. **Today-outline**: `.month-cell-today`'s ring uses a
+> *negative* `outline-offset` (drawn inset, inside the box), so it was already incapable of
+> extending past a cell's own edge into a neighbour — verified unaffected by fusion, no
+> change needed, on a `start`/`middle`/`end` cell exactly as on a free-standing one.
 >
 > **Month key**: unchanged in placement/content (below the grid, above the status Legend,
 > one row per series with a session in the displayed month, first-date order, dates —
-> "Marion Taylor Pairs — 11, 18, 25 Jan"); the swatch is now a taller rounded pill
-> (`.calendar-series-key-swatch`) echoing the rail's cap shape instead of a flat stripe
-> chip. Year view still gets no key; its cells' `aria-label`/`title` carry the series name.
+> "Marion Taylor Pairs — 11, 18, 25 Jan"); the swatch (`.calendar-series-key-swatch`) is
+> now a small outlined "mini slab" (a bordered rounded rectangle with a faint internal
+> divider line) rather than a coloured bar/pill — purely decorative/mnemonic, since colour
+> plays no part in series grouping any more. Year view still gets no key; its cells'
+> `aria-label`/`title` carry the series name, unchanged.
 >
 > **Never colour-alone** (WCAG 1.4.1): unchanged — every day cell's `aria-label`/`title`
 > still carries the series name(s) when present, e.g. "Mon 12 Jan 2027 — Booked — Marion
-> Taylor Pairs"; the rail's tint *and* its structural break are both supplementary cues
+> Taylor Pairs"; fusion's shape cues (squared corners + connector) are supplementary,
 > layered on top of that text, never the only signal.
 >
-> See `web/src/lib/overview.ts` (`computeSeriesBands`, `computeSeriesRunPositions`,
-> `SeriesRun`, `MonthSeriesKeyEntry`, `MonthGrid`), `web/src/screens/CalendarScreen.tsx`
-> (`DayCell`, `railClassName`, `MonthSeriesKey`), `web/src/styles.css`
-> (`--series-band-*`, `--month-grid-row-gap`, `.month-cell-rail`, `.series-rail-*`,
-> `.calendar-series-key-*`); unit tests in `overview.test.ts` (start/middle/end/solo
-> positions, continuation across a month boundary, parity/alternation/one-off/
-> multi-series/cross-year-restart/key-ordering cases) and `CalendarScreen.test.tsx`; e2e
-> assertions in `web/e2e/calendar.spec.ts` updated to the rail classes, against the seed's
-> fixed 2027 Monday-series sequence (Marion Taylor Pairs -> Campbell Cave Pairs).
+> See `web/src/lib/overview.ts` (`computeSeriesRunPositions`, `SeriesRunPosition`,
+> `MonthSeriesKeyEntry`, `MonthGrid` — `computeSeriesBands`/`SeriesBand` deleted),
+> `web/src/screens/CalendarScreen.tsx` (`DayCell`, `fusionClassName`,
+> `hasConnectorBelow`, `MonthSeriesKey`), `web/src/styles.css`
+> (`.month-cell-fused-top`/`-bottom`, `.month-cell-connector`, `.calendar-series-key-*` —
+> `--series-band-*`/`.month-cell-rail`/`.series-rail-*` deleted); unit tests in
+> `overview.test.ts` ("series fusion" describe block: start/middle/end/solo positions,
+> continuation across a month boundary, one-off, multi-series-day; the old
+> `computeSeriesBands`/alternation/parity tests are gone with the function) and
+> `CalendarScreen.test.tsx`; e2e assertions in `web/e2e/calendar.spec.ts` updated from the
+> rail classes to the fusion classes, against the seed's fixed 2027 Monday-series sequence
+> (Marion Taylor Pairs -> Campbell Cave Pairs). Verified against the real, imported 2026
+> programme (not just the seed) at both Year (900px/420px) and Month (420px) viewports
+> before this redesign was considered done — see the branch's screenshot capture.
 >
-> **iOS handoff (updated for rails — iOS never built the stripe version, so build this
-> directly).** `ios/OBCDanceCard/Calendar/CalendarView.swift`'s Month/Year day cells need
-> the same continuous rail, not a per-cell mark: leading edge, same two tints
-> (`#1b3a57`/`#3d6d94` — note `-b` is darker than the original stripe proposal), bridging
-> the grid's own row spacing between weeks so a series' run reads as one bar, breaking
-> (no line, just a gap) with a tint flip where one series ends and the next begins. Mirror
-> `computeSeriesRunPositions` for the start/middle/end/solo decision (from a series'
-> *complete* session list, not clipped to the displayed month — a run continuing past a
-> month/page boundary must stay uncapped there) and `computeSeriesBands` for the tint
-> (per weekday per year, order by first session date, alternate A/B, restart per year,
-> keyed by `${year}:${seriesId}`), so a member sees the same rail on the same day in both
-> apps. Series names for the VoiceOver label and/or an `.accessibilityHint` should come
-> from the year-tagged `series` array the iOS programme store already loads, with the same
-> year-qualified lookup (`seriesId` collides across years there too). The Month view's
-> series key is optional at the Mac session's discretion — the rail + accessible label are
-> the load-bearing parts; the key is a sighted-user convenience only.
+> **iOS handoff (updated for fusion — supersedes the rails-first note; iOS never built
+> either the stripe or the rail version, so build this directly).**
+> `ios/OBCDanceCard/Calendar/CalendarView.swift`'s Month/Year day cells need the fused-slab
+> look, not a coloured mark: square the top/bottom corners of a `middle`/`end` cell's top
+> and a `start`/`middle` cell's bottom respectively (mirror `computeSeriesRunPositions` for
+> the position decision — from a series' *complete* session list, not clipped to the
+> displayed month/page, so a run continuing past a boundary stays uncapped there) and draw
+> a connecting frame — matching left/right hairlines, transparent middle — across the grid's
+> own row spacing between a `start`/`middle` cell and the next week's cell. No colour
+> token is needed at all (the old two-tint rail palette is gone). Series names for the
+> VoiceOver label and/or an `.accessibilityHint` should come from the year-tagged `series`
+> array the iOS programme store already loads, with the same year-qualified lookup
+> (`seriesId` collides across years there too). The Month view's series key is optional at
+> the Mac session's discretion — the fused shape + accessible label are the load-bearing
+> parts; the key is a sighted-user convenience only.
 
 ### Cross-cutting notes for the backlog
 

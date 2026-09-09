@@ -149,7 +149,7 @@ describe('CalendarScreen', () => {
     expect(screen.getByRole('tab', { name: 'Month' }).getAttribute('aria-selected')).toBe('true');
   });
 
-  it('Month mode shows series rails, the series key, and series names in cell labels', async () => {
+  it('Month mode fuses a series run into one slab, breaks between series, and shows the series key + names in cell labels', async () => {
     setup({
       sessions: [
         session({ id: 's-jan-11', date: '2027-01-11', seriesId: 'monday-pairs', title: 'Monday Pairs' }),
@@ -167,22 +167,31 @@ describe('CalendarScreen', () => {
 
     await user.click(screen.getByRole('tab', { name: 'Month' }));
 
-    // Two occurrences of the first series (band A) alternate to the second
-    // series (band B) — see `overview.ts#computeSeriesBands`. Jan 18 is
-    // `monday-pairs`' true last session (`end`); Jan 25 is `campbell`'s
-    // only session (`solo`).
-    const mondayPairsCell = screen.getByRole('button', { name: /Mon 18 Jan 2027.*Monday Pairs/ });
-    const mondayPairsRail = mondayPairsCell.querySelector('.month-cell-rail');
-    expect(mondayPairsRail?.className).toContain('series-rail-a');
-    expect(mondayPairsRail?.className).toContain('series-rail-end');
-    const campbellCell = screen.getByRole('button', { name: /Mon 25 Jan 2027.*Campbell Cave Pairs/ });
-    const campbellRail = campbellCell.querySelector('.month-cell-rail');
-    expect(campbellRail?.className).toContain('series-rail-b');
-    expect(campbellRail?.className).toContain('series-rail-solo');
+    // Jan 11 is `monday-pairs`' true first session (`start`): it squares its
+    // bottom corners and renders a connector bridging into Jan 18. Jan 18 is
+    // its true last session (`end`): it squares its top corners (fusing up
+    // to Jan 11) and renders no connector below (nothing continues). Jan 25
+    // is `campbell`'s only session (`solo`): no fusion classes, no connector.
+    const mondayStartCell = screen.getByRole('button', { name: /Mon 11 Jan 2027.*Monday Pairs/ });
+    expect(mondayStartCell.className).toContain('month-cell-fused-bottom');
+    expect(mondayStartCell.className).not.toContain('month-cell-fused-top');
+    expect(mondayStartCell.querySelector('.month-cell-connector')).not.toBeNull();
 
-    // A one-off (seriesId null) day gets no rail and no series name.
+    const mondayEndCell = screen.getByRole('button', { name: /Mon 18 Jan 2027.*Monday Pairs/ });
+    expect(mondayEndCell.className).toContain('month-cell-fused-top');
+    expect(mondayEndCell.className).not.toContain('month-cell-fused-bottom');
+    expect(mondayEndCell.querySelector('.month-cell-connector')).toBeNull();
+
+    const campbellCell = screen.getByRole('button', { name: /Mon 25 Jan 2027.*Campbell Cave Pairs/ });
+    expect(campbellCell.className).not.toContain('month-cell-fused-top');
+    expect(campbellCell.className).not.toContain('month-cell-fused-bottom');
+    expect(campbellCell.querySelector('.month-cell-connector')).toBeNull();
+
+    // A one-off (seriesId null) day gets no fusion classes, no connector, and no series name.
     const holidayCell = screen.getByRole('button', { name: /Mon 4 Jan 2027/ });
-    expect(holidayCell.querySelector('.month-cell-rail')).toBeNull();
+    expect(holidayCell.className).not.toContain('month-cell-fused-top');
+    expect(holidayCell.className).not.toContain('month-cell-fused-bottom');
+    expect(holidayCell.querySelector('.month-cell-connector')).toBeNull();
     expect(holidayCell.getAttribute('aria-label')).not.toMatch(/Monday Pairs|Campbell/);
 
     // The Month key lists each series, first-date order, with its dates that month.

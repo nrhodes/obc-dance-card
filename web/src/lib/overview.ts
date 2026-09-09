@@ -38,18 +38,21 @@
  * `seriesId`-keyed lookup would risk the cross-year collision plan §21 B3
  * calls out (`${weekday}-${slug(name)}` can repeat across published years).
  *
- * The Month/Year grids also carry a *series* channel (plan §21 "Calendar
- * series rails", replacing an earlier per-cell stripe that shipped
- * 2026-09-08 and proved unreadable on real data — "can't tell where one
- * series ends and another starts"): a series occupies a consecutive run of
- * weeks in one weekday column, and the whole run is meant to read as one
- * continuous bracketed bar (rendered by the screen, bridging the grid's
- * row-gap — see `CalendarScreen.tsx`), broken only where one series ends
- * and the next begins. This module only computes the *data* a renderer
- * needs for that: per cell, which alternating tint (`computeSeriesBands`,
- * unchanged from the stripe version) and which position in the series' true
- * full run (`computeSeriesRunPositions`) — start/middle/end/solo, decided
- * from *every* session the series has, not just the ones landing in a given
+ * The Month/Year grids also carry a *series* channel — this is the third
+ * design for it (plan §21 "Calendar series visibility"): a per-cell edge
+ * stripe shipped 2026-09-08 proved unreadable on real data ("can't tell
+ * where one series ends and another starts"), and the rail replacement that
+ * followed it (continuous bars in a reserved lane, alternating tint) fared
+ * no better at Year-view scale. This iteration drops colour/tint from
+ * series grouping entirely and instead *fuses* a series' consecutive-week
+ * run into one visual slab by squaring the touching corners of adjoining
+ * cells and bridging the grid's row-gap between them (rendered by the
+ * screen — see `CalendarScreen.tsx`); the plain white row-gap between
+ * *different* series (or around a one-off) is left alone, so it reads as
+ * the boundary. This module only computes the *data* a renderer needs for
+ * that: each cell's position in its series' true full run
+ * (`computeSeriesRunPositions`) — start/middle/end/solo, decided from
+ * *every* session the series has, not just the ones landing in a given
  * displayed month, so a run that continues past a month boundary gets an
  * uncapped `middle`/`start` at that edge rather than a false "end" cap.
  * Naming a series *does* need a lookup against the year-tagged `series`
@@ -161,78 +164,20 @@ export function buildAgenda(fromDate: IsoDate, days: number, sessions: readonly 
   return result;
 }
 
-/* ------------------------------ series rails ------------------------------ */
+/* ---------------------------- series fusion -------------------------- */
 
-export type SeriesBand = 'a' | 'b';
-
-/**
- * Alternating tint assignment (plan §21 "Calendar series rails", tint logic
- * unchanged from the original stripe attempt — only the rendering was the
- * problem): per weekday, per year, order that weekday's series by their
- * *first* session date and alternate band A/B by that order's index — so
- * consecutive occurrences of one series (same weekday, same series, week
- * after week) share a tint, and the next series on that weekday flips to
- * the other tint, the next one flips back, and so on. Parity restarts every
- * year (`Series` docs already live one level under `programmes/{year}`, so
- * this falls out naturally) — carrying a running parity across a year
- * boundary would couple two independently-published years for no real
- * benefit.
- *
- * Returns a lookup keyed `${year}:${seriesId}` — `seriesId` collides across
- * years (plan §21 B3: `${weekday}-${slug(name)}`), so any consumer must key
- * on the pair, never the bare id.
- *
- * Sessions with `seriesId == null` (one-off sessions, e.g. Holiday Bridge)
- * never enter this map — the caller treats "no entry" as "no rail".
- */
-export function computeSeriesBands(sessions: readonly Session[]): Map<string, SeriesBand> {
-  // `${year}:${weekday}` -> seriesId -> earliest date seen for that series.
-  const firstDateByGroup = new Map<string, Map<string, IsoDate>>();
-  for (const s of sessions) {
-    if (!s.seriesId) continue;
-    const year = Number(s.date.slice(0, 4));
-    const groupKey = `${year}:${s.weekday}`;
-    let group = firstDateByGroup.get(groupKey);
-    if (!group) {
-      group = new Map<string, IsoDate>();
-      firstDateByGroup.set(groupKey, group);
-    }
-    const earliest = group.get(s.seriesId);
-    if (!earliest || s.date < earliest) group.set(s.seriesId, s.date);
-  }
-
-  const bands = new Map<string, SeriesBand>();
-  for (const [groupKey, group] of firstDateByGroup) {
-    const year = groupKey.slice(0, groupKey.indexOf(':'));
-    // `Array.prototype.sort` is stable, so two series with an identical
-    // first date (unusual — two series on the same weekday starting the
-    // same day) keep the order they were encountered in `sessions`, which
-    // is deterministic for a given input rather than arbitrary.
-    const ordered = [...group.entries()].sort((a, b) => a[1].localeCompare(b[1]));
-    ordered.forEach(([seriesId], index) => {
-      bands.set(`${year}:${seriesId}`, index % 2 === 0 ? 'a' : 'b');
-    });
-  }
-  return bands;
-}
-
-/** A cell's place in its series' true full run (plan §21 "Calendar series rails"). */
+/** A cell's place in its series' true full run (plan §21 "Calendar series visibility"). */
 export type SeriesRunPosition = 'start' | 'middle' | 'end' | 'solo';
-
-/** The rail info a day cell needs: which tint, and where it sits in its series' run. */
-export interface SeriesRun {
-  band: SeriesBand;
-  position: SeriesRunPosition;
-}
 
 /**
  * Ordinal position of every series session within its own *complete* date
  * list (all of that series' sessions in the year, not clipped to any one
  * displayed month) — the first date is `start`, the last is `end`, everything
  * between is `middle`, and a series with exactly one session is `solo`.
- * Keyed `${year}:${seriesId}:${date}` (the same `${year}:${seriesId}`
- * collision-safety as `computeSeriesBands`, plus the date since a run has one
- * position per session).
+ * Keyed `${year}:${seriesId}:${date}` (`seriesId` collides across years —
+ * plan §21 B3: `${weekday}-${slug(name)}` — so any consumer must key on the
+ * `${year}:${seriesId}` pair, never the bare id; plus the date since a run
+ * has one position per session).
  *
  * This is deliberately ordinal-only (no gap/consecutiveness check): the
  * product intent (plan §21) is that a series occupies *consecutive* weeks,
@@ -284,21 +229,21 @@ export interface MonthDayCell {
   /** That day's bookable sessions — empty for a `none` day. */
   sessions: Session[];
   /**
-   * The rail for this day, from the *first* of `sessions`' series (plan §21:
-   * rare multi-series days just use the first — documented, not a bug).
-   * `null` for a `none` day or a day whose first session is a one-off
-   * (`seriesId == null`) — no entry means "no rail", not "rail band a".
+   * This day's position in its series' run, from the *first* of `sessions`'
+   * series (plan §21: rare multi-series days just use the first —
+   * documented, not a bug). `null` for a `none` day or a day whose first
+   * session is a one-off (`seriesId == null`) — no entry means "not part of
+   * a fused run", not "a solo slab".
    */
-  seriesRun: SeriesRun | null;
+  seriesRun: SeriesRunPosition | null;
   /** Every distinct series name among that day's sessions, in session order — feeds the aria-label/title (WCAG 1.4.1); empty when none. */
   seriesNames: string[];
 }
 
-/** One series' entry in the Month view's key (plan §21): a stripe swatch, name, and that series' session dates within the displayed month, ascending. */
+/** One series' entry in the Month view's key (plan §21): a mini-slab swatch, name, and that series' session dates within the displayed month, ascending. */
 export interface MonthSeriesKeyEntry {
   seriesId: string;
   name: string;
-  band: SeriesBand;
   /** Ascending, restricted to the displayed month. */
   dates: IsoDate[];
 }
@@ -343,11 +288,11 @@ export interface MonthGrid {
  * final week is padded out to a full row) are `null`.
  *
  * `series` should be the *full*, multi-year `sessions`/`series` sets a
- * caller already has from `useProgramme()` — band parity (see
- * `computeSeriesBands`) depends on every session in the year, not just the
- * ones landing in this particular month, so narrowing either array to the
- * displayed month before calling this would silently break alternation for
- * any series whose first session falls in an earlier month.
+ * caller already has from `useProgramme()` — run positions (see
+ * `computeSeriesRunPositions`) depend on every session in the year, not
+ * just the ones landing in this particular month, so narrowing either array
+ * to the displayed month before calling this would silently produce a false
+ * `start`/`end` cap for any series that spans a month boundary.
  */
 export function buildMonthGrid(
   year: number,
@@ -357,7 +302,6 @@ export function buildMonthGrid(
   series: readonly Tagged<Series>[] = [],
   today: IsoDate = todayNZ(),
 ): MonthGrid {
-  const bands = computeSeriesBands(sessions);
   const runPositions = computeSeriesRunPositions(sessions);
   const cells: Array<MonthDayCell | null> = [];
   // `seriesId` -> ascending dates, restricted to this month, for the key.
@@ -376,17 +320,12 @@ export function buildMonthGrid(
 
     const seriesSessions = daySessions.filter((s) => s.seriesId != null);
     const seriesNames = [...new Set(seriesSessions.map((s) => seriesNameFor(s.seriesId!, year, series, s)))];
-    // Multi-session days are rare; when one happens, the rail follows the
-    // *first* session's series (whatever that is, one-off included) — kept
-    // simple rather than trying to rank same-day sessions.
+    // Multi-session days are rare; when one happens, the fused position
+    // follows the *first* session's series (whatever that is, one-off
+    // included) — kept simple rather than trying to rank same-day sessions.
     const first = daySessions[0];
-    const seriesRun: SeriesRun | null = first?.seriesId
-      ? (() => {
-          const band = bands.get(`${year}:${first.seriesId}`);
-          const position = runPositions.get(`${year}:${first.seriesId}:${first.date}`);
-          return band && position ? { band, position } : null;
-        })()
-      : null;
+    const seriesRun: SeriesRunPosition | null =
+      first?.seriesId != null ? (runPositions.get(`${year}:${first.seriesId}:${first.date}`) ?? null) : null;
 
     for (const s of seriesSessions) {
       const dates = keyDatesBySeries.get(s.seriesId!) ?? [];
@@ -414,7 +353,6 @@ export function buildMonthGrid(
     .map(([seriesId, dates]) => ({
       seriesId,
       name: keyNameBySeries.get(seriesId)!,
-      band: bands.get(`${year}:${seriesId}`) ?? 'a',
       dates: [...dates].sort(),
     }))
     .sort((a, b) => a.dates[0]!.localeCompare(b.dates[0]!));

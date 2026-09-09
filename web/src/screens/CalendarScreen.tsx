@@ -29,8 +29,7 @@ import {
   type DayStatus,
   type MonthDayCell,
   type MonthSeriesKeyEntry,
-  type SeriesBand,
-  type SeriesRun,
+  type SeriesRunPosition,
 } from '../lib/overview';
 import { SubscriptionError } from '../components/SubscriptionError';
 import { SetAvailabilityDialog, type BulkAvailabilityStatus } from '../components/SetAvailabilityDialog';
@@ -51,19 +50,28 @@ const MONTH_NAMES = [
 const SHORT_MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const WEEKDAY_HEADER = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
 
-/** Tint class for the Month key's swatch (plan §21) — a fixed a/b -> class map, kept next to `STATUS_META` rather than computed inline. */
-const SERIES_BAND_CLASS: Record<SeriesBand, string> = { a: 'series-band-a', b: 'series-band-b' };
-
 /**
- * Class list for a day cell's rail segment (plan §21 "Calendar series
- * rails"): the tint (`series-rail-a`/`-b`) plus this cell's position in its
- * series' true run (`series-rail-start`/`-middle`/`-end`/`-solo`) — the CSS
- * for each position decides whether the bar bridges the grid's row-gap
- * (start/middle, continuing) or caps with a rounded end (end/solo, the
- * break that marks a series boundary).
+ * Corner-squaring classes for a fused day cell (plan §21 "Calendar series
+ * visibility", the fusion design): a `start`/`middle` cell squares its
+ * BOTTOM corners because a connector (see `month-cell-connector` below)
+ * bridges into the next row's cell, and a `middle`/`end` cell squares its
+ * TOP corners because the previous row's connector bridges up into it — so
+ * a run of N weeks reads as one unbroken rounded slab with square joints
+ * inside it, rather than N separate rounded cells. `solo` (and `null`, not
+ * part of any series) gets neither — its corners stay fully rounded,
+ * visually distinct from anything fused.
  */
-function railClassName(run: SeriesRun): string {
-  return `month-cell-rail series-rail-${run.band} series-rail-${run.position}`;
+function fusionClassName(position: SeriesRunPosition | null): string {
+  if (!position) return '';
+  const classes: string[] = [];
+  if (position === 'middle' || position === 'end') classes.push('month-cell-fused-top');
+  if (position === 'start' || position === 'middle') classes.push('month-cell-fused-bottom');
+  return classes.join(' ');
+}
+
+/** `start`/`middle` cells are the ones that extend a connector down into the next row (see `fusionClassName`). */
+function hasConnectorBelow(position: SeriesRunPosition | null): boolean {
+  return position === 'start' || position === 'middle';
 }
 
 const STATUS_META: Record<DayStatus, { label: string; glyph: string; className: string }> = {
@@ -414,22 +422,24 @@ function DayCell({
   // Month key (below the grid) is the sighted-user decode ring in Month
   // view, but Year view has no key, so the label/tooltip carry it there.
   const label = `${formatDateNZ(cell.date)}${isToday ? ' (today)' : ''} — ${meta.label}${seriesSuffix}`;
+  const fusionClasses = fusionClassName(cell.seriesRun);
   return (
     <button
       type="button"
-      className={`month-cell ${meta.className}${isToday ? ' month-cell-today' : ''}${compact ? ' month-cell-compact' : ''}`}
+      className={`month-cell ${meta.className}${isToday ? ' month-cell-today' : ''}${compact ? ' month-cell-compact' : ''}${fusionClasses ? ` ${fusionClasses}` : ''}`}
       disabled={!clickable}
       aria-label={label}
       title={label}
       onClick={() => onSelect(cell)}
     >
-      {/* The series rail (plan §21): an absolutely-positioned bar in the
-          cell's reserved left lane (`.month-cell`'s left padding), a
-          sibling of the day number/glyph rather than a class on the cell
-          itself, because it needs to extend past the cell's own box — into
-          the grid's row-gap, to bridge into the next week's cell — a thing
-          only a real element can do, not a `background-image`. */}
-      {cell.seriesRun && <span className={railClassName(cell.seriesRun)} aria-hidden="true" />}
+      {/* The fusion connector (plan §21 "Calendar series visibility"): a
+          full-cell-width span, a sibling of the day number/glyph rather than
+          a class on the cell itself, because it needs to extend past the
+          cell's own box — into the grid's row-gap, to bridge into the next
+          week's cell — a thing only a real element can do, not a
+          `background-image`. Only `start`/`middle` cells render one; `end`
+          and `solo` don't extend downward. */}
+      {hasConnectorBelow(cell.seriesRun) && <span className="month-cell-connector" aria-hidden="true" />}
       <span className="month-cell-day">{cell.dayOfMonth}</span>
       {/* Always rendered (nbsp when statusless) so every cell is two lines
           tall — otherwise glyph-less cells are shorter and rows misalign. */}
@@ -443,11 +453,12 @@ function DayCell({
 /**
  * The Month view's series key (plan §21): below the grid, above the status
  * Legend, one row per series with a session in the displayed month — in
- * first-date order — a rounded-bar swatch matching that series' rail tint, the
- * series name, and its session dates that month, e.g. "5, 12, 19, 26 Jan".
- * The caller omits this entirely when the month has no series sessions.
- * Year view gets no equivalent (too dense with 12 months on screen at
- * once) — its cells' aria-label/title carry the series name instead.
+ * first-date order — a mini-slab-outline swatch (echoing the fused shape a
+ * series' run renders as on the grid, colour plays no part), the series
+ * name, and its session dates that month, e.g. "5, 12, 19, 26 Jan". The
+ * caller omits this entirely when the month has no series sessions. Year
+ * view gets no equivalent (too dense with 12 months on screen at once) —
+ * its cells' aria-label/title carry the series name instead.
  */
 function MonthSeriesKey({ entries }: { entries: MonthSeriesKeyEntry[] }) {
   return (
@@ -459,7 +470,7 @@ function MonthSeriesKey({ entries }: { entries: MonthSeriesKeyEntry[] }) {
           const days = entry.dates.map((d) => Number(d.slice(8, 10))).join(', ');
           return (
             <li className="calendar-series-key-item" key={entry.seriesId}>
-              <span className={`calendar-series-key-swatch ${SERIES_BAND_CLASS[entry.band]}`} aria-hidden="true" />
+              <span className="calendar-series-key-swatch" aria-hidden="true" />
               <span>
                 {entry.name} — {days} {month}
               </span>

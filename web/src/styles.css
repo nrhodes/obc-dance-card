@@ -54,32 +54,24 @@
   --color-status-open-bg: #ff9838;
   --color-status-open-text: #4a2500;
 
-  /* Series rails (plan §21 "Calendar series rails" — replaces a per-cell
-     left-edge stripe shipped 2026-09-08 that read as unreadable noise on
-     real data: "can't tell where one series ends and another starts"). Two
-     alternating navy-family tints, reused down a weekday column so
-     consecutive occurrences of one series read as one continuous bar and
-     the next series flips. These are supplementary UI cues, redundant with
-     the series name in the aria-label/title/Month-key (WCAG 1.4.1 never
-     depends on them alone) and with the rail's own structural BREAK at a
-     series boundary, so the usual AA text-contrast rules don't strictly
-     apply — but the rail now renders in its own reserved lane against the
-     card/page background (never on top of a status colour, unlike the old
-     stripe) so plain visibility against white is worth checking on its own
-     merits. `--series-band-a` unchanged (11.7:1 against white). The
-     original `--series-band-b` (`#7fa3c0`) was only ~2.65:1 against white —
-     exactly the kind of low-contrast pastel that reads as "barely there" at
-     5-8px — so it's darkened here to `#3d6d94` (~5.5:1 against white,
-     ~2.1:1 against band A: distinct hue and lightness from both the
-     background and the other band). */
-  --series-band-a: #1b3a57;
-  --series-band-b: #3d6d94;
-  /* The grid's row-gap (`.month-grid`'s `gap`, shared by Month and the
-     compact Year grid) — a `start`/`middle` rail segment extends past its
-     own cell by exactly this much to bridge unbroken into the next week's
-     cell (see `.month-cell-rail` below). Kept as one variable so the two
-     values can never drift apart. */
-  --month-grid-row-gap: 4px;
+  /* Calendar series fusion (plan §21 "Calendar series visibility", third
+     iteration): grouping by consecutive-week SHAPE, not colour — a per-cell
+     left-edge stripe (shipped 2026-09-08) and then a continuous rail in a
+     reserved lane both proved unreadable on real data ("can't tell where
+     one series ends and another starts"). No tint token is needed any
+     more — the whole channel is the cell's own border/background plus the
+     connector below.
+     The grid's row-gap (`.month-grid`'s `gap`, shared by Month and the
+     compact Year grid) — a `start`/`middle` cell's connector extends past
+     its own cell by exactly this much to bridge unbroken into the next
+     week's cell (see `.month-cell-connector` below). Kept as one variable
+     so the two values can never drift apart. */
+  /* 8px (was 4): the boundary between two DIFFERENT series is plain
+     whitespace of exactly this height, while fused same-series weeks have it
+     filled solid by the connector — doubling it doubles the joined-vs-
+     separated contrast, which is the whole series-visibility signal at
+     Year-view scale (real-data review, 2026-09-09). */
+  --month-grid-row-gap: 8px;
 }
 
 * {
@@ -777,10 +769,11 @@ td {
   /* `overflow-x: auto` forces the UA to compute `overflow-y` as `auto` too
      (a CSS quirk: a non-`visible` overflow-x pairs with a `visible`
      overflow-y by making the latter `auto`) — so without this, the bottom
-     row's series-rail segments (plan §21) would get clipped/scrolled where
-     they bridge past the grid's own bottom edge into a week that isn't
-     rendered. This padding gives that bridge room to sit inside the box
-     instead (8px covers the largest rail extension used below). */
+     row's fusion connectors (plan §21 "Calendar series visibility") would
+     get clipped/scrolled where they bridge past the grid's own bottom edge
+     into a week that isn't rendered. This padding gives that bridge room to
+     sit inside the box instead (8px comfortably covers the connector's
+     `--month-grid-row-gap` extension below). */
   padding-bottom: 8px;
 }
 
@@ -804,8 +797,9 @@ td {
    same-specificity background on `.month-cell` would win by source order
    and silently strip the status colours — that bug shipped once. */
 .month-cell {
-  /* Positioning context for `.month-cell-rail` (plan §21), which needs to
-     extend past this box's own edges to bridge the grid's row-gap. */
+  /* Positioning context for `.month-cell-connector` (plan §21), which needs
+     to extend past this box's own bottom edge to bridge the grid's
+     row-gap. */
   position: relative;
   min-height: var(--tap-target);
   min-width: var(--tap-target);
@@ -816,11 +810,7 @@ td {
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  /* Left padding reserves the series-rail lane (4px cell inset + 8px rail
-     width + 2px breathing room before the day number) on EVERY cell,
-     railed or not, so the day number/glyph never shift position depending
-     on whether a given cell happens to carry a rail. */
-  padding: 4px 4px 4px 14px;
+  padding: 4px;
   font-weight: 600;
 }
 
@@ -834,6 +824,12 @@ td {
   min-width: var(--tap-target);
 }
 
+/*
+ * Today-outline: an inset ring (negative `outline-offset` draws it INSIDE
+ * the box, never past the cell's own edges), so it reads correctly on a
+ * fused `middle`/`start`/`end` cell exactly as it does on a free-standing
+ * one — there is nothing to clip into a neighbour, fused or not.
+ */
 .month-cell-today {
   outline: 3px solid var(--color-primary);
   outline-offset: -3px;
@@ -843,118 +839,68 @@ td {
 }
 
 /*
- * Series rails (plan §21 "Calendar series rails", replacing the per-cell
- * `background-image` stripe shipped 2026-09-08 — real-data feedback:
- * "pretty unreadable — can't tell where one series ends and another
- * starts"). A rail is a real element, not a background, because a
- * background can never paint outside its own box, and bridging the grid's
- * row-gap between two weeks needs exactly that: `.month-cell-rail` is
- * absolutely positioned within `.month-cell`'s reserved left lane, and a
- * `start`/`middle` cell's rail extends `--month-grid-row-gap` past the
- * cell's own bottom edge so it visually joins the next row's cell — the
- * whole run down a weekday column reads as one unbroken bracketed bar.
- * `end`/`solo` cells stop short (inset, rounded) instead: that gap — a
- * plain visual break, no colour or line drawn across it — IS the marker
- * that one series' run has ended (and, when the tint also flips, that the
- * next one has begun). Sits in front of `.day-status-*`'s background but
- * fully opaque, so within a cell's own box it *replaces* the status colour
- * in that thin lane; across the row-gap (outside every cell's box) it's
- * against the plain card/page background, which is what actually fixed
- * the old version's visibility — see `--series-band-b`'s contrast note.
+ * Series FUSION (plan §21 "Calendar series visibility", third iteration —
+ * grouping by SHAPE, not colour. Two earlier attempts (a per-cell left-edge
+ * stripe, then a continuous tinted rail in a reserved lane) both proved
+ * unreadable on real data: "can't tell where one series ends and another
+ * starts"). A series' consecutive-week run is made to read as ONE tall
+ * rounded slab containing N day-cells: touching corners between two
+ * same-series cells square off (`.month-cell-fused-top`/`-bottom` below)
+ * and a connector bridges the row-gap between them, so the slab's outline
+ * continues unbroken through the white gap. Between different series (or
+ * around a one-off, `seriesId == null`) the normal row-gap is left alone —
+ * the plain white gap IS the boundary, no element renders there at all.
+ * Each cell keeps its own full border on every side (including the edges
+ * that touch a fused neighbour) — inside a slab those read as subtle
+ * internal week-dividers, like row lines inside one Excel band — and each
+ * cell keeps its own `.day-status-*` fill, since two weeks of one series
+ * can have different booking statuses; only the FRAME (border) fuses, not
+ * the fill.
  */
-.month-cell-rail {
+/*
+ * Cells stay fully rounded (no corner-squaring): a full-width fused slab read
+ * as grouping ACROSS the row too (Neil, 2026-09-09: "feels like grouping is
+ * happening both horizontally and vertically"). The series link is carried
+ * ENTIRELY by the centred spine below, so these classes are intentionally
+ * no-ops now — kept because the render logic and tests still tag the cells,
+ * and so a future design could re-introduce an edge treatment here.
+ */
+.month-cell-fused-top,
+.month-cell-fused-bottom {
+  /* deliberately empty — see comment above */
+}
+
+/*
+ * The connector: a short, NARROW, centred vertical bar filling the row-gap
+ * between a `start`/`middle` cell and the next row's same-series cell — a
+ * spine down the weekday column, not a full-width strap. Narrow + centred is
+ * the point (Neil, 2026-09-09): a full-width bar made two rounded cells read
+ * as one horizontal block; a central spine reads as purely vertical grouping
+ * (this weekday's consecutive weeks = one series) with nothing implying a
+ * left-right link between different weekdays. It lives entirely in the gap,
+ * never touching either cell's `.day-status-*` fill (two weeks of one series
+ * can have different booking statuses).
+ */
+.month-cell-connector {
   position: absolute;
-  left: 4px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 16px;
+  /* `bottom` is measured from the cell's PADDING box, but the visible gap
+     runs between the two cells' BORDER boxes — so without the extra 2px (the
+     cell's border width) the spine stops short of the cell below and leaves a
+     white sliver (Neil, 2026-09-09). +2px lands its bottom exactly on the
+     next cell's top edge; its top sits on this cell's bottom edge. */
+  bottom: calc(-1 * var(--month-grid-row-gap) - 2px);
+  height: var(--month-grid-row-gap);
+  background: var(--color-primary);
+  border-radius: 2px;
+  pointer-events: none;
+}
+
+/* Compact (Year view) scale: a proportionally narrower spine. */
+.month-cell-compact .month-cell-connector {
   width: 8px;
-}
-
-.month-cell-rail.series-rail-a {
-  background: var(--series-band-a);
-}
-
-.month-cell-rail.series-rail-b {
-  background: var(--series-band-b);
-}
-
-/* `solo` (a single-session series) and `start` are the true beginning of a
-   run: inset from the cell's own top edge, rounded — nothing continues
-   from above. */
-.month-cell-rail.series-rail-solo,
-.month-cell-rail.series-rail-start {
-  top: 3px;
-}
-
-/* `middle`/`end` continue a run from the row above: flush with the cell's
-   own top edge (no inset, no rounding) so they meet the previous row's
-   downward extension with no seam. */
-.month-cell-rail.series-rail-middle,
-.month-cell-rail.series-rail-end {
-  top: 0;
-}
-
-/* `solo`/`end` are the true end of a run: inset from the cell's own bottom
-   edge, rounded, and — critically — do NOT extend into the row-gap, which
-   is what makes the gap after them read as a break rather than a
-   continuation. */
-.month-cell-rail.series-rail-solo,
-.month-cell-rail.series-rail-end {
-  bottom: 3px;
-}
-
-/* `start`/`middle` continue into the NEXT row: extend past this cell's own
-   bottom edge by exactly the grid's row-gap so the bar is unbroken through
-   it (see the `.month-grid` padding-bottom note above for why this doesn't
-   get clipped). */
-.month-cell-rail.series-rail-start,
-.month-cell-rail.series-rail-middle {
-  bottom: calc(-1 * var(--month-grid-row-gap));
-}
-
-.month-cell-rail.series-rail-solo {
-  border-radius: 4px;
-}
-
-.month-cell-rail.series-rail-start {
-  border-radius: 4px 4px 0 0;
-}
-
-.month-cell-rail.series-rail-middle {
-  border-radius: 0;
-}
-
-.month-cell-rail.series-rail-end {
-  border-radius: 0 0 4px 4px;
-}
-
-/* Compact (Year view) scale: a narrower rail (task: "wider than before" but
-   the grid cells themselves are tiny, ~22px) and proportionally smaller
-   insets/radii — geometry only, the tint/position class rules above still
-   apply unchanged. */
-.month-cell-compact .month-cell-rail {
-  left: 1px;
-  width: 6px;
-}
-
-.month-cell-compact .month-cell-rail.series-rail-solo,
-.month-cell-compact .month-cell-rail.series-rail-start {
-  top: 1px;
-}
-
-.month-cell-compact .month-cell-rail.series-rail-solo,
-.month-cell-compact .month-cell-rail.series-rail-end {
-  bottom: 1px;
-}
-
-.month-cell-compact .month-cell-rail.series-rail-solo {
-  border-radius: 3px;
-}
-
-.month-cell-compact .month-cell-rail.series-rail-start {
-  border-radius: 3px 3px 0 0;
-}
-
-.month-cell-compact .month-cell-rail.series-rail-end {
-  border-radius: 0 0 3px 3px;
 }
 
 .month-cell-day {
@@ -978,10 +924,7 @@ td {
 .month-cell-compact {
   min-height: 22px;
   min-width: 22px;
-  /* Reserves the compact rail lane (1px inset + 6px rail width + 1px
-     breathing room) the same way `.month-cell`'s padding does at full
-     size — see that rule's comment. */
-  padding: 1px 1px 1px 8px;
+  padding: 1px;
   border-width: 1px;
   font-size: 0.65rem;
 }
@@ -1013,10 +956,11 @@ td {
 }
 
 /*
- * Month view's series key (plan §21) — the sighted-user decode ring for the
- * grid's stripes, sitting between the grid and the status Legend. Year view
- * has no equivalent (too dense with 12 months on screen); its cells' own
- * aria-label/title carry the series name instead (WCAG 1.4.1).
+ * Month view's series key (plan §21) — the sighted-user decode ring naming
+ * each fused slab on the grid, sitting between the grid and the status
+ * Legend. Year view has no equivalent (too dense with 12 months on screen);
+ * its cells' own aria-label/title carry the series name instead (WCAG
+ * 1.4.1).
  */
 .calendar-series-key {
   margin-top: var(--space-2);
@@ -1030,7 +974,7 @@ td {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  /* No bullets — the stripe swatch is the marker. */
+  /* No bullets — the swatch is the marker. */
   list-style: none;
   padding: 0;
   margin: 0;
@@ -1045,23 +989,33 @@ td {
   flex-wrap: wrap;
 }
 
-/* A rounded pill, narrower than the swatch itself is tall — echoes the
-   grid's rounded-cap rail shape (plan §21 "Calendar series rails") rather
-   than the old flat stripe swatch. */
+/*
+ * A mini SLAB OUTLINE — two stacked cells fused into one rounded rectangle,
+ * echoed by a faint internal divider — rather than a colour swatch, since
+ * colour plays no part in series grouping any more (plan §21 "Calendar
+ * series visibility"). Purely decorative/mnemonic: the series name text is
+ * the actual identifying channel (WCAG 1.4.1).
+ */
 .calendar-series-key-swatch {
+  position: relative;
   flex: 0 0 auto;
   display: inline-block;
-  width: 8px;
+  width: 20px;
   height: 1.4em;
+  border: 2px solid var(--color-border);
   border-radius: 4px;
+  background: var(--color-bg);
 }
 
-.calendar-series-key-swatch.series-band-a {
-  background: var(--series-band-a);
-}
-
-.calendar-series-key-swatch.series-band-b {
-  background: var(--series-band-b);
+.calendar-series-key-swatch::after {
+  content: '';
+  position: absolute;
+  left: 2px;
+  right: 2px;
+  top: 50%;
+  height: 1px;
+  background: var(--color-border);
+  opacity: 0.6;
 }
 
 .calendar-legend {
