@@ -27,10 +27,10 @@
  * `weekdayOfNZ`), not hardcoded, so this spec keeps working on whatever real
  * date it runs — including a second, back-to-back run with no re-seed.
  *
- * A second test below covers the Month view's series rails (plan §21
- * "Calendar series rails"), against the seed's fixed 2027 Monday-series
- * sequence — Marion Taylor Pairs (Jan) is the first Monday series of that
- * year, so it always lands on band A regardless of when this spec runs.
+ * A second test below covers the Month view's series fusion (plan §21
+ * "Calendar series visibility"), against the seed's fixed 2027 Monday-series
+ * sequence — Marion Taylor Pairs (Jan) is a multi-week series, so its first
+ * session always renders as a `start` slab regardless of when this spec runs.
  */
 import type { Page } from '@playwright/test';
 import { addDaysNZ, todayNZ, weekdayOfNZ } from '@obc/shared';
@@ -127,14 +127,13 @@ test('Calendar overview + bulk "Set availability…" unavailable/clear round-tri
   await expect(page.getByRole('button', { name: "I'm looking for a partner" })).toBeVisible();
 });
 
-test('Month view shows series rails and the series key for a seeded series (plan §21 "Calendar series rails")', async ({ page }) => {
+test('Month view fuses a series run and shows the series key for a seeded series (plan §21 "Calendar series visibility")', async ({ page }) => {
   test.setTimeout(60_000);
 
   // Marion Taylor Pairs is the seed's fixed 2027 programme's first Monday
-  // series (11/18/25 Jan, 01 Feb) — always the first Monday series that
-  // year, so it's always band A regardless of when this spec runs. Navigate
-  // there from whatever month the Month view opens on (today's) via the
-  // view's own Prev/Next, rather than hardcoding a click count.
+  // series (11/18/25 Jan, 01 Feb) — a multi-week run, so it always fuses.
+  // Navigate there from whatever month the Month view opens on (today's) via
+  // the view's own Prev/Next, rather than hardcoding a click count.
   const targetYear = FIXED_YEAR;
   const targetMonth = 1;
   const monthsAhead = (targetYear - currentYear) * 12 + (targetMonth - Number(todayNZ().slice(5, 7)));
@@ -151,17 +150,19 @@ test('Month view shows series rails and the series key for a seeded series (plan
   await expect(page.getByRole('heading', { name: 'January 2027' })).toBeVisible();
 
   // Every day cell in the series carries the series name in its
-  // aria-label/title (WCAG 1.4.1 — colour is never the only signal) and a
-  // rail segment in the matching band/position; a one-off day (2027-01-04,
-  // Holiday Bridge) gets neither. 2027-01-11 is Marion Taylor Pairs' TRUE
-  // first session (band A, its year's first Monday series) — a `start` cap.
+  // aria-label/title (WCAG 1.4.1 — colour is never the only signal) and,
+  // for a `start`/`middle` cell, a connector fusing it to the next week's
+  // cell; a one-off day (2027-01-04, Holiday Bridge) gets neither.
+  // 2027-01-11 is Marion Taylor Pairs' TRUE first session — a `start`: its
+  // bottom corners square off and it renders a connector into 2027-01-18.
   const marionCell = page.getByRole('button', { name: /Mon 11 Jan 2027.*Marion Taylor Pairs/ });
   await expect(marionCell).toBeVisible();
-  const marionRail = marionCell.locator('.month-cell-rail');
-  await expect(marionRail).toHaveClass(/series-rail-a/);
-  await expect(marionRail).toHaveClass(/series-rail-start/);
+  await expect(marionCell).toHaveClass(/month-cell-fused-bottom/);
+  await expect(marionCell).not.toHaveClass(/month-cell-fused-top/);
+  await expect(marionCell.locator('.month-cell-connector')).toHaveCount(1);
   const holidayCell = page.getByRole('button', { name: /Mon 4 Jan 2027/ });
-  await expect(holidayCell.locator('.month-cell-rail')).toHaveCount(0);
+  await expect(holidayCell).not.toHaveClass(/month-cell-fused-top|month-cell-fused-bottom/);
+  await expect(holidayCell.locator('.month-cell-connector')).toHaveCount(0);
 
   // The Month key lists the series, first-date order, with its January dates.
   await expect(page.getByRole('heading', { name: 'Series this month' })).toBeVisible();
