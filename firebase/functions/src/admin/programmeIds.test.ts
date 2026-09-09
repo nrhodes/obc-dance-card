@@ -44,4 +44,37 @@ describe('sessionIdForSeries / sessionIdForSingle', () => {
     );
     expect(sessionIdForSingle(2027, '2027-01-04', 'monday')).toBe('2027-2027-01-04-monday');
   });
+
+  it('two series that collide on slug still get distinct session ids once run through the deduped seriesId (not the raw slug)', () => {
+    // This is the id-generation collision case: assignSeriesIds already
+    // disambiguates "monday-pairs" -> "monday-pairs-2" for the second row,
+    // and runProgrammeImport must feed sessionIdForSeries the *deduped* id
+    // (seriesIds[i]), never the raw `${weekday}-${slugify(name)}` base --
+    // otherwise two distinct series meeting on the same date would produce
+    // identical session ids and one would silently overwrite the other.
+    const rows = [
+      { weekday: 'monday' as const, name: 'Pairs' },
+      { weekday: 'monday' as const, name: 'Pairs' },
+    ];
+    const ids = assignSeriesIds(rows);
+    expect(ids).toEqual(['monday-pairs', 'monday-pairs-2']);
+
+    const date = '2027-01-11';
+    const sessionIds = ids.map((id) => sessionIdForSeries(id, date));
+    expect(sessionIds).toEqual(['monday-pairs-2027-01-11', 'monday-pairs-2-2027-01-11']);
+    expect(new Set(sessionIds).size).toBe(sessionIds.length);
+  });
+
+  it('many series sharing a slug on the same weekday all produce pairwise-distinct session ids across every one of their dates', () => {
+    // Regression guard for the id-collision hypothesis in general, not just
+    // the n=2 case: N colliding series x M shared dates must yield N*M
+    // distinct session ids.
+    const rows = Array.from({ length: 5 }, () => ({ weekday: 'monday' as const, name: 'Pairs' }));
+    const ids = assignSeriesIds(rows);
+    expect(ids).toEqual(['monday-pairs', 'monday-pairs-2', 'monday-pairs-3', 'monday-pairs-4', 'monday-pairs-5']);
+
+    const dates = ['2027-01-04', '2027-01-11', '2027-01-18'];
+    const allSessionIds = ids.flatMap((id) => dates.map((date) => sessionIdForSeries(id, date)));
+    expect(new Set(allSessionIds).size).toBe(allSessionIds.length);
+  });
 });

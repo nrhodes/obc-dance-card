@@ -532,6 +532,29 @@ export async function runProgrammeImport(
 
   candidateSessions = pruneDateWeekdayCollisions(candidateSessions, errors);
   const survivingIds = new Set(candidateSessions.map((c) => c.id));
+  // Invariant: pruneDateWeekdayCollisions guarantees every surviving
+  // candidate has a unique (date, weekday) pair, and every session id is
+  // derived from its date plus a per-series (or per-weekday, for singles)
+  // key -- so ids should always come out distinct too. If they don't, the id
+  // scheme itself has regressed (plan §5.4): fail loudly here rather than
+  // silently writing fewer session docs than reported (a real data-loss bug
+  // used to slip past this exact point -- see batchWriter.ts history).
+  if (survivingIds.size !== candidateSessions.length) {
+    const byId = new Map<string, CandidateSession[]>();
+    for (const c of candidateSessions) {
+      const list = byId.get(c.id) ?? [];
+      list.push(c);
+      byId.set(c.id, list);
+    }
+    const detail = [...byId.entries()]
+      .filter(([, list]) => list.length > 1)
+      .map(([id, list]) => `"${id}" from ${list.map((x) => `${x.source.file} row ${x.source.row}`).join(' and ')}`)
+      .join('; ');
+    throw new HttpsError(
+      'internal',
+      `Session id collision detected -- refusing to import (would silently drop sessions): ${detail}`,
+    );
+  }
   // Drop any series-doc sessionIds that were pruned as a date/weekday collision.
   for (const s of seriesDocs) {
     s.sessionIds = s.sessionIds.filter((id) => survivingIds.has(id));
