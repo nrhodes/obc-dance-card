@@ -335,6 +335,65 @@ describe('importProgramme', () => {
     const programmeSnap = await db.doc(paths.programme(year)).get();
     expect(programmeSnap.data()?.status).toBe('published'); // replace keeps the prior status
   });
+
+  it(
+    'regression: stored session count always equals the reported count, even when re-importing a large ' +
+      'multi-series multi-weekday programme pushes the delete+recreate write past one Firestore batch ' +
+      '(real bug: BatchWriter used to fire batches concurrently, letting a stale delete of an old session ' +
+      'race ahead of -- and silently wipe out -- its own recreate once the op count crossed 400)',
+    async () => {
+      const year = freshYear();
+      const weekdayNames = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'] as const;
+      const isoWeekdayFor: Record<(typeof weekdayNames)[number], number> = {
+        monday: 1,
+        tuesday: 2,
+        wednesday: 3,
+        thursday: 4,
+        friday: 5,
+      };
+
+      const wdRows = weekdayNames.map((wd) => [wd, `${wd} afternoon`, '13:00', '12:45', '', '']);
+      const seriesRows: string[][] = [];
+      for (const wd of weekdayNames) {
+        // 40 distinct same-weekday dates split into two non-overlapping
+        // 20-date series so no two rows collide on (date, weekday).
+        const dates = datesForWeekday(year, isoWeekdayFor[wd], 40);
+        seriesRows.push([wd, `${wd} Series A`, 'Scr', 'Pairs', '', '', 'yes', '', '', dates.slice(0, 20).join(';')]);
+        seriesRows.push([wd, `${wd} Series B`, 'Scr', 'Pairs', '', '', 'yes', '', '', dates.slice(20, 40).join(';')]);
+      }
+      // 5 weekdays x 2 series x 20 dates = 200 sessions, 10 series, 5 weekdays:
+      // first import writes 1+5+10+200=216 ops; a second import over that
+      // draft deletes 5+10+200=215 existing docs and writes 216 new ones =
+      // 431 total, comfortably over BatchWriter's 400-op-per-batch threshold.
+      const input: ImportProgrammeInput = {
+        year,
+        weekdaysCsv: weekdaysCsv(wdRows),
+        seriesCsv: seriesCsv(seriesRows),
+        singlesCsv: EMPTY_SINGLES,
+      };
+
+      const first = await importProgrammeHandler(await adminReq(input));
+      expect(first.errors).toEqual([]);
+      expect(first.weekdays).toBe(5);
+      expect(first.series).toBe(10);
+      expect(first.sessions).toBe(200);
+
+      const firstStored = await db.collection(paths.sessions(year)).get();
+      expect(firstStored.size).toBe(first.sessions);
+
+      // Re-import the identical programme over the draft it just created.
+      // Same session ids -> wouldRemoveSessions is 0 and no warning is
+      // emitted, so this looks like a no-op from the report alone -- but it
+      // still takes the delete-everything-then-recreate path internally.
+      const second = await importProgrammeHandler(await adminReq(input));
+      expect(second.errors).toEqual([]);
+      expect(second.wouldRemoveSessions).toBe(0);
+      expect(second.sessions).toBe(200);
+
+      const secondStored = await db.collection(paths.sessions(year)).get();
+      expect(secondStored.size).toBe(second.sessions); // <- this is the invariant the bug broke
+    },
+  );
 });
 
 /** `count` upcoming Mondays in `year`, formatted YYYY-MM-DD, verified against `weekdayOfNZ` implicitly via the app. */
@@ -345,6 +404,19 @@ function mondaysFor(year: number, count: number): string[] {
   const d = new Date(Date.UTC(year, 0, 1));
   while (dates.length < count) {
     if (d.getUTCDay() === 1) {
+      dates.push(d.toISOString().slice(0, 10));
+    }
+    d.setUTCDate(d.getUTCDate() + 1);
+  }
+  return dates;
+}
+
+/** `count` dates in `year` landing on `isoWeekday` (1=Monday .. 5=Friday), scanning forward from Jan 1. */
+function datesForWeekday(year: number, isoWeekday: number, count: number): string[] {
+  const dates: string[] = [];
+  const d = new Date(Date.UTC(year, 0, 1));
+  while (dates.length < count) {
+    if (d.getUTCDay() === isoWeekday) {
       dates.push(d.toISOString().slice(0, 10));
     }
     d.setUTCDate(d.getUTCDate() + 1);
