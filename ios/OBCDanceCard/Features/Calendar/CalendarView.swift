@@ -61,6 +61,7 @@ private func meta(for status: SessionMemberStatus) -> DayStatusMeta {
 }
 
 private let legendStatuses: [DayStatus] = [.booked, .partly, .seeking, .open, .unavailable]
+private let shortMonthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 private let monthNames = ["January", "February", "March", "April", "May", "June",
                           "July", "August", "September", "October", "November", "December"]
 private let weekdayHeader = ["Mon", "Tue", "Wed", "Thu", "Fri"]
@@ -207,7 +208,7 @@ struct CalendarView: View {
 
     @ViewBuilder
     private var monthSections: some View {
-        let weeks = Overview.buildMonthGrid(year: viewYear, month: viewMonth, sessions: programme.sessions, entries: myEntries.entries, today: today)
+        let grid = Overview.buildMonthGrid(year: viewYear, month: viewMonth, sessions: programme.sessions, entries: myEntries.entries, series: programme.series, today: today)
         Section {
             HStack {
                 Button { prevMonth() } label: { Label("Previous month", systemImage: "chevron.left").labelStyle(.iconOnly) }
@@ -222,9 +223,32 @@ struct CalendarView: View {
             }
             .buttonStyle(.bordered)
 
-            MonthGrid(weeks: weeks, today: today, compact: false, onSelect: handleDayCell)
+            MonthGrid(weeks: grid.weeks, today: today, compact: false, onSelect: handleDayCell)
+        }
+        if !grid.seriesKey.isEmpty {
+            // The web's "Series this month" key: one row per series with a
+            // session in the displayed month, first-date order, with its
+            // dates — the sighted decode ring for the spine. Year view has
+            // no equivalent (too dense); its cells' labels carry the name.
+            Section("Series this month") {
+                ForEach(grid.seriesKey) { entry in
+                    HStack(alignment: .center, spacing: 10) {
+                        SeriesKeySwatch()
+                        Text("\(entry.name) — \(Self.keyDates(entry.dates))")
+                            .font(.subheadline)
+                    }
+                    .accessibilityElement(children: .combine)
+                }
+            }
         }
         Section("Legend") { Legend() }
+    }
+
+    /// "5, 12, 19 Jan" — the day numbers then the month, as on the web.
+    private static func keyDates(_ dates: [String]) -> String {
+        guard let first = dates.first, let month = Int(first.dropFirst(5).prefix(2)) else { return "" }
+        let days = dates.compactMap { Int($0.suffix(2)) }.map(String.init).joined(separator: ", ")
+        return "\(days) \(shortMonthNames[max(0, min(11, month - 1))])"
     }
 
     private func prevMonth() {
@@ -241,7 +265,7 @@ struct CalendarView: View {
 
     @ViewBuilder
     private var yearSections: some View {
-        let overview = Overview.buildYearOverview(year: yearViewYear, sessions: programme.sessions, entries: myEntries.entries, today: today)
+        let overview = Overview.buildYearOverview(year: yearViewYear, sessions: programme.sessions, entries: myEntries.entries, series: programme.series, today: today)
         Section {
             Picker("Year", selection: $yearViewYear) {
                 ForEach(years, id: \.self) { Text(String($0)).tag($0) }
@@ -316,7 +340,10 @@ private struct MonthGrid: View {
     let compact: Bool
     let onSelect: (Overview.MonthDayCell) -> Void
 
-    private var spacing: CGFloat { compact ? 2 : 6 }
+    /// The row gap doubles as the spine's canvas (web: 8px in both views):
+    /// between two weeks of one series it's filled by the spine, between
+    /// different series it's plain — that contrast is the whole signal.
+    private var spacing: CGFloat { compact ? 4 : 8 }
 
     var body: some View {
         // An eager `Grid`, not a LazyVGrid: inside a List a lazy grid reports
@@ -326,8 +353,10 @@ private struct MonthGrid: View {
         Grid(horizontalSpacing: spacing, verticalSpacing: spacing) {
             GridRow {
                 ForEach(weekdayHeader, id: \.self) { label in
+                    // Semibold so the header row reads as labels, not as
+                    // another row of day numbers (Neil, 2026-09-11).
                     Text(compact ? String(label.prefix(1)) : label)
-                        .font(compact ? .caption2 : .caption)
+                        .font((compact ? Font.caption2 : Font.caption).weight(.semibold))
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity)
                         .accessibilityHidden(true)
@@ -336,7 +365,7 @@ private struct MonthGrid: View {
             ForEach(Array(weeks.enumerated()), id: \.offset) { _, week in
                 GridRow {
                     ForEach(Array(week.enumerated()), id: \.offset) { _, cell in
-                        DayCell(cell: cell, today: today, compact: compact, onSelect: onSelect)
+                        DayCell(cell: cell, today: today, compact: compact, rowGap: spacing, onSelect: onSelect)
                     }
                 }
             }
@@ -348,12 +377,20 @@ private struct DayCell: View {
     let cell: Overview.MonthDayCell?
     let today: String
     let compact: Bool
+    /// The grid's vertical spacing — exactly what the spine has to bridge.
+    let rowGap: CGFloat
     let onSelect: (Overview.MonthDayCell) -> Void
+
+    /// `start`/`middle` cells extend a spine down into the next week's cell.
+    private var hasSpineBelow: Bool {
+        cell?.seriesRun == .start || cell?.seriesRun == .middle
+    }
 
     var body: some View {
         if let cell {
             let m = meta(for: cell.status)
             let isToday = cell.date == today
+            let seriesSuffix = cell.seriesNames.isEmpty ? "" : " — \(cell.seriesNames.joined(separator: ", "))"
             Button { onSelect(cell) } label: {
                 VStack(spacing: 0) {
                     Text(String(cell.dayOfMonth)).font(compact ? .caption2 : .body)
@@ -368,6 +405,23 @@ private struct DayCell: View {
                     RoundedRectangle(cornerRadius: compact ? 3 : 6)
                         .strokeBorder(isToday ? Color.accentColor : .clear, lineWidth: 2)
                 )
+                // The series spine (plan §21 "Calendar series visibility",
+                // the web's third design): a short, narrow, centred bar in the
+                // accent colour filling the row gap below a `start`/`middle`
+                // cell, so consecutive weeks of one series read as a single
+                // vertical run down their weekday column. It lives entirely in
+                // the gap — never over either cell's status fill — and the
+                // plain gap around a one-off or between series is the boundary.
+                .overlay(alignment: .bottom) {
+                    if hasSpineBelow {
+                        RoundedRectangle(cornerRadius: 2)
+                            .fill(Color.accentColor)
+                            .frame(width: compact ? 6 : 14, height: rowGap)
+                            .offset(y: rowGap)
+                            .allowsHitTesting(false)
+                            .accessibilityHidden(true)
+                    }
+                }
                 // The compact (Year view) cell is only 22pt tall, below the
                 // usual 44pt hit-target (a documented exception — see the
                 // file header). This doesn't grow the cell, but it does make
@@ -378,7 +432,7 @@ private struct DayCell: View {
             }
             .buttonStyle(.plain)
             .disabled(cell.sessions.isEmpty)
-            .accessibilityLabel("\(Fmt.date(cell.date))\(isToday ? ", today" : "") — \(m.label)")
+            .accessibilityLabel("\(Fmt.date(cell.date))\(isToday ? ", today" : "") — \(m.label)\(seriesSuffix)")
         } else {
             Color.clear.frame(maxWidth: .infinity, minHeight: compact ? 22 : 48)
                 .accessibilityHidden(true)
@@ -550,4 +604,17 @@ struct SetAvailabilitySheet: View {
     }()
     private static func iso(_ d: Date) -> String { formatter.string(from: d) }
     private static func date(_ iso: String) -> Date? { formatter.date(from: iso) }
+}
+
+/// The key's swatch: two tiny cells joined by a spine — the shape a series'
+/// run renders as on the grid (colour plays no part in the grouping).
+private struct SeriesKeySwatch: View {
+    var body: some View {
+        VStack(spacing: 0) {
+            RoundedRectangle(cornerRadius: 2).fill(Color.secondary.opacity(0.35)).frame(width: 14, height: 7)
+            RoundedRectangle(cornerRadius: 1).fill(Color.accentColor).frame(width: 4, height: 4)
+            RoundedRectangle(cornerRadius: 2).fill(Color.secondary.opacity(0.35)).frame(width: 14, height: 7)
+        }
+        .accessibilityHidden(true)
+    }
 }
