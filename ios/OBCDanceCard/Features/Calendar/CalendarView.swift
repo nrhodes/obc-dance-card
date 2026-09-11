@@ -68,6 +68,7 @@ private let weekdayHeader = ["Mon", "Tue", "Wed", "Thu", "Fri"]
 // MARK: - Screen
 
 struct CalendarView: View {
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     private enum Mode: String, CaseIterable, Identifiable {
         case list = "List", month = "Month", year = "Year"
         var id: String { rawValue }
@@ -248,18 +249,27 @@ struct CalendarView: View {
             .pickerStyle(.segmented)
         }
         Section {
-            // Was a hardcoded 2-column grid. On iPhone portrait (~390pt wide,
-            // less List/insetGrouped padding ≈ a ~360pt section) that gave
-            // each of the 2 columns ≈ (360 - 12 spacing) / 2 ≈ 174pt. An
-            // iPad's much wider section wastes all that extra width on the
-            // same 2 overly-wide columns. `.adaptive(minimum: 170, maximum:
-            // 400)` keeps iPhone at 2 columns (170 < 174) while letting an
-            // iPad grow to 3-4.
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 170, maximum: 400), spacing: 12)], spacing: 12) {
-                ForEach(overview) { month in
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(monthNames[month.month - 1]).font(.subheadline.weight(.semibold))
-                        MonthGrid(weeks: month.weeks, today: today, compact: true, onSelect: handleDayCell)
+            // Not a LazyVGrid: inside a List a lazy grid under-measures its
+            // first row and clips it (January lost its title and weekday
+            // header), and `.adaptive(minimum: 170)` collapsed to ONE column
+            // on iPhone because an inset-grouped section is only ~320pt wide,
+            // not the ~360 assumed. Twelve months is small enough for an
+            // eager `Grid`, with the column count from the size class:
+            // 2 on iPhone, 4 on iPad.
+            let perRow = horizontalSizeClass == .regular ? 4 : 2
+            let rows = stride(from: 0, to: overview.count, by: perRow).map { Array(overview[$0 ..< min($0 + perRow, overview.count)]) }
+            Grid(alignment: .top, horizontalSpacing: 12, verticalSpacing: 16) {
+                ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                    GridRow {
+                        ForEach(row) { month in
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(monthNames[month.month - 1]).font(.subheadline.weight(.semibold))
+                                MonthGrid(weeks: month.weeks, today: today, compact: true, onSelect: handleDayCell)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        // Pad a short last row so the columns keep their width.
+                        ForEach(0 ..< max(0, perRow - row.count), id: \.self) { _ in Color.clear.gridCellUnsizedAxes(.vertical) }
                     }
                 }
             }
@@ -306,21 +316,28 @@ private struct MonthGrid: View {
     let compact: Bool
     let onSelect: (Overview.MonthDayCell) -> Void
 
-    private var columns: [GridItem] {
-        Array(repeating: GridItem(.flexible(), spacing: compact ? 2 : 6), count: 5)
-    }
+    private var spacing: CGFloat { compact ? 2 : 6 }
 
     var body: some View {
-        LazyVGrid(columns: columns, spacing: compact ? 2 : 6) {
-            ForEach(weekdayHeader, id: \.self) { label in
-                Text(compact ? String(label.prefix(1)) : label)
-                    .font(compact ? .caption2 : .caption)
-                    .foregroundStyle(.secondary)
-                    .accessibilityHidden(true)
+        // An eager `Grid`, not a LazyVGrid: inside a List a lazy grid reports
+        // a smaller height than it draws, so the row came out too short and
+        // its first/last rows were clipped (month titles lost off the top of
+        // the Year view). A month is at most 6×5 cells — nothing to be lazy about.
+        Grid(horizontalSpacing: spacing, verticalSpacing: spacing) {
+            GridRow {
+                ForEach(weekdayHeader, id: \.self) { label in
+                    Text(compact ? String(label.prefix(1)) : label)
+                        .font(compact ? .caption2 : .caption)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity)
+                        .accessibilityHidden(true)
+                }
             }
             ForEach(Array(weeks.enumerated()), id: \.offset) { _, week in
-                ForEach(Array(week.enumerated()), id: \.offset) { _, cell in
-                    DayCell(cell: cell, today: today, compact: compact, onSelect: onSelect)
+                GridRow {
+                    ForEach(Array(week.enumerated()), id: \.offset) { _, cell in
+                        DayCell(cell: cell, today: today, compact: compact, onSelect: onSelect)
+                    }
                 }
             }
         }
