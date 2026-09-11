@@ -133,7 +133,81 @@ enum Overview {
         var status: DayStatus
         /// That day's bookable sessions — empty for a `none` day.
         var sessions: [Session]
+        /// This day's position in its series' run, from the *first* of
+        /// `sessions`' series (a rare multi-series day just uses the first —
+        /// documented, not a bug). nil for a `none` day or a day whose first
+        /// session is a one-off: "not part of a run", not "a solo run".
+        var seriesRun: SeriesRunPosition? = nil
+        /// Every distinct series name among that day's sessions, in session
+        /// order — appended to the accessibility label; empty when none.
+        var seriesNames: [String] = []
         var id: String { date }
+    }
+
+    // MARK: - Series fusion (plan §21 "Calendar series visibility")
+
+    /// A cell's place in its series' true full run. Port of the web's
+    /// `SeriesRunPosition` — the Month/Year grids draw a centred "spine"
+    /// through the row gap below every `start`/`middle` cell, so a series'
+    /// consecutive weeks read as one vertical run and the plain gap between
+    /// different series (or around a one-off) reads as the boundary.
+    enum SeriesRunPosition: String, Hashable {
+        case start, middle, end, solo
+    }
+
+    /// Ordinal position of every series session within its own *complete*
+    /// date list (every session of that series in the year, not just the
+    /// ones in a displayed month) — first is `start`, last is `end`, the
+    /// rest `middle`; a single-session series is `solo`. Keyed
+    /// `"\(year):\(seriesId):\(date)"`: `seriesId` collides across years
+    /// (plan §21 B3), so consumers key on the year-qualified pair.
+    /// Deliberately ordinal-only: a series occupies consecutive weeks by
+    /// product intent, so first/last-by-date is first/last-by-week.
+    static func computeSeriesRunPositions(_ sessions: [Session]) -> [String: SeriesRunPosition] {
+        var datesByGroup: [String: Set<String>] = [:]
+        for s in sessions {
+            guard let seriesId = s.seriesId else { continue }
+            datesByGroup["\(s.year):\(seriesId)", default: []].insert(s.date)
+        }
+        var positions: [String: SeriesRunPosition] = [:]
+        for (key, dateSet) in datesByGroup {
+            let sorted = dateSet.sorted()
+            for (index, date) in sorted.enumerated() {
+                let position: SeriesRunPosition
+                if sorted.count == 1 { position = .solo }
+                else if index == 0 { position = .start }
+                else if index == sorted.count - 1 { position = .end }
+                else { position = .middle }
+                positions["\(key):\(date)"] = position
+            }
+        }
+        return positions
+    }
+
+    /// Year-qualified series name lookup (a bare `seriesId` match is not
+    /// safe across years); falls back to the session's own denormalised
+    /// `seriesName`/`title` when the series doc isn't loaded. An untagged
+    /// series (`year == 0`, e.g. a single-year fixture) matches any year.
+    static func seriesName(for seriesId: String, year: Int, in series: [Series], fallback: Session) -> String {
+        let found = series.first { $0.id == seriesId && ($0.year == 0 || $0.year == year) }
+        return found?.name ?? fallback.seriesName ?? fallback.title
+    }
+
+    /// One series' entry in the Month view's key: name plus that series'
+    /// session dates within the displayed month, ascending.
+    struct MonthSeriesKeyEntry: Identifiable, Hashable {
+        var seriesId: String
+        var name: String
+        var dates: [String]
+        var id: String { seriesId }
+    }
+
+    struct MonthGrid: Hashable {
+        var weeks: [MonthWeek]
+        /// Every series with a bookable session in this month, first-date
+        /// order. Year view renders no key (too dense) — its cells'
+        /// accessibility labels carry the series name instead.
+        var seriesKey: [MonthSeriesKeyEntry]
     }
 
     /// One calendar week, Monday…Friday; nil for a slot outside the month
@@ -160,14 +234,22 @@ enum Overview {
     /// `year`/`month` (1–12) as Mon–Fri weeks — no weekend columns at all.
     /// Leading/trailing slots outside the month are nil, so day 1 lands in
     /// its true weekday column and the last week is padded to five.
+    /// `sessions`/`series` should be the full multi-year sets the store
+    /// holds — run positions depend on every session in the year, so
+    /// narrowing to the displayed month first would produce false
+    /// `start`/`end` caps at month boundaries.
     static func buildMonthGrid(
         year: Int,
         month: Int,
         sessions: [Session],
         entries: [Entry],
+        series: [Series] = [],
         today: String = NZDate.today()
-    ) -> [MonthWeek] {
+    ) -> MonthGrid {
+        let runPositions = computeSeriesRunPositions(sessions)
         var cells: [MonthDayCell?] = []
+        var keyDatesBySeries: [String: [String]] = [:]
+        var keyNameBySeries: [String: String] = [:]
 
         let firstWeekday = NZDate.weekday(of: isoDate(year: year, month: month, day: 1))
         let leadingBlanks = firstWeekday.flatMap { weekdayColumn[$0] } ?? 0
@@ -176,17 +258,37 @@ enum Overview {
         for day in 1...daysInMonth(year: year, month: month) {
             let date = isoDate(year: year, month: month, day: day)
             guard NZDate.weekday(of: date) != nil else { continue } // Saturday/Sunday: no cell at all.
+            let daySessions = bookableSessions(on: date, in: sessions)
+            let seriesSessions = daySessions.filter { $0.seriesId != nil }
+            var seriesNames: [String] = []
+            for s in seriesSessions {
+                let name = seriesName(for: s.seriesId!, year: year, in: series, fallback: s)
+                if !seriesNames.contains(name) { seriesNames.append(name) }
+                keyDatesBySeries[s.seriesId!, default: []].append(date)
+                if keyNameBySeries[s.seriesId!] == nil { keyNameBySeries[s.seriesId!] = name }
+            }
+            // A multi-session day follows its *first* session's series.
+            var seriesRun: SeriesRunPosition?
+            if let first = daySessions.first, let seriesId = first.seriesId {
+                seriesRun = runPositions["\(year):\(seriesId):\(first.date)"]
+            }
             cells.append(MonthDayCell(
                 date: date,
                 dayOfMonth: day,
                 status: dayStatus(date, sessions: sessions, entries: entries, today: today),
-                sessions: bookableSessions(on: date, in: sessions)
+                sessions: daySessions,
+                seriesRun: seriesRun,
+                seriesNames: seriesNames
             ))
         }
 
         while cells.count % 5 != 0 { cells.append(nil) }
 
-        return stride(from: 0, to: cells.count, by: 5).map { Array(cells[$0..<$0 + 5]) }
+        let weeks = stride(from: 0, to: cells.count, by: 5).map { Array(cells[$0..<$0 + 5]) }
+        let seriesKey = keyDatesBySeries
+            .map { MonthSeriesKeyEntry(seriesId: $0.key, name: keyNameBySeries[$0.key] ?? $0.key, dates: $0.value.sorted()) }
+            .sorted { ($0.dates.first ?? "") < ($1.dates.first ?? "") }
+        return MonthGrid(weeks: weeks, seriesKey: seriesKey)
     }
 
     // MARK: - Year overview
@@ -210,10 +312,11 @@ enum Overview {
         year: Int,
         sessions: [Session],
         entries: [Entry],
+        series: [Series] = [],
         today: String = NZDate.today()
     ) -> [YearMonthOverview] {
         (1...12).map { month in
-            var weeks = buildMonthGrid(year: year, month: month, sessions: sessions, entries: entries, today: today)
+            var weeks = buildMonthGrid(year: year, month: month, sessions: sessions, entries: entries, series: series, today: today).weeks
             while weeks.count < yearViewWeekRows { weeks.append(blankWeek) }
             return YearMonthOverview(month: month, weeks: weeks)
         }
