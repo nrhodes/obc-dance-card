@@ -25,6 +25,8 @@ import { entryId } from '../../entries/lib.js';
 import { sendInviteHandler, respondToInviteHandler } from '../../entries/invites.js';
 import { createTeamHandler, inviteToTeamHandler } from '../../teams/teams.js';
 import { deactivateMemberHandler, eraseMemberHandler, reactivateMemberHandler, setMemberRoleHandler } from '../members.js';
+import { createIcalFeedHandler } from '../../ical/tokens.js';
+import { createHash } from 'node:crypto';
 
 /**
  * The shared emulator accumulates every admin created by earlier tests
@@ -247,6 +249,23 @@ describe('eraseMember', () => {
     await expect(
       eraseMemberHandler(fakeCallableRequest<EraseMemberInput>({ memberId: member, confirmName: 'Erase Recent' }, { uid: admin })),
     ).rejects.toMatchObject({ code: 'failed-precondition' });
+  });
+
+  /** Security review 2026-11-16, L8: erasure must also remove the hash-keyed iCal lookup row. */
+  it('deletes the iCal feed lookup doc along with the plaintext token', async () => {
+    const admin = await makeMember('erase-ical-admin@example.org', { role: 'admin' });
+    const member = await makeMember('erase-ical-member@example.org', { firstName: 'Erase', lastName: 'Ical' });
+    const { url } = await createIcalFeedHandler(fakeCallableRequest({}, { uid: member }));
+    const token = /\/ical\/([^/]+)\.ics$/.exec(url)![1]!;
+    const lookupRef = db.doc(paths.icalToken(createHash('sha256').update(token).digest('hex')));
+    expect((await lookupRef.get()).exists).toBe(true);
+
+    await deactivateMemberHandler(fakeCallableRequest<DeactivateMemberInput>({ memberId: member }, { uid: admin }));
+    await backdateDeactivation(member, 31);
+    await eraseMemberHandler(fakeCallableRequest<EraseMemberInput>({ memberId: member, confirmName: 'Erase Ical' }, { uid: admin }));
+
+    expect((await lookupRef.get()).exists).toBe(false);
+    expect((await db.doc(paths.memberPrivate(member)).get()).get('icalToken')).toBeUndefined();
   });
 
   it('refuses when confirmName does not match exactly', async () => {

@@ -7,6 +7,7 @@
  * deactivated member's future card is left in precisely the state a manual
  * `cancelEntry` on each of their entries would have produced.
  */
+import { createHash } from 'node:crypto';
 import { onCall, HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
 import {
   DEFAULT_NOTIFICATION_PREFS,
@@ -338,6 +339,14 @@ export async function eraseMemberHandler(req: CallableRequest<EraseMemberInput>)
   await privateRef.set(scrubbedPrivate);
 
   const writer = new BatchWriter();
+
+  // 2b. The iCal feed's hash-keyed lookup doc (plan §21 B1). The feed is
+  //     already dead for an inactive member, but the orphan row would map a
+  //     token hash to this uid forever (security review 2026-11-16, L8).
+  if (existingPrivate?.icalToken) {
+    const hash = createHash('sha256').update(existingPrivate.icalToken).digest('hex');
+    writer.delete(db.doc(paths.icalToken(hash)));
+  }
 
   // 3. visitors owned by this member: delete every doc.
   const visitorsSnap = await db.collection(paths.visitors()).where('createdByMemberId', '==', input.memberId).get();
