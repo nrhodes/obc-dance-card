@@ -23,6 +23,7 @@ import {
 import { auth, db } from '../lib/admin.js';
 import { callableOptions } from '../lib/callable.js';
 import { assertRateLimit } from '../lib/rateLimit.js';
+import { clientIpFromForwardedFor, trustedHopsFromEnv } from '../lib/clientIp.js';
 import { logger } from '../lib/logger.js';
 import { LOGIN_CODE_PEPPER, SMTP_PASS } from '../lib/secrets.js';
 import { getEmailProvider } from '../email/provider.js';
@@ -63,14 +64,19 @@ function computeCodeHmac(pepper: string, emailLower: string, code: string): stri
   return createHmac('sha256', pepper).update(`${emailLower}:${code}`).digest('hex');
 }
 
-/** First value of `x-forwarded-for`, falling back to the raw connection IP. */
+/**
+ * Per-IP bucket subject. A callable is reached directly on Cloud Run, so the
+ * platform appends exactly one `x-forwarded-for` entry — the real client —
+ * and `TRUSTED_PROXY_HOPS` defaults to 0 (take the last). Never the first
+ * entry: that is whatever the caller chose to send (security review
+ * 2026-11-16, M1; see `lib/clientIp.ts`).
+ */
 function clientIp(req: CallableRequest): string {
-  const forwarded = req.rawRequest?.headers?.['x-forwarded-for'];
-  const first = Array.isArray(forwarded) ? forwarded[0] : forwarded;
-  if (typeof first === 'string' && first.length > 0) {
-    return first.split(',')[0]!.trim();
-  }
-  return req.rawRequest?.ip ?? 'unknown';
+  return clientIpFromForwardedFor(
+    req.rawRequest?.headers?.['x-forwarded-for'],
+    req.rawRequest?.ip,
+    trustedHopsFromEnv('TRUSTED_PROXY_HOPS', 0),
+  );
 }
 
 function sleep(ms: number): Promise<void> {

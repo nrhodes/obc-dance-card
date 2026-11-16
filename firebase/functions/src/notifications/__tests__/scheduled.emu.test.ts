@@ -194,6 +194,31 @@ describe('runPurgeExpired', () => {
     expect((await db.doc(paths.notification(recentNotif.id)).get()).exists).toBe(true);
   });
 
+  /** Security review 2026-11-16, L4: the 2-year audit retention the plan and privacy page promise. */
+  it('deletes audit rows older than two years and keeps younger ones', async () => {
+    const now = new Date();
+    const old = new Date(now);
+    old.setUTCFullYear(old.getUTCFullYear() - 2);
+    old.setUTCDate(old.getUTCDate() - 1); // two years and a day ago
+    const young = new Date(now);
+    young.setUTCFullYear(young.getUTCFullYear() - 2);
+    young.setUTCDate(young.getUTCDate() + 1); // one day inside the window
+
+    const oldId = `purge-audit-old-${randomUUID()}`;
+    const youngId = `purge-audit-young-${randomUUID()}`;
+    await db.collection(paths.auditLog()).doc(oldId).set({
+      id: oldId, at: old.toISOString(), actorMemberId: 'system', action: 'visitor_purged',
+    });
+    await db.collection(paths.auditLog()).doc(youngId).set({
+      id: youngId, at: young.toISOString(), actorMemberId: 'system', action: 'visitor_purged',
+    });
+
+    const report = await runPurgeExpired(now);
+    expect(report.auditLogDeleted).toBeGreaterThanOrEqual(1);
+    expect((await db.collection(paths.auditLog()).doc(oldId).get()).exists).toBe(false);
+    expect((await db.collection(paths.auditLog()).doc(youngId).get()).exists).toBe(true);
+  });
+
   it('expires a pending invite past its expiresAt and notifies the sender', async () => {
     const a = await makeMember('purge-invite-a@example.org');
     const b = await makeMember('purge-invite-b@example.org');
