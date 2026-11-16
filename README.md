@@ -82,10 +82,11 @@ npm install
 cp firebase/functions/.env.example firebase/functions/.env   # fill in local values
 cp web/.env.example web/.env                                  # emulator defaults work as-is
 
-# Secrets declared with defineSecret() (login-code pepper, SMTP password) are
+# Secrets declared with defineSecret() (login-code pepper, SMTP login + password) are
 # not read from .env — the emulator reads them from this gitignored file:
 echo "LOGIN_CODE_PEPPER=local-dev-pepper" > firebase/functions/.secret.local
 echo "SMTP_PASS=local-dev-smtp-pass" >> firebase/functions/.secret.local
+echo "SMTP_USER=local-dev-smtp-user" >> firebase/functions/.secret.local
 
 npm run build             # builds @obc/shared, which functions/web import
 npm run emulators         # Firestore + Auth + Functions + Hosting on demo-obc (needs --config; see below)

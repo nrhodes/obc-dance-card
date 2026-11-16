@@ -33,7 +33,7 @@ import {
 } from '@obc/shared';
 import { db } from '../lib/admin.js';
 import { logger } from '../lib/logger.js';
-import { SMTP_PASS } from '../lib/secrets.js';
+import { SMTP_SECRETS } from '../lib/secrets.js';
 import { EMULATOR_OUTBOX, getEmailProvider, isDeployed } from '../email/provider.js';
 import { notificationEmail } from '../email/templates/notification.js';
 
@@ -319,7 +319,7 @@ export const onNotificationCreated = onDocumentCreated(
   {
     document: 'notifications/{id}',
     region: 'australia-southeast1',
-    secrets: [SMTP_PASS],
+    secrets: SMTP_SECRETS,
     retry: true,
   },
   async (event) => {

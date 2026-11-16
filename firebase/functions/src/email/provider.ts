@@ -13,7 +13,7 @@ import { randomUUID } from 'node:crypto';
 import { db } from '../lib/admin.js';
 import { logger } from '../lib/logger.js';
 import { isDeployed } from '../lib/runtime.js';
-import { SMTP_PASS } from '../lib/secrets.js';
+import { SMTP_PASS, SMTP_USER } from '../lib/secrets.js';
 
 export { isDeployed };
 
@@ -96,7 +96,7 @@ class SmtpEmailProvider implements EmailProvider {
         secure: false,
         requireTLS: true, // STARTTLS is mandatory, never opportunistic
         auth: {
-          user: process.env.SMTP_USER,
+          user: SMTP_USER.value(),
           pass: SMTP_PASS.value(),
         },
       });

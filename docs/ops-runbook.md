@@ -36,8 +36,11 @@ project ids. Copy `firebase/functions/.env.example` to `.env` for local runs.
    `obc-dance-card-dev`). These wrap `firebase --config firebase/firebase.json
    --project <alias> deploy --only ...`; hosting's `predeploy` hook builds
    `@obc/shared` then `web` automatically.
-6. Configure email: set `EMAIL_PROVIDER` + credentials as Firebase Secrets
-   (`firebase functions:secrets:set ...`). For the zero-cost option, install the
+6. Configure email: set `EMAIL_PROVIDER`/`SMTP_HOST` in `.env.<project>` and
+   the credentials as Firebase Secrets (`firebase functions:secrets:set
+   SMTP_USER`, then `SMTP_PASS`). `SMTP_USER` is a secret, not an env
+   variable (plan §21 B12) — remove any `SMTP_USER=` line from `.env*`, or the
+   deploy is refused for declaring the name twice. For the zero-cost option, install the
    **Trigger Email from Firestore** extension pointed at the club's Google
    Workspace SMTP.
 7. Import members (`importMembers` callable via the admin UI). This creates
