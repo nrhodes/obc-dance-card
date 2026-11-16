@@ -1380,7 +1380,7 @@ entry for that session. Open points to settle before building:
 - Also notify when the request is withdrawn or filled? (Probably not in v1.)
 - Still no extra *permissions* for stewards — this is notification-only.
 
-### B12. Continuous deployment from `main` (GitHub Actions + Workload Identity Federation) — planned 2026-11-17, not yet implemented
+### B12. Continuous deployment from `main` (GitHub Actions + Workload Identity Federation) — planned 2026-11-17; first deploy from CI 2026-11-17 (manual dispatch; deploy-on-merge not yet switched on)
 
 **Intent.** Today nothing deploys automatically: `npm run deploy` runs the
 Firebase CLI from whichever laptop someone is sitting at, authenticated as that
@@ -1441,8 +1441,21 @@ another), `roles/firebasehosting.admin`, `roles/firebaserules.admin`,
 `roles/datastore.indexAdmin`, `roles/secretmanager.viewer` **scoped to the
 four secrets** (the CLI checks they exist and that the runtime SA may read
 them), `roles/serviceusage.serviceUsageConsumer`. No owner/editor. Verify the
-set empirically: first dispatch against `obc-dance-card-dev`, add exactly the
-role each failure names, record the final list here.
+set empirically: add exactly the role each failure names, record the final
+list here.
+
+> **Final list, verified by the first successful deploy (2026-11-17, run
+> 43961395909, commit `9c7b8ff`).** There is no dev project, so the tuning was
+> done on dispatched production deploys. Everything above, plus two the first
+> attempts named: `roles/iam.serviceAccountUser` on
+> `obc-dance-card@appspot.gserviceaccount.com` as well (the Firebase CLI's
+> functions pre-check demands ActAs on the App Engine default account even
+> though nothing runs as it), and project-level `roles/cloudscheduler.admin`
+> (the four scheduled functions upsert Cloud Scheduler jobs). Also required
+> once, outside the deployer's roles: `sts.googleapis.com` enabled, and
+> `roles/secretmanager.secretAccessor` on `SMTP_USER` for the functions runtime
+> account, granted by hand because the deployer may only *view* secrets — any
+> future new secret needs the same manual grant before its first deploy.
 
 **Work items (in order).**
 1. Security review **H1** lands first — the deploy job `needs:` a green

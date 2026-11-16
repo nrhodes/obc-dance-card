@@ -65,8 +65,8 @@ project ids. Copy `firebase/functions/.env.example` to `.env` for local runs.
 
 ## Deploying from GitHub Actions (plan §21 B12)
 
-**Status: staged.** The `deploy` job in `.github/workflows/ci.yml` exists and
-runs on **manual dispatch only**. Deploying from a laptop (`npm run deploy`,
+**Status: working, manual dispatch only.** The first deploy from CI succeeded
+on 2026-11-17 (commit `9c7b8ff`). Deploying from a laptop (`npm run deploy`,
 same order: functions → rules + indexes → hosting) still works and is still
 the fallback. Merges to `main` do **not** deploy yet — that switch is the last
 step below.
@@ -104,12 +104,21 @@ rolled back instantly from the Firebase console's release history.
 
 Recorded so it can be repeated (e.g. for a future dev project) or audited.
 Needs Owner on the Google Cloud project and admin on the GitHub repo;
-`PROJECT` = `obc-dance-card`, `PROJECT_NUMBER` = `928037350568`. Two things
+`PROJECT` = `obc-dance-card`, `PROJECT_NUMBER` = `928037350568`. Four things
 were needed beyond the original list: enabling `sts.googleapis.com` (the
-token exchange), and granting the functions runtime account
-`roles/secretmanager.secretAccessor` on `SMTP_USER` by hand — the CLI
+token exchange); granting the functions runtime account
+`roles/secretmanager.secretAccessor` on `SMTP_USER` by hand (the CLI
 normally grants that during a deploy, but the deployer may only *view*
-secrets.
+secrets — **repeat this for any new secret before its first deploy**);
+`roles/iam.serviceAccountUser` for the deployer on
+`obc-dance-card@appspot.gserviceaccount.com`; and project-level
+`roles/cloudscheduler.admin` for the deployer. The full verified role list is
+in plan §21 B12.
+
+**A dispatched run scans the whole git history for secrets** (a push or PR
+scans only its new commits), so `.gitleaks.toml` allowlists the public web
+config `web/.env.production`. The CI action pins gitleaks 8.24.3 — test any
+change to that file against that version.
 
 1. **Secrets** (from a trusted machine): `firebase functions:secrets:set
    SMTP_USER --project PROJECT`; confirm `SMTP_PASS` and `LOGIN_CODE_PEPPER`
