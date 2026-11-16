@@ -1344,6 +1344,34 @@ palette comment) and must stay untouched.
 > the Mac session's discretion — the fused shape + accessible label are the load-bearing
 > parts; the key is a sighted-user convenience only.
 
+### B11. Partner Steward alerts: notify the steward of every partner request (captured 2026-11-16)
+
+**Intent (Neil).** A Partner Steward should be notified whenever *anybody* posts
+"looking for a partner" on a session they are steward of, so they can do the
+job without watching the noticeboard.
+
+**Today.** The steward is a label only (`partnerStewardMemberId` on
+`programmes/{year}/weekdays/{weekday}`, §5.4; "ordinary members in v1", §2).
+The only signal they can get is the member-wide `matchmaking_alert`
+(`notifications/matchmaking.ts`), which is opt-in, goes only to members who
+are themselves *free* on that session, and skips Individual-format sessions —
+so a steward who is already booked that day hears nothing.
+
+**Sketch (not designed yet).** In `setSoloStatus`, after a `looking_for_partner`
+post, also notify the steward of the session's weekday regardless of their own
+entry for that session. Open points to settle before building:
+
+- **Scope: weekday or series?** Neil's wording was "a series they're a steward
+  of", but stewardship is stored per weekday. Either keep per-weekday (covers
+  every series and one-off on that day) or add a per-series steward.
+- Own notification type (e.g. `steward_alert`) vs reusing `matchmaking_alert`;
+  default on for stewards, with a preference to turn it off?
+- Skip when the steward is the poster; keep the 24h per-(recipient, session)
+  de-dupe; respect the review-cohort partition (§8.1).
+- Individual-format sessions: include or not.
+- Also notify when the request is withdrawn or filled? (Probably not in v1.)
+- Still no extra *permissions* for stewards — this is notification-only.
+
 ### Cross-cutting notes for the backlog
 
 - **B3 is a prerequisite** for B1, B4, and the value of B2 (bulk-setting across the
