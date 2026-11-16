@@ -5,6 +5,16 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+    inputs:
+      deploy_project:
+        description: "Deploy after all checks pass (plan §21 B12). 'none' = just run CI."
+        type: choice
+        options: [none, obc-dance-card-dev, obc-dance-card]
+        default: none
+      deploy_ref:
+        description: "Commit/tag to deploy instead of the dispatched one (rollback). Empty = the dispatched commit."
+        type: string
+        default: ""
 
 # Audit L8: least privilege for the workflow token — no job here needs more
 # than read access (gitleaks-action only reads history with GITHUB_TOKEN).
@@ -330,3 +340,84 @@ jobs:
             web/playwright-report/
             firebase-emulators-scrubbed.out
           retention-days: 7
+
+  deploy:
+    # Continuous deployment (plan §21 B12). Runs only after every other job in
+    # this workflow is green — a red check cannot deploy by construction.
+    #
+    # STAGED ROLLOUT (B12 item 8): for now this runs on manual dispatch only
+    # (Actions → CI → Run workflow → pick a project). Once a dispatch to
+    # obc-dance-card-dev and a no-op deploy to production have both worked,
+    # add `|| (github.event_name == 'push' && github.ref == 'refs/heads/main')`
+    # to the `if:` below and merges to main deploy themselves.
+    #
+    # Credentials: Workload Identity Federation — GitHub's OIDC token is
+    # exchanged for a ~1 h Google token; there is no key or secret anywhere.
+    # The two identifiers below are NOT secrets; they are variables on the
+    # GitHub Environment (`production` / `dev`), which may also carry a
+    # required-reviewer rule so a deploy waits for a click.
+    needs: [build-test, secret-scan, emulator-tests, ios-build-test, e2e-test]
+    if: >-
+      github.event_name == 'workflow_dispatch' && inputs.deploy_project != 'none' &&
+      (inputs.deploy_project != 'obc-dance-card' || github.ref == 'refs/heads/main')
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.deploy_project == 'obc-dance-card-dev' && 'dev' || 'production' }}
+    concurrency:
+      # Two deploys to one project never interleave; a queued one waits.
+      group: deploy-${{ inputs.deploy_project || 'obc-dance-card' }}
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write # mint the OIDC token for federation — nothing else
+    env:
+      FIREBASE_PROJECT: ${{ inputs.deploy_project || 'obc-dance-card' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ inputs.deploy_ref || github.sha }}
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Check the project's committed config exists
+        # The functions' non-secret config is read from the repo, never from a
+        # laptop (security review M3). Fail before touching production.
+        run: |
+          f="firebase/functions/.env.${FIREBASE_PROJECT}"
+          if [ ! -f "$f" ]; then
+            echo "::error::$f is not committed — refusing to deploy without the project's config." >&2
+            exit 1
+          fi
+          if grep -q -E '^(SMTP_USER|SMTP_PASS|LOGIN_CODE_PEPPER|EMAIL_PROVIDER_KEY)=' "$f"; then
+            echo "::error::$f declares a name that must be a Secret Manager secret." >&2
+            exit 1
+          fi
+
+      - name: Authenticate to Google Cloud (Workload Identity Federation)
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOYER_SERVICE_ACCOUNT }}
+
+      # Order matters (B12): functions are backward compatible with the old
+      # client and rules; rules may depend on fields functions write; hosting
+      # goes last so the new client never meets old functions.
+      - name: Deploy functions
+        run: npm run deploy:functions -- --non-interactive
+
+      - name: Deploy Firestore rules and indexes
+        run: npm run deploy:rules -- --non-interactive
+
+      - name: Deploy hosting
+        run: npm run deploy:hosting -- --non-interactive
+
+      - name: Post-deploy smoke test
+        # The CLI exiting 0 only means the upload was accepted. This fails the
+        # job (and notifies) if the site, the version or the functions are not
+        # actually live. No automatic rollback: re-dispatch with deploy_ref.
+        run: node scripts/post-deploy-smoke.mjs --project "$FIREBASE_PROJECT" --expect-sha "$(git rev-parse HEAD)"

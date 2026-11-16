@@ -16,7 +16,7 @@
   "scripts": {
     "build": "npm run build --workspaces --if-present",
     "lint": "eslint .",
-    "test": "npm run build -w @obc/shared && npm run test --workspaces --if-present",
+    "test": "npm run build -w @obc/shared && npm run test --workspaces --if-present && node --test \"scripts/*.test.mjs\"",
     "typecheck": "npm run build -w @obc/shared && npm run typecheck --workspaces --if-present",
     "emulators": "npm run bundle -w @obc/functions && firebase --config firebase/firebase.json --project demo-obc emulators:start",
     "seed": "npm run seed -w @obc/functions",
@@ -24,7 +24,8 @@
     "deploy:rules": "firebase --config firebase/firebase.json --project \"${FIREBASE_PROJECT:-default}\" deploy --only firestore:rules,firestore:indexes",
     "deploy:functions": "firebase --config firebase/firebase.json --project \"${FIREBASE_PROJECT:-default}\" deploy --only functions",
     "deploy:hosting": "firebase --config firebase/firebase.json --project \"${FIREBASE_PROJECT:-default}\" deploy --only hosting",
-    "deploy": "npm run deploy:rules && npm run deploy:functions && npm run deploy:hosting"
+    "deploy": "npm run deploy:functions && npm run deploy:rules && npm run deploy:hosting",
+    "smoke": "node scripts/post-deploy-smoke.mjs"
   },
   "devDependencies": {
     "eslint": "^10.14.0",

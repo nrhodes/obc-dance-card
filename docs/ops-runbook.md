@@ -29,8 +29,9 @@ project ids. Copy `firebase/functions/.env.example` to `.env` for local runs.
    providers (reCAPTCHA Enterprise for web, App Attest for iOS) and Firestore
    enforcement in the **App Check** console tab before the first production
    deploy.
-5. `npm run deploy:rules` / `npm run deploy:functions` / `npm run
-   deploy:hosting` (or `npm run deploy` for all three, in that order) from the
+5. `npm run deploy:functions` / `npm run deploy:rules` / `npm run
+   deploy:hosting` (or `npm run deploy` for all three, in that order — changed
+   2026-11-17, plan §21 B12: functions first, hosting last) from the
    repo root, with `FIREBASE_PROJECT=<alias>` set to the `.firebaserc` alias
    for this project (`default` for `obc-dance-card`, `dev` for
    `obc-dance-card-dev`). These wrap `firebase --config firebase/firebase.json
@@ -61,6 +62,91 @@ project ids. Copy `firebase/functions/.env.example` to `.env` for local runs.
    reports "already an admin" and makes no change. Manage every admin after
    the first one in-app via `setMemberRole`.
 8. Import the programme CSVs (`importProgramme`), review, `publishProgramme`.
+
+## Deploying from GitHub Actions (plan §21 B12)
+
+**Status: staged.** The `deploy` job in `.github/workflows/ci.yml` exists and
+runs on **manual dispatch only**. Deploying from a laptop (`npm run deploy`,
+same order: functions → rules + indexes → hosting) still works and is still
+the fallback. Merges to `main` do **not** deploy yet — that switch is the last
+step below.
+
+### How a deploy runs
+
+GitHub → **Actions → CI → Run workflow**, branch `main`, then:
+
+| Input | Value |
+|---|---|
+| `deploy_project` | `obc-dance-card-dev` or `obc-dance-card` (`none` just runs CI) |
+| `deploy_ref` | empty to deploy the dispatched commit; a commit SHA or tag to deploy that instead |
+
+All five CI jobs must pass first; a red job means no deploy. Production can
+only be dispatched from `main`. The job then authenticates with Workload
+Identity Federation (no key, no stored secret), deploys in order, and runs
+the smoke test.
+
+### Post-deploy smoke test
+
+`scripts/post-deploy-smoke.mjs` (also `npm run smoke -- --project <id>` from a
+laptop) checks that (1) the site root returns 200 with the right title, (2)
+`/version.json` reports the commit just deployed, and (3) one unauthenticated
+call to `requestLoginCode` gets the expected App Check rejection (HTTP 401
+`UNAUTHENTICATED`) — proof the functions bundle loaded. Any miss fails the
+job. **There is no automatic rollback.**
+
+### Rolling back
+
+Dispatch again with `deploy_ref` set to the last good commit SHA (the tests
+run on `main`'s head; the deploy uses the SHA). Hosting alone can also be
+rolled back instantly from the Firebase console's release history.
+
+### One-time setup (per project) — not done yet
+
+Needs Owner on the Google Cloud project and admin on the GitHub repo. Replace
+`PROJECT` (`obc-dance-card` / `obc-dance-card-dev`).
+
+1. **Secrets** (from a trusted machine): `firebase functions:secrets:set
+   SMTP_USER --project PROJECT`; confirm `SMTP_PASS` and `LOGIN_CODE_PEPPER`
+   exist (`firebase functions:secrets:access NAME --project PROJECT`).
+2. **Commit the project's config** as `firebase/functions/.env.PROJECT`
+   (non-secret values only — the job refuses to run without it, and refuses a
+   file that declares a secret's name).
+3. **Identity pool and provider:**
+   ```sh
+   gcloud iam workload-identity-pools create github --project PROJECT \
+     --location global --display-name "GitHub Actions"
+   gcloud iam workload-identity-pools providers create-oidc github \
+     --project PROJECT --location global --workload-identity-pool github \
+     --issuer-uri https://token.actions.githubusercontent.com \
+     --attribute-mapping "google.subject=assertion.sub,attribute.repository=assertion.repository,attribute.ref=assertion.ref" \
+     --attribute-condition "assertion.repository == 'nrhodes/obc-dance-card'"
+   ```
+   For production, tighten the condition to
+   `assertion.repository == 'nrhodes/obc-dance-card' && assertion.ref == 'refs/heads/main'`.
+4. **Deployer service account** `obc-deployer@PROJECT.iam.gserviceaccount.com`
+   with the roles listed in plan §21 B12 ("Deployer service account"), and
+   allow the repository to impersonate it:
+   ```sh
+   gcloud iam service-accounts create obc-deployer --project PROJECT
+   gcloud iam service-accounts add-iam-policy-binding \
+     obc-deployer@PROJECT.iam.gserviceaccount.com --project PROJECT \
+     --role roles/iam.workloadIdentityUser \
+     --member "principalSet://iam.googleapis.com/projects/PROJECT_NUMBER/locations/global/workloadIdentityPools/github/attribute.repository/nrhodes/obc-dance-card"
+   ```
+   Tune the role list against the dev project: dispatch, add exactly the role
+   each failure names, and record the final list in the plan.
+5. **GitHub Environment** (`production` for prod, `dev` for dev) under repo
+   Settings → Environments, with two *variables* (not secrets):
+   `GCP_WORKLOAD_IDENTITY_PROVIDER` =
+   `projects/PROJECT_NUMBER/locations/global/workloadIdentityPools/github/providers/github`
+   and `GCP_DEPLOYER_SERVICE_ACCOUNT` =
+   `obc-deployer@PROJECT.iam.gserviceaccount.com`. On `production`, add
+   yourself as a **required reviewer** so each deploy waits for a click.
+6. **Dry run:** dispatch to `obc-dance-card-dev`; then a no-op dispatch to
+   `obc-dance-card`; check the smoke test and the cold-start
+   `app_check_enforced` / `email_sent provider=smtp` log lines.
+7. **Switch on deploy-on-merge:** extend the `deploy` job's `if:` as its
+   header comment describes. From then on, "deploy" means "merge to `main`".
 
 ## App-Store-review cohort partition (decided 2026-09-05, plan §2/§8.1)
 

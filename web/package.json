@@ -8,6 +8,7 @@
     "dev": "vite",
     "prebuild": "node scripts/copy-templates.mjs",
     "build": "tsc -b && vite build",
+    "postbuild": "node scripts/write-version.mjs",
     "preview": "vite preview",
     "typecheck": "tsc -b",
     "lint": "eslint src",
