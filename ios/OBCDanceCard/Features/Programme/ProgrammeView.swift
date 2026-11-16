@@ -34,9 +34,11 @@ struct ProgrammeView: View {
     }
 
     /// Oldest first, e.g. "2026 & 2027 Programme".
-    private var heading: String {
-        let ys = programme.years.sorted().map(String.init)
-        return ys.isEmpty ? "Programme" : "\(ys.joined(separator: " & ")) Programme"
+    /// The years shown, e.g. "2026 & 2027". A navigation title can't wrap,
+    /// and "2026 & 2027 Programme" truncates as a large title even at the
+    /// default text size, so the years sit on their own line under it.
+    private var yearsLabel: String {
+        programme.years.sorted().map(String.init).joined(separator: " & ")
     }
 
     var body: some View {
@@ -55,7 +57,7 @@ struct ProgrammeView: View {
                 content
             }
         }
-        .navigationTitle(heading)
+        .navigationTitle("Programme")
         .onAppear(perform: correctInitialWeekday)
         .onChange(of: presentWeekdays) { _, _ in correctInitialWeekday() }
     }
@@ -67,6 +69,15 @@ struct ProgrammeView: View {
         let visible = pastOpen ? all : all.filter { !$0.isPast(today: today) }
 
         return VStack(spacing: 0) {
+            if !yearsLabel.isEmpty {
+                Text(yearsLabel)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal)
+                    .padding(.bottom, 6)
+                    .accessibilityLabel("Programme years \(yearsLabel)")
+            }
             Picker("Weekday", selection: $activeWeekday) {
                 ForEach(presentWeekdays, id: \.self) { weekday in
                     Text(weekday.shortLabel).tag(weekday)

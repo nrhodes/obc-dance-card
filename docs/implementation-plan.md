@@ -378,8 +378,12 @@ re-validates inside its transaction before commit; the nightly sweep runs both.
 **Code sign-in:**
 1. Client calls `requestLoginCode({ email })`.
 2. Function: normalise; rate-limit (email, IP); look up `auth.getUserByEmail`
-   *and* `members/{uid}.active`. **Regardless of outcome**, sleep-to-uniform (target
-   ~400 ms total) and return `{ ok: true }`. If known+active: generate
+   *and* `members/{uid}.active`. **Regardless of outcome**, do equal work and
+   sleep-to-uniform, then return `{ ok: true }` (amended 2026-11-16, security
+   review M2: the unknown/inactive path performs the email provider's connection
+   handshake — `EmailProvider.warm()` — so it costs what a real send costs, and
+   the floor is 1 200 ms, `LOGIN_CODE_UNIFORM_RESPONSE_MS`, not the original
+   ~400 ms which sat below a relay round-trip). If known+active: generate
    `crypto.randomInt(0, 1_000_000)` zero-padded; store `emailCodes/{sha256(email)}` =
    `{ codeHmac: HMAC(pepper, email + ':' + code), expiresAt: now+10m, attempts: 0 }`
    (overwriting any prior); send email (text + HTML) containing the code only.
@@ -1343,6 +1347,34 @@ palette comment) and must stay untouched.
 > (`seriesId` collides across years there too). The Month view's series key is optional at
 > the Mac session's discretion — the fused shape + accessible label are the load-bearing
 > parts; the key is a sighted-user convenience only.
+
+### B11. Partner Steward alerts: notify the steward of every partner request (captured 2026-11-16)
+
+**Intent (Neil).** A Partner Steward should be notified whenever *anybody* posts
+"looking for a partner" on a session they are steward of, so they can do the
+job without watching the noticeboard.
+
+**Today.** The steward is a label only (`partnerStewardMemberId` on
+`programmes/{year}/weekdays/{weekday}`, §5.4; "ordinary members in v1", §2).
+The only signal they can get is the member-wide `matchmaking_alert`
+(`notifications/matchmaking.ts`), which is opt-in, goes only to members who
+are themselves *free* on that session, and skips Individual-format sessions —
+so a steward who is already booked that day hears nothing.
+
+**Sketch (not designed yet).** In `setSoloStatus`, after a `looking_for_partner`
+post, also notify the steward of the session's weekday regardless of their own
+entry for that session. Open points to settle before building:
+
+- **Scope: weekday or series?** Neil's wording was "a series they're a steward
+  of", but stewardship is stored per weekday. Either keep per-weekday (covers
+  every series and one-off on that day) or add a per-series steward.
+- Own notification type (e.g. `steward_alert`) vs reusing `matchmaking_alert`;
+  default on for stewards, with a preference to turn it off?
+- Skip when the steward is the poster; keep the 24h per-(recipient, session)
+  de-dupe; respect the review-cohort partition (§8.1).
+- Individual-format sessions: include or not.
+- Also notify when the request is withdrawn or filled? (Probably not in v1.)
+- Still no extra *permissions* for stewards — this is notification-only.
 
 ### Cross-cutting notes for the backlog
 

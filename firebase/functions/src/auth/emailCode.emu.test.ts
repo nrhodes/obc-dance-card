@@ -33,7 +33,7 @@ describe('requestLoginCode / verifyLoginCode', () => {
     await wipeEmailCodes();
   });
 
-  it('unknown email: returns {ok:true}, stores no code, and takes ~400ms', async () => {
+  it('unknown email: returns {ok:true}, stores no code, and takes at least the uniform floor', async () => {
     const start = Date.now();
     const result = await requestLoginCodeHandler(
       fakeCallableRequest<RequestLoginCodeInput>({ email: 'nobody@example.org' }, { ip: '203.0.113.9' }),
@@ -41,7 +41,8 @@ describe('requestLoginCode / verifyLoginCode', () => {
     const elapsed = Date.now() - start;
 
     expect(result).toEqual({ ok: true });
-    expect(elapsed).toBeGreaterThanOrEqual(350);
+    // Floor is 1 200 ms (LOGIN_CODE_UNIFORM_RESPONSE_MS); allow timer slack.
+    expect(elapsed).toBeGreaterThanOrEqual(1150);
 
     const snap = await db.collection('emailCodes').doc(emailDocId('nobody@example.org')).get();
     expect(snap.exists).toBe(false);
