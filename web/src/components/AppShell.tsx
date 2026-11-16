@@ -8,6 +8,7 @@ import { usePushForeground } from '../push/usePushForeground';
 import { usePwaUpdate } from '../pwa/usePwaUpdate';
 import { useIdleSignOut } from '../session/useIdleSignOut';
 import { OfflineBanner } from './OfflineBanner';
+import { isWideRoute } from './wideRoute';
 
 export function AppShell() {
   const { member, signOut } = useAuth();
@@ -172,7 +173,7 @@ export function AppShell() {
           </button>
         </div>
       )}
-      <main id="content">
+      <main id="content" className={isWideRoute(location.pathname) ? 'main-wide' : undefined}>
         <Outlet />
       </main>
     </>
