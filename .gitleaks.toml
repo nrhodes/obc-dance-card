@@ -11,6 +11,9 @@
 [extend]
 useDefault = true
 
-[[allowlists]]
+# `[allowlist]` (singular) on purpose: the CI action pins gitleaks 8.24.3,
+# which silently ignores the newer `[[allowlists]]` table. Newer versions
+# still accept this form.
+[allowlist]
 description = "Public Firebase web client config (ships in the browser bundle)"
 paths = ['''^web/\.env\.production$''']
