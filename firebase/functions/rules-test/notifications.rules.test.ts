@@ -94,6 +94,19 @@ describe('notifications collection rules', () => {
     );
   });
 
+  it('owner may not use readAt as a storage channel — strings over 40 chars are rejected (security review L2)', async () => {
+    await assertFails(
+      updateDoc(doc(clientAs(env, 'alice'), 'notifications/n1'), { read: true, readAt: 'x'.repeat(41) }),
+    );
+    await assertFails(
+      updateDoc(doc(clientAs(env, 'alice'), 'notifications/n1'), { read: true, readAt: 'p'.repeat(100_000) }),
+    );
+    // An ISO instant with an offset (the longest legitimate shape) still fits.
+    await assertSucceeds(
+      updateDoc(doc(clientAs(env, 'alice'), 'notifications/n1'), { read: true, readAt: '2026-09-05T12:00:00.000+13:00' }),
+    );
+  });
+
   it('another member may not update the owner\'s notification', async () => {
     await assertFails(updateDoc(doc(clientAs(env, 'bob'), 'notifications/n1'), { read: true }));
   });

@@ -146,10 +146,14 @@ service cloud.firestore {
         && request.resource.data.read is bool
         // Audit L1: without a type check the owner could stash arbitrary
         // payloads (up to the 1 MB doc cap) in their own readAt field.
-        // (`readAt` may be absent entirely — flipping `read` alone is fine.)
+        // Security review 2026-11-16 L2: a string is still a 1 MB channel —
+        // cap it at ISO-8601 length (`2026-09-05T00:00:00.000Z` is 24 chars;
+        // 40 leaves room for an offset form). (`readAt` may be absent
+        // entirely — flipping `read` alone is fine.)
         && (!('readAt' in request.resource.data)
-            || request.resource.data.readAt is string
-            || request.resource.data.readAt == null);
+            || request.resource.data.readAt == null
+            || (request.resource.data.readAt is string
+                && request.resource.data.readAt.size() <= 40));
 
       allow create, delete: if false;
     }
