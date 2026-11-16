@@ -8,10 +8,16 @@ import { createContext } from 'react';
 import type { User } from 'firebase/auth';
 import type { Member, MemberPrivate } from '@obc/shared';
 
-export type AuthStatus = 'loading' | 'signedOut' | 'signedIn' | 'notActive';
+/**
+ * `unavailable`: signed in, but the member record could not be loaded for a
+ * reason other than "not an active member" — see `memberDocError.ts`.
+ */
+export type AuthStatus = 'loading' | 'signedOut' | 'signedIn' | 'notActive' | 'unavailable';
 
 export interface AuthContextValue {
   status: AuthStatus;
+  /** Set only when `status === 'unavailable'`: why the member record could not be loaded. */
+  problem: 'browser-not-verified' | 'unavailable' | null;
   user: User | null;
   member: Member | null;
   memberPrivate: MemberPrivate | null;

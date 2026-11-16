@@ -23,10 +23,11 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { onAuthStateChanged, signOut as firebaseSignOut, type User } from 'firebase/auth';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { paths, type Member, type MemberPrivate } from '@obc/shared';
-import { auth, db } from '../firebase';
+import { appCheckWorking, auth, db } from '../firebase';
 import { AuthContext, type AuthContextValue, type AuthStatus } from './AuthContext';
+import { classifyMemberDocError } from './memberDocError';
 
-type MemberDocState = 'pending' | 'active' | 'notActive';
+type MemberDocState = 'pending' | 'active' | 'notActive' | 'browser-not-verified' | 'unavailable';
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [authReady, setAuthReady] = useState(false);
@@ -50,6 +51,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!user) return;
     setMemberDocState('pending');
+    let cancelled = false;
 
     const unsubMember = onSnapshot(
       doc(db, paths.member(user.uid)),
@@ -63,11 +65,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setMember(data);
         setMemberDocState(data.active === true ? 'active' : 'notActive');
       },
-      () => {
-        // A deactivated member's read of their own doc is denied by rules
-        // (plan §10) — that arrives here as `permission-denied`.
+      (err) => {
         setMember(null);
-        setMemberDocState('notActive');
+        // A deactivated member's read of their own doc is denied by rules
+        // (plan §10) — that arrives here as `permission-denied`. But so does
+        // EVERY read when App Check rejects this browser (enforced in
+        // production), and telling that member "your membership is not
+        // active" would be false — so ask App Check before deciding
+        // (memberDocError.ts).
+        void appCheckWorking().then((appCheckOk) => {
+          if (cancelled) return;
+          const problem = classifyMemberDocError(err.code, appCheckOk);
+          setMemberDocState(problem === 'not-active' ? 'notActive' : problem);
+        });
       },
     );
 
@@ -78,6 +88,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     );
 
     return () => {
+      cancelled = true;
       unsubMember();
       unsubPrivate();
     };
@@ -87,12 +98,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!authReady) return 'loading';
     if (!user) return 'signedOut';
     if (memberDocState === 'pending') return 'loading';
-    return memberDocState === 'active' ? 'signedIn' : 'notActive';
+    if (memberDocState === 'active') return 'signedIn';
+    return memberDocState === 'notActive' ? 'notActive' : 'unavailable';
   }, [authReady, user, memberDocState]);
 
   const value = useMemo<AuthContextValue>(
     () => ({
       status,
+      problem: memberDocState === 'browser-not-verified' || memberDocState === 'unavailable' ? memberDocState : null,
       user,
       member: status === 'signedIn' ? member : null,
       memberPrivate: status === 'signedIn' ? memberPrivate : null,
@@ -100,7 +113,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await firebaseSignOut(auth);
       },
     }),
-    [status, user, member, memberPrivate],
+    [status, memberDocState, user, member, memberPrivate],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

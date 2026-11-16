@@ -9,7 +9,7 @@
  */
 import { initializeApp } from 'firebase/app';
 import { FirebaseError } from 'firebase/app';
-import { initializeAppCheck, ReCaptchaEnterpriseProvider } from 'firebase/app-check';
+import { getToken as getAppCheckToken, initializeAppCheck, ReCaptchaEnterpriseProvider, type AppCheck } from 'firebase/app-check';
 import { connectAuthEmulator, getAuth } from 'firebase/auth';
 import { connectFirestoreEmulator, getFirestore } from 'firebase/firestore';
 import { connectFunctionsEmulator, getFunctions, httpsCallable } from 'firebase/functions';
@@ -44,12 +44,13 @@ export const app = initializeApp(firebaseConfig);
 // configured (production); the emulator and tests run without it. Must be
 // initialised before any Firestore/Functions traffic.
 const appCheckSiteKey = env.VITE_FIREBASE_APPCHECK_SITE_KEY;
-if (appCheckSiteKey && !useEmulators) {
-  initializeAppCheck(app, {
-    provider: new ReCaptchaEnterpriseProvider(appCheckSiteKey),
-    isTokenAutoRefreshEnabled: true,
-  });
-}
+const appCheck: AppCheck | undefined =
+  appCheckSiteKey && !useEmulators
+    ? initializeAppCheck(app, {
+        provider: new ReCaptchaEnterpriseProvider(appCheckSiteKey),
+        isTokenAutoRefreshEnabled: true,
+      })
+    : undefined;
 export const auth = getAuth(app);
 // Firestore offline persistence is intentionally NOT enabled here — see
 // module docstring.
@@ -60,6 +61,24 @@ if (useEmulators) {
   connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
   connectFirestoreEmulator(db, '127.0.0.1', 8080);
   connectFunctionsEmulator(functions, '127.0.0.1', 5001);
+}
+
+/**
+ * Whether this browser can currently prove itself to App Check. Firestore
+ * enforces App Check in production, so when attestation fails every read is
+ * refused with the same `permission-denied` a deactivated member gets —
+ * `AuthProvider` uses this to tell the two apart instead of showing "your
+ * membership is not active" to a member whose *browser* was rejected. Always
+ * `true` where App Check is not configured (the emulator).
+ */
+export async function appCheckWorking(): Promise<boolean> {
+  if (!appCheck) return true;
+  try {
+    await getAppCheckToken(appCheck, false);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** Small, display-safe error shape. Never carries a raw Firebase message to the UI unmapped. */
