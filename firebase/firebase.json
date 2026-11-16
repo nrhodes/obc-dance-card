@@ -44,7 +44,7 @@
         "headers": [
           {
             "key": "Content-Security-Policy",
-            "value": "default-src 'self'; script-src 'self' https://www.gstatic.com https://www.google.com https://www.recaptcha.net; worker-src 'self'; manifest-src 'self'; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://*.cloudfunctions.net https://*.run.app https://www.google.com; frame-src https://www.google.com https://recaptcha.google.com; img-src 'self' data:; style-src 'self' 'unsafe-inline'; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+            "value": "default-src 'self'; script-src 'self' https://www.gstatic.com https://www.google.com https://www.recaptcha.net; worker-src 'self'; manifest-src 'self'; connect-src 'self' https://*.googleapis.com https://australia-southeast1-obc-dance-card.cloudfunctions.net https://australia-southeast1-obc-dance-card-dev.cloudfunctions.net https://www.google.com; frame-src https://www.google.com https://recaptcha.google.com; img-src 'self' data:; style-src 'self' 'unsafe-inline'; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
           },
           {
             "key": "Strict-Transport-Security",
@@ -65,6 +65,10 @@
           {
             "key": "X-Frame-Options",
             "value": "DENY"
+          },
+          {
+            "key": "Cross-Origin-Opener-Policy",
+            "value": "same-origin"
           }
         ]
       }

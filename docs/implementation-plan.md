@@ -724,8 +724,12 @@ Unchanged from v1 in format (see `docs/csv-formats.md`, templates in
   or function responses), zod (from shared).
 - Allowed additional deps: `@tanstack/react-query` (optional), `clsx`. Nothing else
   without justification.
-- Hosting headers in `firebase.json`:
-  `Content-Security-Policy: default-src 'self'; script-src 'self' https://www.gstatic.com https://www.google.com https://www.recaptcha.net; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://*.cloudfunctions.net https://*.run.app https://www.google.com; frame-src https://www.google.com https://recaptcha.google.com; img-src 'self' data:; style-src 'self' 'unsafe-inline'; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'`,
+- Hosting headers in `firebase.json` (amended 2026-11-16, security review L5:
+  `connect-src` pins the two project function hosts instead of `*.cloudfunctions.net` /
+  `*.run.app`, drops the unused `firebaseio.com` entries, and adds
+  `Cross-Origin-Opener-Policy: same-origin`; HSTS `preload` deliberately not set —
+  it would bind any future custom club domain and all its subdomains):
+  `Content-Security-Policy: default-src 'self'; script-src 'self' https://www.gstatic.com https://www.google.com https://www.recaptcha.net; connect-src 'self' https://*.googleapis.com https://australia-southeast1-obc-dance-card.cloudfunctions.net https://australia-southeast1-obc-dance-card-dev.cloudfunctions.net https://www.google.com; frame-src https://www.google.com https://recaptcha.google.com; img-src 'self' data:; style-src 'self' 'unsafe-inline'; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'`,
   `Strict-Transport-Security: max-age=31536000; includeSubDomains`,
   `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`,
   `Permissions-Policy: camera=(), microphone=(), geolocation=()`.
