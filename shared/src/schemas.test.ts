@@ -121,6 +121,15 @@ describe('SetBulkSoloStatusInputSchema', () => {
       }),
     ).not.toThrow();
   });
+  it('rejects more than five weekdays (security review H1 — no unbounded arrays)', () => {
+    expect(() =>
+      SetBulkSoloStatusInputSchema.parse({ status: 'unavailable', filter: { weekdays: Array(6).fill('monday') } }),
+    ).toThrow();
+    expect(() =>
+      SetBulkSoloStatusInputSchema.parse({ status: 'unavailable', filter: { weekdays: Array(100_000).fill('monday') } }),
+    ).toThrow();
+  });
+
   it('rejects an empty weekdays array', () => {
     expect(() =>
       SetBulkSoloStatusInputSchema.parse({ status: 'unavailable', filter: { weekdays: [] } }),
