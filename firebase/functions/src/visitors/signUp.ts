@@ -20,6 +20,8 @@ import {
 import { db } from '../lib/admin.js';
 import { audit } from '../lib/audit.js';
 import { callableOptions } from '../lib/callable.js';
+import { logger } from '../lib/logger.js';
+import { SMTP_SECRETS } from '../lib/secrets.js';
 import { requireMember, resolveActingMember } from '../lib/context.js';
 import { getEmailProvider } from '../email/provider.js';
 import { visitorCourtesyEmail } from '../email/templates/visitorCourtesy.js';
@@ -150,10 +152,19 @@ export async function signUpWithVisitorHandler(
       dates: result.entries.map((e) => e.date),
       seriesName: result.seriesName,
     });
-    await getEmailProvider().send({ to: visitor.email, subject: content.subject, text: content.text, html: content.html });
+    // The sign-up has already committed; a mail failure must never turn it
+    // into an error for the member (security review 2026-11-17, T1).
+    try {
+      await getEmailProvider().send({ to: visitor.email, subject: content.subject, text: content.text, html: content.html });
+    } catch {
+      logger.warn('visitor_email_failed', { kind: 'courtesy' });
+    }
   }
 
   return { entries: result.entries };
 }
 
-export const signUpWithVisitor = onCall(callableOptions, signUpWithVisitorHandler);
+// Binds the SMTP secrets: this callable sends the visitor courtesy email
+// itself (security review 2026-11-17, T1 — it was exported with the bare
+// options, so the secret read threw after the transaction had committed).
+export const signUpWithVisitor = onCall({ ...callableOptions, secrets: SMTP_SECRETS }, signUpWithVisitorHandler);
