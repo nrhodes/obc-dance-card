@@ -375,6 +375,22 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ inputs.deploy_ref || github.sha }}
+          # Full history: the next step needs `origin/main` to prove the
+          # deploy ref is a commit that has already been on main.
+          fetch-depth: 0
+
+      - name: Require the deploy ref to be a commit already on main
+        # The gating jobs above ran on the dispatched main head, not on
+        # `deploy_ref`. Rolling back to an earlier main commit is fine (it was
+        # tested when it merged); an arbitrary branch or tag would bypass the
+        # gate (security review 2026-11-17, T2).
+        run: |
+          git fetch --quiet origin main
+          if ! git merge-base --is-ancestor HEAD origin/main; then
+            echo "::error::$(git rev-parse --short HEAD) is not on main — only commits that have merged to main can be deployed." >&2
+            exit 1
+          fi
+          echo "deploying $(git rev-parse --short HEAD), an ancestor of origin/main"
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:

@@ -97,7 +97,9 @@ job. **There is no automatic rollback.**
 ### Rolling back
 
 Dispatch again with `deploy_ref` set to the last good commit SHA (the tests
-run on `main`'s head; the deploy uses the SHA). Hosting alone can also be
+run on `main`'s head; the deploy uses the SHA). The job refuses a
+`deploy_ref` that has not been merged to `main` — a rollback target is
+always an earlier `main` commit, never a branch (security review T2). Hosting alone can also be
 rolled back instantly from the Firebase console's release history.
 
 ### One-time setup — done for `obc-dance-card` on 2026-11-17
