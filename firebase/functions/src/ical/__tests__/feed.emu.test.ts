@@ -48,12 +48,12 @@ function fakeResponse(): FakeResponse {
   return res;
 }
 
-function fakeRequest(opts: { path: string; method?: string; ip?: string }): Request {
+function fakeRequest(opts: { path: string; method?: string; ip?: string; forwardedFor?: string }): Request {
   return {
     method: opts.method ?? 'GET',
     path: opts.path,
     ip: opts.ip ?? '203.0.113.50',
-    headers: {},
+    headers: opts.forwardedFor ? { 'x-forwarded-for': opts.forwardedFor } : {},
   } as unknown as Request;
 }
 
@@ -232,4 +232,20 @@ describe('icalFeed HTTP endpoint (plan §21 B1)', () => {
     expect(res61.statusCode).toBe(429);
     expect(res61.headers['Retry-After']).toBeTruthy();
   }, 60_000);
+});
+
+describe('icalFeed per-IP bucket (security review 2026-11-16, M1)', () => {
+  it('keys on the second-to-last x-forwarded-for hop (Hosting rewrite), never a client-supplied prefix', async () => {
+    const { createHash } = await import('node:crypto');
+    const ipKey = (ip: string) => `ical:ip:${createHash('sha256').update(ip).digest('hex')}`;
+    const res = fakeResponse();
+    // [client-supplied spoof, real client (appended by Hosting), Hosting proxy (appended by Cloud Run)]
+    await icalFeedHandler(
+      fakeRequest({ path: '/ical/' + 'A'.repeat(43) + '.ics', ip: '10.0.0.1', forwardedFor: '198.51.100.1, 203.0.113.88, 35.0.0.1' }),
+      res,
+    );
+    expect((await db.collection('rateLimits').doc(ipKey('203.0.113.88')).get()).exists).toBe(true);
+    expect((await db.collection('rateLimits').doc(ipKey('198.51.100.1')).get()).exists).toBe(false);
+    expect((await db.collection('rateLimits').doc(ipKey('35.0.0.1')).get()).exists).toBe(false);
+  });
 });

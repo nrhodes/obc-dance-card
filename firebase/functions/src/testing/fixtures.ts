@@ -76,7 +76,7 @@ export async function makeMember(email: string, opts: MakeMemberOptions = {}): P
 /** A minimal fake `CallableRequest` for calling an exported `xxxHandler` directly. */
 export function fakeCallableRequest<T>(
   data: T,
-  opts: { uid?: string; ip?: string; authTimeSeconds?: number } = {},
+  opts: { uid?: string; ip?: string; authTimeSeconds?: number; forwardedFor?: string } = {},
 ): CallableRequest<T> {
   return {
     data,
@@ -90,7 +90,12 @@ export function fakeCallableRequest<T>(
           token: { auth_time: opts.authTimeSeconds ?? Math.floor(Date.now() / 1000) } as never,
         }
       : undefined,
-    rawRequest: { headers: {}, ip: opts.ip ?? '203.0.113.1' } as never,
+    rawRequest: {
+      // `forwardedFor` simulates the proxy-built `x-forwarded-for` chain
+      // (security review M1); without it the handler falls back to `ip`.
+      headers: opts.forwardedFor ? { 'x-forwarded-for': opts.forwardedFor } : {},
+      ip: opts.ip ?? '203.0.113.1',
+    } as never,
   } as unknown as CallableRequest<T>;
 }
 

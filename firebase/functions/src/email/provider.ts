@@ -26,6 +26,17 @@ export interface EmailMessage {
 
 export interface EmailProvider {
   send(msg: EmailMessage): Promise<void>;
+  /**
+   * Do the expensive part of a send — for SMTP, connect + STARTTLS + AUTH +
+   * QUIT — without sending anything. `requestLoginCode` calls this on the
+   * unknown/inactive-email path so that path costs the same wall-clock time
+   * as the real send on the known path (security review 2026-11-16, M2):
+   * without it, a relay round-trip longer than the uniform floor made known
+   * addresses answer in "SMTP time" and unknown ones in exactly the floor.
+   * Must never throw to the caller's benefit — failures are swallowed and
+   * logged by the caller.
+   */
+  warm(): Promise<void>;
 }
 
 /**
@@ -44,6 +55,10 @@ function emailDomain(address: string): string {
 }
 
 class ConsoleEmailProvider implements EmailProvider {
+  async warm(): Promise<void> {
+    // Nothing to warm: a console "send" costs nothing either.
+  }
+
   async send(msg: EmailMessage): Promise<void> {
     logger.info('email_sent', {
       provider: 'console',
@@ -89,6 +104,11 @@ class SmtpEmailProvider implements EmailProvider {
     return this.transporter;
   }
 
+  /** The same connection, TLS and AUTH handshake `sendMail` performs, then QUIT — no DATA. */
+  async warm(): Promise<void> {
+    await this.getTransporter().verify();
+  }
+
   async send(msg: EmailMessage): Promise<void> {
     await this.getTransporter().sendMail({
       from: process.env.EMAIL_FROM,
@@ -103,6 +123,8 @@ class SmtpEmailProvider implements EmailProvider {
 
 class NotImplementedEmailProvider implements EmailProvider {
   constructor(private readonly name: string) {}
+
+  async warm(): Promise<void> {}
 
   send(): Promise<void> {
     throw new Error(`Email provider "${this.name}" is not implemented yet.`);

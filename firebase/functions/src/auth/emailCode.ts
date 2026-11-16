@@ -23,6 +23,7 @@ import {
 import { auth, db } from '../lib/admin.js';
 import { callableOptions } from '../lib/callable.js';
 import { assertRateLimit } from '../lib/rateLimit.js';
+import { clientIpFromForwardedFor, trustedHopsFromEnv } from '../lib/clientIp.js';
 import { logger } from '../lib/logger.js';
 import { LOGIN_CODE_PEPPER, SMTP_PASS } from '../lib/secrets.js';
 import { getEmailProvider } from '../email/provider.js';
@@ -31,8 +32,27 @@ import { parseInput } from '../lib/parseInput.js';
 
 const TTL_MINUTES = Number(process.env.LOGIN_CODE_TTL_MINUTES ?? 10);
 const MAX_ATTEMPTS = Number(process.env.LOGIN_CODE_MAX_ATTEMPTS ?? 5);
-/** Target wall-clock time for `requestLoginCode` regardless of outcome (plan §8.2). */
-const UNIFORM_RESPONSE_TARGET_MS = 400;
+/**
+ * Minimum wall-clock time for `requestLoginCode` regardless of outcome (plan
+ * §8.2 "uniform response + timing"). Two things make the timing uniform:
+ *
+ *  1. Equal work. The known-and-active path sends an email, which on a real
+ *     SMTP relay is dominated by connect + STARTTLS + AUTH. The unknown /
+ *     inactive path therefore performs the same handshake via
+ *     `EmailProvider.warm()` (security review 2026-11-16, M2) so neither
+ *     path is systematically faster than the other.
+ *  2. A floor. Whatever work was done, the handler sleeps until at least this
+ *     many milliseconds have elapsed, masking the small residual differences
+ *     (one Firestore write, a member-doc read, the DATA phase of the send).
+ *
+ * 1 200 ms rather than the original 400: the old value sat *below* a typical
+ * relay round-trip, so it only ever padded the unknown path and the known
+ * path leaked through in SMTP time. When the floor is exceeded a
+ * `login_code_uniform_floor_exceeded` warning is logged (no email, just the
+ * overrun) so ops can raise `LOGIN_CODE_UNIFORM_RESPONSE_MS` if the relay is
+ * slower than this in practice.
+ */
+const UNIFORM_RESPONSE_TARGET_MS = Number(process.env.LOGIN_CODE_UNIFORM_RESPONSE_MS ?? 1200);
 
 const INVALID_CODE_MESSAGE = 'That code is not valid. Request a new one.';
 
@@ -44,14 +64,19 @@ function computeCodeHmac(pepper: string, emailLower: string, code: string): stri
   return createHmac('sha256', pepper).update(`${emailLower}:${code}`).digest('hex');
 }
 
-/** First value of `x-forwarded-for`, falling back to the raw connection IP. */
+/**
+ * Per-IP bucket subject. A callable is reached directly on Cloud Run, so the
+ * platform appends exactly one `x-forwarded-for` entry — the real client —
+ * and `TRUSTED_PROXY_HOPS` defaults to 0 (take the last). Never the first
+ * entry: that is whatever the caller chose to send (security review
+ * 2026-11-16, M1; see `lib/clientIp.ts`).
+ */
 function clientIp(req: CallableRequest): string {
-  const forwarded = req.rawRequest?.headers?.['x-forwarded-for'];
-  const first = Array.isArray(forwarded) ? forwarded[0] : forwarded;
-  if (typeof first === 'string' && first.length > 0) {
-    return first.split(',')[0]!.trim();
-  }
-  return req.rawRequest?.ip ?? 'unknown';
+  return clientIpFromForwardedFor(
+    req.rawRequest?.headers?.['x-forwarded-for'],
+    req.rawRequest?.ip,
+    trustedHopsFromEnv('TRUSTED_PROXY_HOPS', 0),
+  );
 }
 
 function sleep(ms: number): Promise<void> {
@@ -90,6 +115,8 @@ export async function requestLoginCodeHandler(
     isActiveMember = member?.active === true;
   }
 
+  const provider = getEmailProvider();
+
   if (uid && isActiveMember) {
     const code = randomInt(0, 1_000_000).toString().padStart(6, '0');
     const codeHmac = computeCodeHmac(LOGIN_CODE_PEPPER.value(), emailLower, code);
@@ -105,7 +132,16 @@ export async function requestLoginCodeHandler(
     await db.collection('emailCodes').doc(doc.id).set(doc);
 
     const email = loginCodeEmail(code);
-    await getEmailProvider().send({ to: emailLower, subject: email.subject, text: email.text, html: email.html });
+    await provider.send({ to: emailLower, subject: email.subject, text: email.text, html: email.html });
+  } else {
+    // Equal work for the "no" path — see UNIFORM_RESPONSE_TARGET_MS. A warm
+    // failure must not change the response or its timing profile any more
+    // than a send failure would, so it is swallowed here.
+    try {
+      await provider.warm();
+    } catch {
+      logger.warn('login_code_warm_failed', {});
+    }
   }
 
   // Generic event with no field that identifies the email, known or not.
@@ -115,6 +151,10 @@ export async function requestLoginCodeHandler(
   const remaining = UNIFORM_RESPONSE_TARGET_MS - elapsed;
   if (remaining > 0) {
     await sleep(remaining);
+  } else {
+    // The floor no longer masks the work — timing is now "equal work" only.
+    // Overrun in ms, nothing that identifies the request.
+    logger.warn('login_code_uniform_floor_exceeded', { overByMs: -remaining });
   }
 
   return { ok: true };

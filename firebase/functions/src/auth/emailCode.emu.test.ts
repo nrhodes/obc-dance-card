@@ -33,7 +33,7 @@ describe('requestLoginCode / verifyLoginCode', () => {
     await wipeEmailCodes();
   });
 
-  it('unknown email: returns {ok:true}, stores no code, and takes ~400ms', async () => {
+  it('unknown email: returns {ok:true}, stores no code, and takes at least the uniform floor', async () => {
     const start = Date.now();
     const result = await requestLoginCodeHandler(
       fakeCallableRequest<RequestLoginCodeInput>({ email: 'nobody@example.org' }, { ip: '203.0.113.9' }),
@@ -41,10 +41,30 @@ describe('requestLoginCode / verifyLoginCode', () => {
     const elapsed = Date.now() - start;
 
     expect(result).toEqual({ ok: true });
-    expect(elapsed).toBeGreaterThanOrEqual(350);
+    // Floor is 1 200 ms (LOGIN_CODE_UNIFORM_RESPONSE_MS); allow timer slack.
+    expect(elapsed).toBeGreaterThanOrEqual(1150);
 
     const snap = await db.collection('emailCodes').doc(emailDocId('nobody@example.org')).get();
     expect(snap.exists).toBe(false);
+  }, 10_000);
+
+  /**
+   * Security review 2026-11-16, M1: the per-IP bucket must be keyed on the
+   * `x-forwarded-for` entry the platform appended (the last one for a
+   * callable), never on a client-supplied prefix — otherwise a caller could
+   * pick any bucket, including a victim's.
+   */
+  it('keys the per-IP bucket on the last x-forwarded-for hop, not a client-supplied prefix', async () => {
+    const ipKey = (ip: string) => `loginCode:requestIp:${createHash('sha256').update(ip).digest('hex')}`;
+    await requestLoginCodeHandler(
+      fakeCallableRequest<RequestLoginCodeInput>(
+        { email: 'nobody-xff@example.org' },
+        { ip: '10.0.0.1', forwardedFor: '198.51.100.1, 198.51.100.2, 203.0.113.77' },
+      ),
+    );
+    expect((await db.collection('rateLimits').doc(ipKey('203.0.113.77')).get()).exists).toBe(true);
+    expect((await db.collection('rateLimits').doc(ipKey('198.51.100.1')).get()).exists).toBe(false);
+    expect((await db.collection('rateLimits').doc(ipKey('10.0.0.1')).get()).exists).toBe(false);
   }, 10_000);
 
   it('known active email: request stores a code doc whose hmac does not equal the raw code', async () => {
