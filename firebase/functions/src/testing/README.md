@@ -35,8 +35,8 @@ const result = await requestLoginCodeHandler({
 } as CallableRequest<RequestLoginCodeInput>);
 ```
 
-This avoids depending on `firebase-functions-test`'s wrapping/mocking behaviour (which
-still works and is a valid alternative — see its docs — but isn't used here) and keeps
+This avoids depending on `firebase-functions-test`'s wrapping/mocking behaviour (not
+installed — its peer range stops at firebase-admin 13; removed with the admin 14 bump) and keeps
 secrets simple: bind a callable's secrets by setting the matching environment variable
 directly before importing the module under test, e.g.
 
