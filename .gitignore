@@ -81,7 +81,6 @@ firebase/functions-deploy/
 
 # Committed emulator config (non-secret) — see the file header
 !firebase/functions/.env.demo-obc
-# Committed per-project config (non-secret; plan §21 B12) — the deploy job
-# reads these from the repo. Secrets stay in Secret Manager.
+# Committed production config (non-secret; plan §21 B12) — the deploy job
+# reads it from the repo. Secrets stay in Secret Manager.
 !firebase/functions/.env.obc-dance-card
-!firebase/functions/.env.obc-dance-card-dev

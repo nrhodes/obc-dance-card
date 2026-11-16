@@ -5,7 +5,7 @@
 | Env | Firebase project | Notes |
 |---|---|---|
 | local | `demo-obc` | Emulator only. No real project; `demo-*` disables all cloud calls. |
-| dev | `obc-dance-card-dev` | Optional shared sandbox. |
+| dev | `obc-dance-card-dev` | Optional shared sandbox. **Does not exist** (checked 2026-11-17) — create it before following any step that names it. |
 | prod | `obc-dance-card` | Blaze plan. Billing budget alert set at NZ$5. |
 
 Copy `firebase/.firebaserc.example` to `firebase/.firebaserc` and fill in the real
@@ -77,7 +77,7 @@ GitHub → **Actions → CI → Run workflow**, branch `main`, then:
 
 | Input | Value |
 |---|---|
-| `deploy_project` | `obc-dance-card-dev` or `obc-dance-card` (`none` just runs CI) |
+| `deploy_project` | `obc-dance-card` (`none` just runs CI) |
 | `deploy_ref` | empty to deploy the dispatched commit; a commit SHA or tag to deploy that instead |
 
 All five CI jobs must pass first; a red job means no deploy. Production can
@@ -100,10 +100,16 @@ Dispatch again with `deploy_ref` set to the last good commit SHA (the tests
 run on `main`'s head; the deploy uses the SHA). Hosting alone can also be
 rolled back instantly from the Firebase console's release history.
 
-### One-time setup (per project) — not done yet
+### One-time setup — done for `obc-dance-card` on 2026-11-17
 
-Needs Owner on the Google Cloud project and admin on the GitHub repo. Replace
-`PROJECT` (`obc-dance-card` / `obc-dance-card-dev`).
+Recorded so it can be repeated (e.g. for a future dev project) or audited.
+Needs Owner on the Google Cloud project and admin on the GitHub repo;
+`PROJECT` = `obc-dance-card`, `PROJECT_NUMBER` = `928037350568`. Two things
+were needed beyond the original list: enabling `sts.googleapis.com` (the
+token exchange), and granting the functions runtime account
+`roles/secretmanager.secretAccessor` on `SMTP_USER` by hand — the CLI
+normally grants that during a deploy, but the deployer may only *view*
+secrets.
 
 1. **Secrets** (from a trusted machine): `firebase functions:secrets:set
    SMTP_USER --project PROJECT`; confirm `SMTP_PASS` and `LOGIN_CODE_PEPPER`
@@ -135,14 +141,14 @@ Needs Owner on the Google Cloud project and admin on the GitHub repo. Replace
    ```
    Tune the role list against the dev project: dispatch, add exactly the role
    each failure names, and record the final list in the plan.
-5. **GitHub Environment** (`production` for prod, `dev` for dev) under repo
+5. **GitHub Environment** `production` under repo
    Settings → Environments, with two *variables* (not secrets):
    `GCP_WORKLOAD_IDENTITY_PROVIDER` =
    `projects/PROJECT_NUMBER/locations/global/workloadIdentityPools/github/providers/github`
    and `GCP_DEPLOYER_SERVICE_ACCOUNT` =
    `obc-deployer@PROJECT.iam.gserviceaccount.com`. On `production`, add
    yourself as a **required reviewer** so each deploy waits for a click.
-6. **Dry run:** dispatch to `obc-dance-card-dev`; then a no-op dispatch to
+6. **Dry run:** with no dev project, the dry run is a dispatched deploy to
    `obc-dance-card`; check the smoke test and the cold-start
    `app_check_enforced` / `email_sent provider=smtp` log lines.
 7. **Switch on deploy-on-merge:** extend the `deploy` job's `if:` as its

@@ -1,0 +1,16 @@
+# Gitleaks configuration (CI `secret-scan` job).
+#
+# `web/.env.production` is the Firebase *web client* config: the API key, the
+# VAPID public key and the reCAPTCHA site key ship to every browser in the
+# built bundle. They are identifiers, not secrets — access is enforced by
+# Firestore rules, App Check and callable auth (plan §8; CLAUDE.md "public
+# Firebase config, committed"). Gitleaks' key-shaped rules flag them anyway,
+# and a full-history scan (every `workflow_dispatch`, i.e. every deploy)
+# fails on them. Allowlist that one file; everything else keeps the default
+# rules.
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Public Firebase web client config (ships in the browser bundle)"
+paths = ['''^web/\.env\.production$''']
