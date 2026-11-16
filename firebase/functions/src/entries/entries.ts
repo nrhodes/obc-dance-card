@@ -28,6 +28,8 @@ import {
 import { db } from '../lib/admin.js';
 import { audit } from '../lib/audit.js';
 import { callableOptions } from '../lib/callable.js';
+import { logger } from '../lib/logger.js';
+import { SMTP_SECRETS } from '../lib/secrets.js';
 import { requireMember, resolveActingMember } from '../lib/context.js';
 import { createNotification } from '../notifications/create.js';
 import { sendMatchmakingAlerts } from '../notifications/matchmaking.js';
@@ -400,11 +402,19 @@ export async function cancelEntryHandler(req: CallableRequest<CancelEntryInput>)
         sponsorPhone: actor.member.phone || undefined,
         date: result.ownEntry.date,
       });
-      await getEmailProvider().send({ to: visitor.email, subject: content.subject, text: content.text, html: content.html });
+      // The cancellation has already committed; a mail failure must never
+      // turn it into an error for the member (security review 2026-11-17, T1).
+      try {
+        await getEmailProvider().send({ to: visitor.email, subject: content.subject, text: content.text, html: content.html });
+      } catch {
+        logger.warn('visitor_email_failed', { kind: 'cancelled' });
+      }
     }
   }
 
   return { entry: result.ownEntry, partnerEntry: result.partnerEntry };
 }
 
-export const cancelEntry = onCall(callableOptions, cancelEntryHandler);
+// Binds the SMTP secrets: cancelEntry sends the visitor cancellation email
+// itself (security review 2026-11-17, T1).
+export const cancelEntry = onCall({ ...callableOptions, secrets: SMTP_SECRETS }, cancelEntryHandler);
