@@ -1532,6 +1532,136 @@ project), and deploying the emulator seed anywhere (never).
 half on the Google-side setup and role tuning against the dev project, half
 on the workflow, the `SMTP_USER` move and the runbook.
 
+### B13. Android app — member client with parity to iOS (planned 2026-11-17, not yet implemented)
+
+**Intent.** A native Android client with the same member-only feature set as
+the iOS app (plan §14.2): sign in by emailed code or password, My Card,
+Calendar (list / month / year, series spine, bulk availability), Programme,
+Session (invites, noticeboard, visitors, substitutes, teams), Inbox (invites +
+alerts), Profile (contact, preferences, push, app lock, password, visitors,
+calendar feed). Admin stays web-only. Nothing in the data model, rules or
+callables changes except the one `platform` value noted below.
+
+**Decisions (defaults — override before scheduling).**
+- **Stack.** Kotlin, Jetpack Compose + Material 3, single-activity, ViewModels
+  exposing Kotlin `Flow`s that wrap Firestore snapshot listeners. Firebase
+  Android SDK via the BoM: Auth, Firestore, Functions, Messaging, App Check.
+  No analytics SDKs. `minSdk 26` (Android 8, 2017 — covers the oldest
+  handsets members are likely to carry), `targetSdk` = current Play
+  requirement.
+- **Package / identity.** `nz.org.orewabridge.dancecard`, matching the iOS
+  bundle id. `google-services.json` is committed — the same public values as
+  `web/.env.production` and the iOS plist (add it to
+  `.github/secret_scanning.yml`).
+- **Shared logic.** Hand-port exactly as iOS did: Kotlin data classes mirror
+  `shared/src/models.ts` (enum string values identical, decoding tests like
+  `ModelDecodingTests`), one typed wrapper per callable (omit nulls, region
+  `australia-southeast1`), and 1:1 ports of the pure logic the web and iOS
+  share — `sessionActions`, `card`, `roster`, `overview`, `bulkAvailability`,
+  `programmeView`, `time` — with the web test suites ported as JVM tests.
+  Kotlin Multiplatform is explicitly *not* used: iOS is already Swift, so
+  there is nothing to share with.
+- **Auth.** `signInWithCustomToken` after `verifyLoginCode`;
+  `signInWithEmailAndPassword`; no magic links; identical generic error copy
+  (no enumeration). Session persisted by the SDK. Optional **app lock** via
+  `BiometricPrompt` (biometric or device credential), default off, toggle in
+  Profile, Firebase session untouched underneath; the lock cover must be
+  present in the first frame on resume and the task switcher must not show
+  the card (`FLAG_SECURE` while locked — the Android equivalent of the iOS
+  snapshot fix).
+- **App Check.** Play Integrity in release builds (needs the Play Console app
+  and the signing SHA-256 fingerprints registered in Firebase; Play App
+  Signing's upload *and* app-signing keys); the debug provider in debug
+  builds, with each dev device / emulator's debug token registered in the
+  project exactly as for iOS.
+- **Push.** FCM via a `FirebaseMessagingService`. Android 13+ needs the
+  `POST_NOTIFICATIONS` runtime permission: same soft-ask pattern as iOS
+  (explain, one button, "Not now" remembered, Profile as fallback). Messages
+  to Android are **data-only** like the web's, and the service builds the
+  notification itself on a single "OBC Dance Card" channel, so deep links
+  (`sessionId`+`year` → Session, `inviteId` → Inbox) behave identically in
+  foreground and background and never depend on the launcher intent. Token
+  refresh → `registerDevice { token, platform: "android", label }`;
+  `unregisterDevice` on sign-out; the same reconcile-against-server-list
+  logic as iOS.
+- **Backend change (small, do first).** `platform` gains `'android'`:
+  `RegisterDeviceInputSchema`, `DevicePlatform` in `shared/src/enums.ts`, and
+  `dispatch.ts`'s `sendGroup` (android tokens in the data-only group with
+  `android.priority: "high"`). Rules are unaffected.
+- **Dates.** `java.time` with `ZoneId.of("Pacific/Auckland")`, mirroring
+  `shared/src/time.ts`; session lock = `sessionCutoff`.
+- **Accessibility and theme.** TalkBack content descriptions on every control,
+  `sp` text everywhere (test at the largest font scale), 48 dp targets,
+  Material dynamic colour **off** — a fixed palette audited for contrast in
+  both light and dark from day one (the iOS dark-accent lesson), and the same
+  readable weekday-header / status-colour choices as the web.
+- **Review cohort.** All roster-style queries are cohort-scoped from the
+  start (members, teams, session entries), as iOS now does.
+- **Storage hygiene.** `android:allowBackup="false"` (no auto-backup of the
+  Firebase session to another device), `usesCleartextTraffic="false"`, no
+  WebView, no third-party SDKs beyond Firebase.
+- **Distribution.** Google Play Console (one-off fee; decide whether the
+  account is the club's or Neil's — the club's, ideally, as for Apple),
+  internal testing track (the TestFlight equivalent) → closed testing with
+  members → production. Play requires the Data safety form (the counterpart
+  of the iOS privacy manifest: name, email, phone, user id; app
+  functionality; no tracking) and a privacy-policy URL (`/privacy` on the
+  web app).
+
+**Project shape.**
+```
+android/
+  settings.gradle.kts, build.gradle.kts (version catalog; Kotlin, Compose BOM, Firebase BOM)
+  app/
+    google-services.json                      (committed, public config)
+    src/main/java/nz/org/orewabridge/dancecard/
+      App/        Application, FirebaseService (App Check, emulator wiring), PushService, Router
+      Shared/     Models.kt, Enums.kt, Paths.kt, Api.kt
+      Auth/       SignInScreen, EmailCodeFlow, AuthModel, AppLock
+      Features/   Card, Calendar, Programme, Session (+ Team panel), Inbox (Invites, Notifications), Profile
+      Support/    NZDate.kt, Format.kt, AppError.kt
+    src/test/      JVM tests: ported web/iOS suites (sessionActions, card, roster, overview,
+                   bulkAvailability, timeline, NZDate, model decoding, deep links)
+    src/androidTest/ emulator sign-in smoke test (Firebase emulators at 10.0.2.2), run locally / nightly
+```
+
+**Phases (sequential; each ends green).**
+1. Backend `platform: 'android'` + docs (half a day).
+2. Scaffold: Gradle, Compose, Firebase, App Check debug provider, emulator
+   wiring behind a build flavour, sign-in by code and by password against
+   the emulator, CI job `android-build-test` (JVM tests only; `ubuntu-latest`
+   with Gradle cache). (1–2 days)
+3. Models, API wrappers, stores; My Card, Programme, Session with every
+   action; the ported pure logic and its tests. (3–4 days)
+4. Inbox (invites, notifications, mark-read), Profile (contact, prefs,
+   password incl. inline re-auth, visitors, calendar feed), Teams panel. (2–3 days)
+5. Calendar (list/month/year, spine, key, bulk availability), push (service,
+   soft ask, deep links, reconcile), app lock, dark theme audit. (2 days)
+6. Play Console: app record, Play App Signing, fingerprints into Firebase,
+   Play Integrity enabled in App Check, Data safety form, internal testing
+   build to Neil's phone; security-checklist rows for Android. (1 day)
+
+**Estimate.** Two to two-and-a-half weeks of session time, calibrated against
+the iOS app (~9 000 lines of Swift, built and hardened over several sessions)
+with the advantage that every logic port and every copy string already has a
+tested reference in two languages.
+
+**Risks.**
+- *Play Integrity vs. sideloaded or emulator builds.* Debug builds use the
+  debug provider; a release APK installed outside Play fails App Check by
+  design. Document it, as the iOS debug-token note does.
+- *Push permission denial on Android 13+ is permanent from the app's side*
+  (same as iOS) — hence the soft ask.
+- *Fragmentation.* Test on one small/old phone and one large/new one; rely
+  on Compose's font scaling rather than fixed layouts.
+- *Play review timing* is usually hours, not days, but the first submission
+  of a new developer account can take longer — start the Console setup in
+  phase 2, not phase 6.
+
+**Out of scope.** Tablet-specific layouts beyond what Compose adapts for free,
+offline persistence (same decision as web/iOS), widgets, Wear OS, and any
+admin surface.
+
 ### Cross-cutting notes for the backlog
 
 - **B3 is a prerequisite** for B1, B4, and the value of B2 (bulk-setting across the
