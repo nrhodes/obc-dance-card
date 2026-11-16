@@ -29,6 +29,7 @@ import { BatchWriter } from '../lib/batchWriter.js';
 import { provisionMember } from './provisionMember.js';
 import { promoteVisitorsForNewMember } from '../visitors/promotion.js';
 import { parseInput } from '../lib/parseInput.js';
+import { redactImportReport } from './importReport.js';
 
 const EXPECTED_HEADERS = ['firstName', 'lastName', 'email', 'phone', 'grade'];
 const MAX_ROWS = 2_000;
@@ -257,7 +258,7 @@ export async function importMembersHandler(req: CallableRequest<ImportMembersInp
       actorMemberId: caller.uid,
       startedAt,
       finishedAt: new Date().toISOString(),
-      report,
+      report: redactImportReport(report),
     });
 
     await audit({

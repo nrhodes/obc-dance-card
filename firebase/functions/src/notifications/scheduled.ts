@@ -188,6 +188,8 @@ const NOTIFICATION_MAX_AGE_DAYS = 180;
  * (L4) nothing enforced it — rows accumulated indefinitely.
  */
 const AUDIT_LOG_RETENTION_YEARS = 2;
+/** Import reports (`imports/{id}`) follow the audit log's retention (security review L9). */
+const IMPORT_RETENTION_YEARS = 2;
 
 /** Every visitorId referenced by a non-cancelled entry dated today or later. */
 async function visitorIdsWithFutureEntries(now: Date): Promise<Set<string>> {
@@ -211,6 +213,7 @@ export interface PurgeReport {
   visitorsPurged: number;
   notificationsDeleted: number;
   auditLogDeleted: number;
+  importsDeleted: number;
 }
 
 export async function runPurgeExpired(now: Date = new Date()): Promise<PurgeReport> {
@@ -223,6 +226,7 @@ export async function runPurgeExpired(now: Date = new Date()): Promise<PurgeRepo
     visitorsPurged: 0,
     notificationsDeleted: 0,
     auditLogDeleted: 0,
+    importsDeleted: 0,
   };
 
   // 1. emailCodes past expiry.
@@ -299,6 +303,17 @@ export async function runPurgeExpired(now: Date = new Date()): Promise<PurgeRepo
   for (const doc of auditSnap.docs) {
     writer.delete(doc.ref);
     counts.auditLogDeleted += 1;
+  }
+
+  // 7. import reports older than the retention window -> delete. They are
+  // server-only and already redacted of raw CSV rows, but still name members
+  // in warnings; nothing reads them after the admin's screen closes.
+  const importCutoff = new Date(now);
+  importCutoff.setUTCFullYear(importCutoff.getUTCFullYear() - IMPORT_RETENTION_YEARS);
+  const importsSnap = await db.collection(paths.imports()).where('startedAt', '<', importCutoff.toISOString()).get();
+  for (const doc of importsSnap.docs) {
+    writer.delete(doc.ref);
+    counts.importsDeleted += 1;
   }
 
   await writer.flush();

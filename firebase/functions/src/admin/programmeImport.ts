@@ -46,6 +46,7 @@ import { db } from '../lib/admin.js';
 import { audit } from '../lib/audit.js';
 import { BatchWriter } from '../lib/batchWriter.js';
 import { assignSeriesIds, sessionIdForSeries, sessionIdForSingle, slugify } from './programmeIds.js';
+import { redactImportReport } from './importReport.js';
 
 const MAX_ROWS = 2_000;
 const MAX_CELL_LENGTH = 500;
@@ -688,7 +689,7 @@ export async function runProgrammeImport(
     actorMemberId,
     startedAt,
     finishedAt: new Date().toISOString(),
-    report,
+    report: redactImportReport(report),
   });
 
   await audit({
