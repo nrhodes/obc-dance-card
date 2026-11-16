@@ -18,13 +18,6 @@ updates:
       # 2026-09-05). Lift once typescript-eslint declares TS 7 support.
       - dependency-name: typescript
         update-types: ["version-update:semver-major"]
-      # firebase-functions 6.x declares peer firebase-admin ^11 || ^12 || ^13.
-      # A firebase-admin major bump breaks the Cloud Build install of the
-      # bundled functions-deploy/package.json (no lockfile there), even when
-      # the local lockfile still resolves to 13.x — seen 2026-09-04. Lift
-      # this once firebase-functions supports admin >= 14.
-      - dependency-name: firebase-admin
-        update-types: ["version-update:semver-major"]
       # @types/node must track the runtime, not the newest release: functions
       # run on Node 22 (`firebase.json` runtime, CI node-version), so 22.x is
       # the right major. Dependabot only ever proposes the latest (PR #38
