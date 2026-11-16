@@ -9,7 +9,7 @@ on:
       deploy_project:
         description: "Deploy after all checks pass (plan §21 B12). 'none' = just run CI."
         type: choice
-        options: [none, obc-dance-card-dev, obc-dance-card]
+        options: [none, obc-dance-card]
         default: none
       deploy_ref:
         description: "Commit/tag to deploy instead of the dispatched one (rollback). Empty = the dispatched commit."
@@ -346,22 +346,22 @@ jobs:
     # this workflow is green — a red check cannot deploy by construction.
     #
     # STAGED ROLLOUT (B12 item 8): for now this runs on manual dispatch only
-    # (Actions → CI → Run workflow → pick a project). Once a dispatch to
-    # obc-dance-card-dev and a no-op deploy to production have both worked,
-    # add `|| (github.event_name == 'push' && github.ref == 'refs/heads/main')`
+    # (Actions → CI → Run workflow → pick the project). There is no dev
+    # project, so the dry run is a dispatched production deploy. Once that has
+    # worked, add `|| (github.event_name == 'push' && github.ref == 'refs/heads/main')`
     # to the `if:` below and merges to main deploy themselves.
     #
     # Credentials: Workload Identity Federation — GitHub's OIDC token is
     # exchanged for a ~1 h Google token; there is no key or secret anywhere.
     # The two identifiers below are NOT secrets; they are variables on the
-    # GitHub Environment (`production` / `dev`), which may also carry a
+    # GitHub Environment `production`, which also carries a
     # required-reviewer rule so a deploy waits for a click.
     needs: [build-test, secret-scan, emulator-tests, ios-build-test, e2e-test]
     if: >-
       github.event_name == 'workflow_dispatch' && inputs.deploy_project != 'none' &&
       (inputs.deploy_project != 'obc-dance-card' || github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
-    environment: ${{ inputs.deploy_project == 'obc-dance-card-dev' && 'dev' || 'production' }}
+    environment: production
     concurrency:
       # Two deploys to one project never interleave; a queued one waits.
       group: deploy-${{ inputs.deploy_project || 'obc-dance-card' }}
