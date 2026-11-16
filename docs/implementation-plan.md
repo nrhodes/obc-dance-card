@@ -1380,6 +1380,124 @@ entry for that session. Open points to settle before building:
 - Also notify when the request is withdrawn or filled? (Probably not in v1.)
 - Still no extra *permissions* for stewards — this is notification-only.
 
+### B12. Continuous deployment from `main` (GitHub Actions + Workload Identity Federation) — planned 2026-11-17, not yet implemented
+
+**Intent.** Today nothing deploys automatically: `npm run deploy` runs the
+Firebase CLI from whichever laptop someone is sitting at, authenticated as that
+person, reading that machine's gitignored `firebase/.firebaserc` and
+`functions/.env*`. So (a) what is deployed is "whatever checkout was last
+deployed from", not `main`; (b) a red CI does not stop a deploy; (c) the
+non-secret production config exists only on one machine (security review
+2026-11-16, M3 — a deploy from a fresh checkout shipped App Check off until
+the default was flipped); (d) one-off admin scripts need a service-account
+key file, which proved un-findable when needed. After B12, a merge to `main`
+that passes every CI job *is* the production deploy, with no long-lived
+credential anywhere.
+
+**Decisions.**
+- **Credential: Workload Identity Federation, no key file.** A deployer
+  service account in the project trusts OIDC tokens GitHub issues for this
+  repository on `main` (and for the manual dispatch below). The job exchanges
+  its token for a ~1 h Google access token via `google-github-actions/auth`.
+  Nothing is stored in GitHub secrets. A service-account key as a GitHub
+  secret is the fallback only if federation is blocked for an organisational
+  reason — and then it is rotated quarterly.
+- **Application secrets do not move.** `LOGIN_CODE_PEPPER`, `SMTP_PASS`,
+  `EMAIL_PROVIDER_KEY` stay in Secret Manager, bound with `defineSecret`; a
+  deploy only confirms they exist. They are set/rotated with
+  `firebase functions:secrets:set` from a trusted machine, as now.
+- **Non-secret config moves into the repo.** `firebase/functions/
+  .env.obc-dance-card` (and `.env.obc-dance-card-dev`) are committed
+  (un-ignore those two names; `.env`/`.env.local` stay ignored). Contents:
+  `EMAIL_PROVIDER`, `EMAIL_FROM`, `SMTP_HOST`, `SMTP_PORT`, `WEB_APP_BASE_URL`,
+  `CLUB_CONTACT_EMAIL`, `LOGIN_CODE_*`, `TRUSTED_PROXY_HOPS`,
+  `ICAL_TRUSTED_PROXY_HOPS`. **`SMTP_USER` becomes a Secret Manager secret**
+  (`defineSecret('SMTP_USER')`, bound wherever `SMTP_PASS` is) — it is a
+  mailbox address and the repository is public.
+- **Trigger: a `deploy` job inside `ci.yml`,** `needs:` all five existing
+  jobs, `if: github.event_name == 'push' && github.ref == 'refs/heads/main'`.
+  One workflow, one source of truth, and a red job cannot deploy by
+  construction. Plus `workflow_dispatch` with inputs `project`
+  (`obc-dance-card-dev` | `obc-dance-card`) and `ref` (default `main`) for
+  the dev sandbox, rollbacks and re-deploys.
+- **GitHub Environment `production`** holds the (non-secret) provider and
+  service-account identifiers as environment *variables*, and may carry a
+  "required reviewer" protection rule so a deploy waits for Neil's click.
+  Start with the rule **on**; relax once trusted.
+- **Deploy order inside the job: functions → rules + indexes → hosting.**
+  Functions first because they are backward compatible with the old client
+  and the old rules; rules second (the cohort rollout in `docs/ops-runbook.md`
+  showed rules can depend on fields functions write); hosting last so the new
+  client never meets old functions. `npm run deploy` is changed to the same
+  order so there is one definition.
+- `concurrency: production-deploy` (no cancel-in-progress): two merges in
+  quick succession deploy serially, never interleave.
+
+**Deployer service account — least privilege.** `obc-deployer@<project>.iam`
+with: `roles/firebase.viewer` (the CLI reads project metadata),
+`roles/cloudfunctions.developer`, `roles/iam.serviceAccountUser` **on the
+functions runtime account only** (the default compute SA — nothing pins
+another), `roles/firebasehosting.admin`, `roles/firebaserules.admin`,
+`roles/datastore.indexAdmin`, `roles/secretmanager.viewer` **scoped to the
+four secrets** (the CLI checks they exist and that the runtime SA may read
+them), `roles/serviceusage.serviceUsageConsumer`. No owner/editor. Verify the
+set empirically: first dispatch against `obc-dance-card-dev`, add exactly the
+role each failure names, record the final list here.
+
+**Work items (in order).**
+1. Security review **H1** lands first — the deploy job `needs:` a green
+   `build-test`, which is currently red on the dependency audit.
+2. `SMTP_USER` → `defineSecret`; set it in both projects; remove it from the
+   env files. (functions + `lib/secrets.ts`; small.)
+3. Commit `.env.obc-dance-card` / `.env.obc-dance-card-dev`; narrow the
+   `.gitignore` rule; `.env.example` documents the split (secrets vs config).
+4. Google side (console or `gcloud`, once per project): Workload Identity
+   pool `github` + OIDC provider for `token.actions.githubusercontent.com`
+   with attribute condition `assertion.repository == 'nrhodes/obc-dance-card'`;
+   deployer SA with the roles above; `roles/iam.workloadIdentityUser` on the SA
+   for `principalSet://…/attribute.repository/nrhodes/obc-dance-card`
+   (optionally also constrain `attribute.ref` to `refs/heads/main` for prod).
+5. `ci.yml` `deploy` job: `permissions: { contents: read, id-token: write }`,
+   `environment: production`, `actions/checkout` + `setup-node` 22 + `npm ci`,
+   `google-github-actions/auth@<sha>` (federation), `npm run deploy:functions
+   && npm run deploy:rules && npm run deploy:hosting` with
+   `FIREBASE_PROJECT=<input or obc-dance-card>` and `--non-interactive`;
+   every action pinned to a commit SHA (audit L7) and the workflow token kept
+   read-only except `id-token`.
+6. `firebase/.firebaserc` becomes unnecessary for CI (`--project` is explicit);
+   keep it gitignored for local convenience.
+7. Runbook: replace "run `npm run deploy` from your laptop" with "merge to
+   `main`"; document manual dispatch, rollback (dispatch with the previous
+   commit's `ref`; Hosting also keeps release history in the console), and
+   how to rotate nothing (there is no key).
+8. Dry run: dispatch to `obc-dance-card-dev` from a branch; fix roles; then a
+   no-op deploy to prod from `main`; then switch the push trigger on.
+
+**Risks and mitigations.**
+- *Deploys the wrong thing after a bad merge.* Required checks + the
+  `production` environment reviewer rule; rollback is a dispatch with a `ref`.
+- *A compromised workflow run.* Its token can only deploy; it cannot read
+  secrets' values (viewer only), cannot change IAM, cannot touch other
+  projects. Branch protection (admins included, all five checks) bounds what
+  reaches `main`.
+- *Federation misconfigured too broadly.* The attribute condition pins the
+  repository; adding the `ref` condition pins the branch. Test by dispatching
+  from a fork/branch and confirming the auth step fails.
+- *Functions predeploy needs the workspace build.* `npm ci` at the root plus
+  the existing `bundle` script already cover this (CI's `build-test` does the
+  same today).
+- *First deploy from CI differs from the laptop's.* The committed env files
+  make it reproducible; compare the cold-start `app_check_enforced` and
+  `email_sent provider=smtp` log lines after the first prod run.
+
+**Out of scope for B12.** Preview channels per PR (Hosting supports them; a
+nice follow-up), iOS/TestFlight automation (Apple signing in CI is its own
+project), and deploying the emulator seed anywhere (never).
+
+**Estimate.** About a day: half on the Google-side setup and role tuning
+against the dev project, half on the workflow, the `SMTP_USER` move and the
+runbook.
+
 ### Cross-cutting notes for the backlog
 
 - **B3 is a prerequisite** for B1, B4, and the value of B2 (bulk-setting across the
