@@ -345,6 +345,54 @@ main {
   padding: var(--space-3) var(--space-2) var(--space-4);
 }
 
+/* Table screens (admin, the members directory — see `isWideRoute`) use the
+   width a desktop has; on a phone this changes nothing. Prose and forms on
+   those screens keep the 640px reading width so lines stay short. */
+main.main-wide {
+  max-width: 1100px;
+}
+
+main.main-wide p,
+main.main-wide form,
+main.main-wide fieldset,
+main.main-wide .alert,
+main.main-wide input,
+main.main-wide textarea,
+main.main-wide select {
+  max-width: 640px;
+}
+
+/* `.card` sets `overflow-wrap: anywhere` for prose, which also lets a table
+   cell shrink to one letter per line ("Activ-e", "membe-r") — the reason the
+   admin tables looked cramped even with room to spare. From tablet width up,
+   cells break only between words and headers never wrap; on a phone the
+   existing behaviour is left exactly as it was. */
+@media (min-width: 700px) {
+  main.main-wide th,
+  main.main-wide td {
+    overflow-wrap: normal;
+    word-break: normal;
+  }
+
+  main.main-wide th,
+  main.main-wide td .button {
+    white-space: nowrap;
+  }
+
+  main.main-wide td .button {
+    overflow-wrap: normal;
+  }
+}
+
+/* With the full desktop width available, a row stays on one line (phone
+   numbers, the action links). Below that the cells wrap between words as
+   usual, so nothing overflows on a tablet. */
+@media (min-width: 1000px) {
+  main.main-wide td {
+    white-space: nowrap;
+  }
+}
+
 .card {
   border: 1px solid var(--color-border);
   border-radius: 12px;
