@@ -5,6 +5,7 @@
  */
 import { randomUUID } from 'node:crypto';
 import { onCall, HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
+import type { Transaction } from 'firebase-admin/firestore';
 import {
   CancelInviteInputSchema,
   RespondToInviteInputSchema,
@@ -49,6 +50,26 @@ const INVITE_SEND_WINDOW_SEC = 24 * 3600;
 const INVITE_MAX_AGE_MS = 7 * 24 * 3600 * 1000;
 
 /* ---------------------------------- sendInvite ------------------------------- */
+
+/**
+ * Every pending invite in which any of `memberIds` is the sender or the
+ * recipient — the set an acceptance has to expire. Two equality-only queries
+ * (so no composite index is needed) instead of reading every pending invite
+ * in the club inside the transaction (security review 2026-11-16, I4).
+ */
+async function pendingInvitesInvolving(tx: Transaction, memberIds: string[]): Promise<Invite[]> {
+  const ids = [...new Set(memberIds)];
+  const [bySender, byRecipient] = await Promise.all([
+    tx.get(db.collection(paths.invites()).where('status', '==', 'pending').where('fromMemberId', 'in', ids)),
+    tx.get(db.collection(paths.invites()).where('status', '==', 'pending').where('toMemberId', 'in', ids)),
+  ]);
+  const byId = new Map<string, Invite>();
+  for (const d of [...bySender.docs, ...byRecipient.docs]) {
+    const invite = d.data() as Invite;
+    byId.set(invite.id, invite);
+  }
+  return [...byId.values()];
+}
 
 export async function sendInviteHandler(req: CallableRequest<SendInviteInput>): Promise<SendInviteResult> {
   const input = parseInput(SendInviteInputSchema, req.data);
@@ -342,19 +363,10 @@ export async function respondToInviteHandler(
     const seriesForWarning = loaded.find((ls) => ls.series)?.series ?? null;
     const warning = await repeatPartnerWarning(tx, seriesForWarning, fromMember, toMember);
 
-    const otherPendingSnap = await tx.get(db.collection(paths.invites()).where('status', '==', 'pending'));
     const sessionIdSet = new Set(inv.sessionIds);
-    const toExpire = otherPendingSnap.docs
-      .map((d) => d.data() as Invite)
-      .filter(
-        (other) =>
-          other.id !== inv.id &&
-          (other.fromMemberId === inv.fromMemberId ||
-            other.toMemberId === inv.fromMemberId ||
-            other.fromMemberId === actor.memberId ||
-            other.toMemberId === actor.memberId) &&
-          other.sessionIds.some((sid) => sessionIdSet.has(sid)),
-      );
+    const toExpire = (await pendingInvitesInvolving(tx, [inv.fromMemberId, actor.memberId])).filter(
+      (other) => other.id !== inv.id && other.sessionIds.some((sid) => sessionIdSet.has(sid)),
+    );
 
     // ---- writes ----
     const entries: Entry[] = [];
@@ -582,15 +594,9 @@ async function respondToTeamInviteHandler(
     }
 
     const activeSessionIdSet = new Set(activeSessions.map((s) => s.id));
-    const otherPendingSnap = await tx.get(db.collection(paths.invites()).where('status', '==', 'pending'));
-    const toExpire = otherPendingSnap.docs
-      .map((d) => d.data() as Invite)
-      .filter(
-        (other) =>
-          other.id !== inv.id &&
-          (other.fromMemberId === actor.memberId || other.toMemberId === actor.memberId) &&
-          other.sessionIds.some((sid) => activeSessionIdSet.has(sid)),
-      );
+    const toExpire = (await pendingInvitesInvolving(tx, [actor.memberId])).filter(
+      (other) => other.id !== inv.id && other.sessionIds.some((sid) => activeSessionIdSet.has(sid)),
+    );
 
     const baseline = await loadTeamEntries(tx, team.id);
     const now = new Date().toISOString();
