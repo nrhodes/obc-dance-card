@@ -35,6 +35,7 @@ import {
 } from '@obc/shared';
 import { db } from '../lib/admin.js';
 import { assertRateLimit } from '../lib/rateLimit.js';
+import { clientIpFromForwardedFor, forwardedForEntries, trustedHopsFromEnv } from '../lib/clientIp.js';
 import { logger } from '../lib/logger.js';
 import { buildCalendar, type IcsEvent } from './ics.js';
 
@@ -66,14 +67,19 @@ function parseTokenFromPath(path: string): string | null {
   return token.length > 0 ? token : null;
 }
 
-/** First `x-forwarded-for` hop, falling back to the connection IP — same convention as `auth/emailCode.ts#clientIp`. */
+/**
+ * Per-IP bucket subject. The feed is reached through the Hosting rewrite
+ * (`/ical/**`), which puts one hop between the client and the function, so
+ * `ICAL_TRUSTED_PROXY_HOPS` defaults to 1 (second-to-last entry). A direct
+ * call with fewer entries falls back to the leftmost surviving one. Never the
+ * first entry (security review 2026-11-16, M1; see `lib/clientIp.ts`).
+ */
 function clientIp(req: Request): string {
-  const forwarded = req.headers['x-forwarded-for'];
-  const first = Array.isArray(forwarded) ? forwarded[0] : forwarded;
-  if (typeof first === 'string' && first.length > 0) {
-    return first.split(',')[0]!.trim();
-  }
-  return req.ip ?? 'unknown';
+  return clientIpFromForwardedFor(
+    req.headers['x-forwarded-for'],
+    req.ip,
+    trustedHopsFromEnv('ICAL_TRUSTED_PROXY_HOPS', 1),
+  );
 }
 
 /**
@@ -146,6 +152,10 @@ export async function icalFeedHandler(req: Request, res: Response): Promise<void
       memberId: member.id,
       entries: events.length,
       status: 200,
+      // How many `x-forwarded-for` entries arrived (a count, never an
+      // address) — lets ops confirm the ICAL_TRUSTED_PROXY_HOPS assumption
+      // against real traffic.
+      forwardedHops: forwardedForEntries(req.headers['x-forwarded-for']).length,
     });
 
     if (method === 'HEAD') res.end();
