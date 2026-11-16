@@ -182,6 +182,12 @@ export const sendDailyDigest = onSchedule(
 const RATE_LIMIT_MAX_AGE_MS = 24 * 3600 * 1000;
 const VISITOR_UNUSED_MONTHS = 18;
 const NOTIFICATION_MAX_AGE_DAYS = 180;
+/**
+ * Audit-log retention (plan §8.1 "audit log retained 2 years"; the in-app
+ * privacy statement says the same). Until the 2026-11-16 security review
+ * (L4) nothing enforced it — rows accumulated indefinitely.
+ */
+const AUDIT_LOG_RETENTION_YEARS = 2;
 
 /** Every visitorId referenced by a non-cancelled entry dated today or later. */
 async function visitorIdsWithFutureEntries(now: Date): Promise<Set<string>> {
@@ -204,6 +210,7 @@ export interface PurgeReport {
   invitesExpired: number;
   visitorsPurged: number;
   notificationsDeleted: number;
+  auditLogDeleted: number;
 }
 
 export async function runPurgeExpired(now: Date = new Date()): Promise<PurgeReport> {
@@ -215,6 +222,7 @@ export async function runPurgeExpired(now: Date = new Date()): Promise<PurgeRepo
     invitesExpired: 0,
     visitorsPurged: 0,
     notificationsDeleted: 0,
+    auditLogDeleted: 0,
   };
 
   // 1. emailCodes past expiry.
@@ -279,6 +287,18 @@ export async function runPurgeExpired(now: Date = new Date()): Promise<PurgeRepo
   for (const doc of notificationsSnap.docs) {
     writer.delete(doc.ref);
     counts.notificationsDeleted += 1;
+  }
+
+  // 6. auditLog rows older than the 2-year retention window -> delete.
+  // Erasure (`eraseMember`) deliberately leaves audit rows alone so the
+  // accountability trail survives the member; this is the one place they
+  // ever go, and only by age.
+  const auditCutoff = new Date(now);
+  auditCutoff.setUTCFullYear(auditCutoff.getUTCFullYear() - AUDIT_LOG_RETENTION_YEARS);
+  const auditSnap = await db.collection(paths.auditLog()).where('at', '<', auditCutoff.toISOString()).get();
+  for (const doc of auditSnap.docs) {
+    writer.delete(doc.ref);
+    counts.auditLogDeleted += 1;
   }
 
   await writer.flush();
