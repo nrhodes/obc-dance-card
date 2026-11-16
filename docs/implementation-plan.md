@@ -1472,6 +1472,25 @@ role each failure names, record the final list here.
    how to rotate nothing (there is no key).
 8. Dry run: dispatch to `obc-dance-card-dev` from a branch; fix roles; then a
    no-op deploy to prod from `main`; then switch the push trigger on.
+9. **Post-deploy smoke test** (added 2026-11-17 — the CLI exiting 0 only
+   means the upload was accepted; it does not prove the site serves or the
+   functions bundle starts, e.g. a missing runtime dependency). A final step
+   in the `deploy` job, run after hosting, against the project just deployed:
+   - *Hosting reachable:* `GET` the site root returns 200 and the expected
+     `<title>`.
+   - *Right version live:* the web build writes the commit SHA to a static
+     `version.json`; the step polls it (short retry loop — Hosting's CDN can
+     lag a few seconds) until it equals `github.sha` (or the dispatched `ref`).
+   - *Functions loaded:* an unauthenticated request to one cheap callable
+     returns the **expected, well-formed rejection** (App Check is enforced by
+     default, so a 401/`unauthenticated` JSON error is the pass condition; a
+     404, 5xx or timeout is the failure). The probe sends no member data and
+     must stay well inside the rate limits (one request per deploy).
+   - *On failure:* the job fails (GitHub notifies Neil); **no automatic
+     rollback** in v1 — roll back with the manual dispatch + previous `ref`.
+   The script lives in the repo (`scripts/post-deploy-smoke.mjs`), takes the
+   base URL and expected SHA as arguments, and is exercised against
+   `obc-dance-card-dev` in the item-8 dry run before the push trigger goes on.
 
 **Risks and mitigations.**
 - *Deploys the wrong thing after a bad merge.* Required checks + the
@@ -1494,9 +1513,9 @@ role each failure names, record the final list here.
 nice follow-up), iOS/TestFlight automation (Apple signing in CI is its own
 project), and deploying the emulator seed anywhere (never).
 
-**Estimate.** About a day: half on the Google-side setup and role tuning
-against the dev project, half on the workflow, the `SMTP_USER` move and the
-runbook.
+**Estimate.** About a day, plus an hour or two for the item-9 smoke test:
+half on the Google-side setup and role tuning against the dev project, half
+on the workflow, the `SMTP_USER` move and the runbook.
 
 ### Cross-cutting notes for the backlog
 
