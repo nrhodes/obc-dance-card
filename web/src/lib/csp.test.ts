@@ -32,11 +32,15 @@ interface HostingConfig {
   hosting: { headers: Array<{ source: string; headers: Header[] }> };
 }
 
-function readCsp(): string {
+function readHeaders(): Header[] {
   const config = JSON.parse(readFileSync(firebaseJsonPath, 'utf8')) as HostingConfig;
   const rule = config.hosting.headers.find((h) => h.source === '**');
   expect(rule, 'no "**" hosting header rule found').toBeDefined();
-  const csp = rule!.headers.find((h) => h.key === 'Content-Security-Policy');
+  return rule!.headers;
+}
+
+function readCsp(): string {
+  const csp = readHeaders().find((h) => h.key === 'Content-Security-Policy');
   expect(csp, 'no Content-Security-Policy header found on the "**" rule').toBeDefined();
   return csp!.value;
 }
@@ -84,5 +88,49 @@ describe('hosting CSP (firebase/firebase.json)', () => {
     // other path — assert that shape explicitly so a future narrowing of
     // `source` (e.g. excluding *.webmanifest) is caught here.
     expect(rule!.source).toBe('**');
+  });
+});
+
+/**
+ * Security review 2026-11-16, L5: `connect-src` must name only hosts this app
+ * actually talks to. A wildcard over every Cloud Run / Cloud Functions
+ * customer (`*.run.app`, `*.cloudfunctions.net`) would hand any future XSS an
+ * exfiltration path; Realtime Database (`firebaseio.com`) is not used at all.
+ */
+describe('hosting CSP connect-src pins (security review L5)', () => {
+  const csp = readCsp();
+  const connect = directive(csp, 'connect-src');
+
+  it('names the project function hosts explicitly rather than every GCP customer', () => {
+    expect(connect).toContain('https://australia-southeast1-obc-dance-card.cloudfunctions.net');
+    expect(connect).not.toMatch(/\*\.cloudfunctions\.net/);
+    expect(connect).not.toMatch(/run\.app/);
+  });
+
+  it('does not allow Realtime Database hosts the app never uses', () => {
+    expect(connect).not.toMatch(/firebaseio\.com/);
+  });
+
+  it("allows only 'self', *.googleapis.com, the function hosts and www.google.com (reCAPTCHA)", () => {
+    const allowed = connect.split(/\s+/).filter((t) => t !== "'self'");
+    for (const host of allowed) {
+      expect(host).toMatch(
+        /^https:\/\/(\*\.googleapis\.com|australia-southeast1-obc-dance-card(-dev)?\.cloudfunctions\.net|www\.google\.com)$/,
+      );
+    }
+  });
+});
+
+describe('hosting isolation headers (security review L5)', () => {
+  const headers = readHeaders();
+  const value = (key: string) => headers.find((h) => h.key === key)?.value;
+
+  it('sets Cross-Origin-Opener-Policy: same-origin (no OAuth popups or cross-origin openers are needed)', () => {
+    expect(value('Cross-Origin-Opener-Policy')).toBe('same-origin');
+  });
+
+  it('keeps clickjacking and transport protections', () => {
+    expect(value('X-Frame-Options')).toBe('DENY');
+    expect(value('Strict-Transport-Security')).toMatch(/max-age=\d+; includeSubDomains/);
   });
 });
