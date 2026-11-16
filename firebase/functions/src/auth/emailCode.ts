@@ -25,7 +25,7 @@ import { callableOptions } from '../lib/callable.js';
 import { assertRateLimit } from '../lib/rateLimit.js';
 import { clientIpFromForwardedFor, trustedHopsFromEnv } from '../lib/clientIp.js';
 import { logger } from '../lib/logger.js';
-import { LOGIN_CODE_PEPPER, SMTP_PASS } from '../lib/secrets.js';
+import { LOGIN_CODE_PEPPER, SMTP_SECRETS } from '../lib/secrets.js';
 import { getEmailProvider } from '../email/provider.js';
 import { loginCodeEmail } from '../email/templates/loginCode.js';
 import { parseInput } from '../lib/parseInput.js';
@@ -161,7 +161,7 @@ export async function requestLoginCodeHandler(
 }
 
 export const requestLoginCode = onCall(
-  { ...callableOptions, secrets: [LOGIN_CODE_PEPPER, SMTP_PASS] },
+  { ...callableOptions, secrets: [LOGIN_CODE_PEPPER, ...SMTP_SECRETS] },
   requestLoginCodeHandler,
 );
 
@@ -235,6 +235,6 @@ export async function verifyLoginCodeHandler(
 }
 
 export const verifyLoginCode = onCall(
-  { ...callableOptions, secrets: [LOGIN_CODE_PEPPER, SMTP_PASS] },
+  { ...callableOptions, secrets: [LOGIN_CODE_PEPPER, ...SMTP_SECRETS] },
   verifyLoginCodeHandler,
 );

@@ -182,6 +182,7 @@ jobs:
         run: |
           echo "LOGIN_CODE_PEPPER=ci-dev-pepper" > firebase/functions/.secret.local
           echo "SMTP_PASS=ci-dev-smtp-pass" >> firebase/functions/.secret.local
+          echo "SMTP_USER=ci-dev-smtp-user" >> firebase/functions/.secret.local
 
       - name: Start emulators
         if: github.event_name == 'workflow_dispatch'
@@ -281,6 +282,7 @@ jobs:
         run: |
           echo "LOGIN_CODE_PEPPER=ci-dev-pepper" > firebase/functions/.secret.local
           echo "SMTP_PASS=ci-dev-smtp-pass" >> firebase/functions/.secret.local
+          echo "SMTP_USER=ci-dev-smtp-user" >> firebase/functions/.secret.local
 
       - name: Start emulators
         run: nohup npm run emulators > firebase-emulators.out 2>&1 &

@@ -25,7 +25,7 @@ import { db } from '../lib/admin.js';
 import { audit } from '../lib/audit.js';
 import { BatchWriter } from '../lib/batchWriter.js';
 import { logger } from '../lib/logger.js';
-import { SMTP_PASS } from '../lib/secrets.js';
+import { SMTP_SECRETS } from '../lib/secrets.js';
 import { getEmailProvider } from '../email/provider.js';
 import { digestEmail } from '../email/templates/digest.js';
 import { createNotification } from './create.js';
@@ -118,7 +118,7 @@ export async function runSendSessionReminders(now: Date = new Date()): Promise<R
 }
 
 export const sendSessionReminders = onSchedule(
-  { schedule: '0 8 * * *', timeZone: NZ_TIME_ZONE, region: REGION, secrets: [SMTP_PASS] },
+  { schedule: '0 8 * * *', timeZone: NZ_TIME_ZONE, region: REGION, secrets: SMTP_SECRETS },
   async () => {
     await runSendSessionReminders();
   },
@@ -171,7 +171,7 @@ export async function runSendDailyDigest(now: Date = new Date()): Promise<Digest
 }
 
 export const sendDailyDigest = onSchedule(
-  { schedule: '0 17 * * *', timeZone: NZ_TIME_ZONE, region: REGION, secrets: [SMTP_PASS] },
+  { schedule: '0 17 * * *', timeZone: NZ_TIME_ZONE, region: REGION, secrets: SMTP_SECRETS },
   async () => {
     await runSendDailyDigest();
   },
