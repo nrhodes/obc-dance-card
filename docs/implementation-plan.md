@@ -1369,9 +1369,11 @@ so a steward who is already booked that day hears nothing.
 post, also notify the steward of the session's weekday regardless of their own
 entry for that session. Open points to settle before building:
 
-- **Scope: weekday or series?** Neil's wording was "a series they're a steward
-  of", but stewardship is stored per weekday. Either keep per-weekday (covers
-  every series and one-off on that day) or add a per-series steward.
+- **Scope: per weekday — decided by Neil 2026-11-17.** The steward of a
+  weekday is notified for every session on that day (each series and each
+  one-off), using the existing `partnerStewardMemberId` on
+  `programmes/{year}/weekdays/{weekday}`. No per-series steward; no data-model
+  change.
 - Own notification type (e.g. `steward_alert`) vs reusing `matchmaking_alert`;
   default on for stewards, with a preference to turn it off?
 - Skip when the steward is the poster; keep the 24h per-(recipient, session)
