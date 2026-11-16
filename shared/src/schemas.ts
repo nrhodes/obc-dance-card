@@ -283,7 +283,10 @@ export type ClaimLookingForPartnerInput = z.infer<typeof ClaimLookingForPartnerI
  */
 export const BulkSoloStatusFilterSchema = z
   .object({
-    weekdays: z.array(weekday).min(1, 'select at least one weekday'),
+    // `.max(5)`: there are only five weekdays; an unbounded constrained array
+    // is exactly the shape the zod memory-exhaustion advisory concerned
+    // (security review 2026-11-16, H1) and a callable payload can be 10 MB.
+    weekdays: z.array(weekday).min(1, 'select at least one weekday').max(5, 'at most five weekdays'),
     /** Defaults to `todayNZ()` server-side when absent. */
     fromDate: isoDate.optional(),
     /** No upper bound when absent. */
@@ -464,7 +467,7 @@ export type RemoveIcalFeedInput = z.infer<typeof RemoveIcalFeedInputSchema>;
 export const BroadcastInputSchema = z.object({
   title: z.string().trim().min(1).max(80),
   body: z.string().trim().min(1).max(1000),
-  weekdays: z.array(weekday).optional(),
+  weekdays: z.array(weekday).max(5, 'at most five weekdays').optional(),
 });
 export type BroadcastInput = z.infer<typeof BroadcastInputSchema>;
 
