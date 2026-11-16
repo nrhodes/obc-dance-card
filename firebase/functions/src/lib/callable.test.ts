@@ -24,8 +24,14 @@ describe('callableOptions — App Check param', () => {
     vi.resetModules();
   });
 
-  it('defaults enforceAppCheck to false when the env var is unset', async () => {
+  it('defaults enforceAppCheck to TRUE when the env var is unset (security review M3)', async () => {
     delete process.env.ENFORCE_APP_CHECK;
+    const { callableOptions } = await import('./callable.js');
+    expect(callableOptions.enforceAppCheck).toBe(true);
+  });
+
+  it('is false only for the literal "false" (the committed emulator setting)', async () => {
+    process.env.ENFORCE_APP_CHECK = 'false';
     const { callableOptions } = await import('./callable.js');
     expect(callableOptions.enforceAppCheck).toBe(false);
   });
@@ -36,10 +42,44 @@ describe('callableOptions — App Check param', () => {
     expect(callableOptions.enforceAppCheck).toBe(true);
   });
 
-  it('treats any non-"true" value as false', async () => {
+  it('fails closed: a typo or any other value still enforces', async () => {
     process.env.ENFORCE_APP_CHECK = 'yes';
     const { callableOptions } = await import('./callable.js');
-    expect(callableOptions.enforceAppCheck).toBe(false);
+    expect(callableOptions.enforceAppCheck).toBe(true);
+  });
+
+  describe('on a deployed instance', () => {
+    const originalService = process.env.K_SERVICE;
+    const originalEmulator = process.env.FUNCTIONS_EMULATOR;
+    afterEach(() => {
+      if (originalService === undefined) delete process.env.K_SERVICE;
+      else process.env.K_SERVICE = originalService;
+      if (originalEmulator === undefined) delete process.env.FUNCTIONS_EMULATOR;
+      else process.env.FUNCTIONS_EMULATOR = originalEmulator;
+    });
+
+    it('refuses to load with ENFORCE_APP_CHECK=false, so a misconfigured deploy fails its rollout', async () => {
+      process.env.K_SERVICE = 'requestlogincode';
+      delete process.env.FUNCTIONS_EMULATOR;
+      process.env.ENFORCE_APP_CHECK = 'false';
+      await expect(import('./callable.js')).rejects.toThrow(/Refusing to start/);
+    });
+
+    it('loads normally when enforced', async () => {
+      process.env.K_SERVICE = 'requestlogincode';
+      delete process.env.FUNCTIONS_EMULATOR;
+      delete process.env.ENFORCE_APP_CHECK;
+      const { callableOptions } = await import('./callable.js');
+      expect(callableOptions.enforceAppCheck).toBe(true);
+    });
+
+    it('the emulator (K_SERVICE + FUNCTIONS_EMULATOR) may run unenforced', async () => {
+      process.env.K_SERVICE = 'requestlogincode';
+      process.env.FUNCTIONS_EMULATOR = 'true';
+      process.env.ENFORCE_APP_CHECK = 'false';
+      const { callableOptions } = await import('./callable.js');
+      expect(callableOptions.enforceAppCheck).toBe(false);
+    });
   });
 
   it('always disables consumeAppCheckToken (plan §8.3)', async () => {

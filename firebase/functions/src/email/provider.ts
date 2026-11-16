@@ -12,7 +12,10 @@ import nodemailer, { type Transporter } from 'nodemailer';
 import { randomUUID } from 'node:crypto';
 import { db } from '../lib/admin.js';
 import { logger } from '../lib/logger.js';
+import { isDeployed } from '../lib/runtime.js';
 import { SMTP_PASS } from '../lib/secrets.js';
+
+export { isDeployed };
 
 export interface EmailMessage {
   to: string;
@@ -23,16 +26,6 @@ export interface EmailMessage {
 
 export interface EmailProvider {
   send(msg: EmailMessage): Promise<void>;
-}
-
-/**
- * True only on a deployed Cloud Function. Cloud Run sets `K_SERVICE` on real
- * instances — but so does the Functions emulator, which additionally sets
- * `FUNCTIONS_EMULATOR=true`. Tests and local scripts set neither.
- */
-export function isDeployed(): boolean {
-  const hasService = typeof process.env.K_SERVICE === 'string' && process.env.K_SERVICE.length > 0;
-  return hasService && process.env.FUNCTIONS_EMULATOR !== 'true';
 }
 
 /**
