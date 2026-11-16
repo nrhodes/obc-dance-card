@@ -378,8 +378,12 @@ re-validates inside its transaction before commit; the nightly sweep runs both.
 **Code sign-in:**
 1. Client calls `requestLoginCode({ email })`.
 2. Function: normalise; rate-limit (email, IP); look up `auth.getUserByEmail`
-   *and* `members/{uid}.active`. **Regardless of outcome**, sleep-to-uniform (target
-   ~400 ms total) and return `{ ok: true }`. If known+active: generate
+   *and* `members/{uid}.active`. **Regardless of outcome**, do equal work and
+   sleep-to-uniform, then return `{ ok: true }` (amended 2026-11-16, security
+   review M2: the unknown/inactive path performs the email provider's connection
+   handshake — `EmailProvider.warm()` — so it costs what a real send costs, and
+   the floor is 1 200 ms, `LOGIN_CODE_UNIFORM_RESPONSE_MS`, not the original
+   ~400 ms which sat below a relay round-trip). If known+active: generate
    `crypto.randomInt(0, 1_000_000)` zero-padded; store `emailCodes/{sha256(email)}` =
    `{ codeHmac: HMAC(pepper, email + ':' + code), expiresAt: now+10m, attempts: 0 }`
    (overwriting any prior); send email (text + HTML) containing the code only.
