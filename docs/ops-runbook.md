@@ -21,11 +21,14 @@ project ids. Copy `firebase/functions/.env.example` to `.env` for local runs.
    `docs/security-checklist.md` items 2–3 for the exact click-path and a
    script (`check-auth-config.ts`) that verifies both are on.
 3. Enable **Identity Platform** (required for the sign-in blocking function).
-4. Set `ENFORCE_APP_CHECK=true` in `firebase/functions/.env.<projectId>`
-   (e.g. `.env.obc-dance-card`) — **not** in the shared `.env`/`.env.example`
-   — and configure App Check providers (reCAPTCHA Enterprise for web, App
-   Attest for iOS) and Firestore enforcement in the **App Check** console tab
-   before the first production deploy.
+4. App Check enforcement on callables is **on by default** (amended
+   2026-11-16, security review M3) — there is nothing to set. Make sure no
+   `.env`/`.env.local` carries `ENFORCE_APP_CHECK=false` (the CLI loads `.env`
+   for every project; a deployed function refuses to start with `false`, so
+   the deploy would fail rather than go out unenforced). Configure App Check
+   providers (reCAPTCHA Enterprise for web, App Attest for iOS) and Firestore
+   enforcement in the **App Check** console tab before the first production
+   deploy.
 5. `npm run deploy:rules` / `npm run deploy:functions` / `npm run
    deploy:hosting` (or `npm run deploy` for all three, in that order) from the
    repo root, with `FIREBASE_PROJECT=<alias>` set to the `.firebaserc` alias
