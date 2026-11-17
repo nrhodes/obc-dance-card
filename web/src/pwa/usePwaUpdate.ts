@@ -6,6 +6,8 @@
  * part-way through inviting a partner should never have the page swapped
  * out from under them without being asked.
  *
+ * Registered from `PwaUpdater` at the app root (every screen, signed in or
+ * not) and consumed by `AppShell` for the banner.
  * `registerSW` is called exactly once, at first use (a module-level guard,
  * not an effect that re-registers on every mount) — React StrictMode's dev
  * double-invoke would otherwise register the update-check twice — and its

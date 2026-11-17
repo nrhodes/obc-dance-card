@@ -11,6 +11,8 @@ export default tseslint.config(
       '**/dist/**',
       'firebase/functions/lib/**',
       'firebase/functions-deploy/**',
+      // Local SwiftPM checkout when the iOS app is built with -clonedSourcePackagesDirPath .spm (gitignored).
+      'ios/.spm/**',
       'firebase/web-dist/**',
       '**/node_modules/**',
       '**/*.config.js',
