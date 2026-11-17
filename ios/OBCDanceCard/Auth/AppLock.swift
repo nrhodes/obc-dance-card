@@ -39,7 +39,13 @@ final class AppLock: ObservableObject {
     private var isAuthenticating = false
 
     init() {
-        isEnabled = UserDefaults.standard.bool(forKey: Self.enabledKey)
+        let enabled = UserDefaults.standard.bool(forKey: Self.enabledKey)
+        isEnabled = enabled
+        // Start locked whenever the lock is on. `isLocked` lives in memory, so
+        // without this a force-quit and relaunch landed on the card with no
+        // prompt — the scene-phase handler only locks on the way to the
+        // background (security review 2026-11-17, S1).
+        isLocked = enabled
     }
 
     /// Whether this device can do any kind of owner authentication at all.
@@ -125,5 +131,10 @@ struct AppLockView: View {
         .padding()
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(.systemBackground))
+        // Prompt as soon as the cover is on screen. Covers the cold-launch
+        // case (S1), where no scene-phase change fires; on a return from the
+        // background the phase handler also calls unlock(), and
+        // `isAuthenticating` makes the second call a no-op.
+        .task { await lock.unlock() }
     }
 }
