@@ -1,14 +1,15 @@
 /**
  * Notifications feed (`/notifications`, plan Phase 3b task, deliverable 4,
  * §11). Newest 50 notifications; unread ones are styled distinctly; tapping
- * one marks it read via `markNotificationsRead` and follows its `data` deep
+ * one marks it read (a direct Firestore write, `notifications/markRead.ts`) and follows its `data` deep
  * link (`sessionId` + `year` → the session page; `inviteId` → Invites).
  * "Mark all read" marks every currently-unread one in the same way.
  */
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { Notification } from '@obc/shared';
 import { useNotifications } from '../notifications/useNotifications';
-import { markNotificationsRead } from '../api';
+import { markNotificationsRead } from '../notifications/markRead';
 import { formatDateTimeNZ } from '../lib/format';
 import { SubscriptionError } from '../components/SubscriptionError';
 
@@ -22,10 +23,13 @@ function deepLinkFor(notification: Notification): string | null {
 export function NotificationsScreen() {
   const { notifications, unreadCount, loading, error } = useNotifications();
   const navigate = useNavigate();
+  const [marking, setMarking] = useState(false);
 
-  async function handleOpen(notification: Notification) {
+  function handleOpen(notification: Notification) {
     if (!notification.read) {
-      await markNotificationsRead({ ids: [notification.id] }).catch(() => undefined);
+      // Fire and forget: the local write reaches the listener at once, and a
+      // failure (offline, rules) leaves the dot in place for next time.
+      void markNotificationsRead([notification.id]).catch(() => undefined);
     }
     const link = deepLinkFor(notification);
     if (link) navigate(link);
@@ -34,15 +38,27 @@ export function NotificationsScreen() {
   async function handleMarkAllRead() {
     const ids = notifications.filter((n) => !n.read).map((n) => n.id);
     if (ids.length === 0) return;
-    await markNotificationsRead({ ids }).catch(() => undefined);
+    setMarking(true);
+    try {
+      await markNotificationsRead(ids);
+    } catch {
+      // The dots stay; the member can try again.
+    } finally {
+      setMarking(false);
+    }
   }
 
   return (
     <div className="stack">
       <div className="card">
         <h1>Notifications</h1>
-        <button type="button" className="button button-secondary" disabled={unreadCount === 0} onClick={() => void handleMarkAllRead()}>
-          Mark all read
+        <button
+          type="button"
+          className="button button-secondary"
+          disabled={unreadCount === 0 || marking}
+          onClick={() => void handleMarkAllRead()}
+        >
+          {marking ? 'Marking…' : 'Mark all read'}
         </button>
       </div>
 

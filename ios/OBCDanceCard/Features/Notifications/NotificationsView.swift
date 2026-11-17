@@ -2,12 +2,14 @@
 //  NotificationsView.swift
 //  Notifications feed (plan §11) — the counterpart of
 //  `web/src/screens/NotificationsScreen.tsx`. Newest 50; unread ones are
-//  marked; tapping one marks it read via `markNotificationsRead` and follows
-//  its `data` deep link, resolved by the same `DeepLink.resolve` a tapped
-//  push uses so both routes agree.
+//  marked; tapping one marks it read via `Api.markNotificationsRead` and
+//  follows its `data` deep link, resolved by the same `DeepLink.resolve` a
+//  tapped push uses so both routes agree.
 //
-//  Marking read is the *one* client Firestore write the plan allows — and
-//  even that goes through a callable here (plan §3.3, §9.2).
+//  Marking read is the *one* client Firestore write the plan allows (§2),
+//  and since 2026-11-17 it is written directly (a batched `read`/`readAt`
+//  set, rules-enforced) rather than through the callable, so the dots clear
+//  at once instead of after a Cloud Run cold start.
 //
 
 import SwiftUI
@@ -92,8 +94,8 @@ struct NotificationsView: View {
     private func markAllRead() async {
         let ids = notifications.notifications.filter { !$0.read }.map(\.id)
         guard !ids.isEmpty else { return }
-        // Clear the dots and the tab badge immediately; the callable
-        // confirms in the background and the listener reconciles.
+        // Clear the dots and the tab badge immediately; the direct write
+        // lands in the listener a moment later and reconciles either way.
         notifications.markReadOptimistically(ids: ids)
         do {
             try await Api.markNotificationsRead(ids: ids)

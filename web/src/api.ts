@@ -49,7 +49,6 @@ import type {
   LeaveTeamResult,
   ListAuditLogInput,
   ListAuditLogResult,
-  MarkNotificationsReadInput,
   MarkPasswordSetInput,
   SetPasswordInput,
   PublishProgrammeInput,
@@ -122,7 +121,6 @@ export const claimLookingForPartner = callable<ClaimLookingForPartnerInput, Clai
   'claimLookingForPartner',
 );
 export const cancelEntry = callable<CancelEntryInput, CancelEntryResult>('cancelEntry');
-export const markNotificationsRead = callable<MarkNotificationsReadInput, { ok: true }>('markNotificationsRead');
 
 // iCal subscription feed (plan §21 B1)
 export const getIcalFeed = callable<GetIcalFeedInput, GetIcalFeedResult>('getIcalFeed');

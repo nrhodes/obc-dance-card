@@ -492,7 +492,7 @@ export const sendInvite = onCall(opts, async (req) => {
 | `disbandTeam` | captain | `{teamId}` | unlocked sessions remain | status `disbanded`; cancel all future team entries | if on-behalf | all members: `team_disbanded` |
 | `addTeamSessionSubstitute` / `clearTeamSessionSubstitute` | captain | `{teamId, sessionId, ref}` | some team member's entry for S is cancelled; sub free | `teamSessionOnly` entry (member) or note on team (visitor) | if on-behalf | sub (if member) |
 | `claimLookingForPartner` (Teams series) | captain | `{sessionId, posterMemberId}` | poster `lfp`; caller captains a team in this series with space; poster free on all series sessions | add poster to team for the whole series (I9) | if on-behalf | poster: `claimed` |
-| `markNotificationsRead` | member | `{ids[]}` | own | read=true | — | — |
+| `markNotificationsRead` | member | `{ids[]}` | own | read=true | — | Retained for older iOS builds; since 2026-11-17 the web and iOS clients write `read`/`readAt` directly (the §2 exception, rules-enforced) so the tap is instant instead of paying a cold start. |
 | `getIcalFeed` (§21 B1) | member | `{onBehalfOfMemberId?}` | — | reads only, never creates | if on-behalf | if on-behalf: `on_behalf_action` |
 | `createIcalFeed` (§21 B1) | member | `{onBehalfOfMemberId?}` | no existing token | mints token; writes `memberPrivate` + `icalTokens` in one transaction | if on-behalf | `security`; if on-behalf also: `on_behalf_action` |
 | `rotateIcalFeed` (§21 B1) | member | `{onBehalfOfMemberId?}` | token exists | new token; old `icalTokens` doc deleted, new one written, `memberPrivate` updated, in one transaction | if on-behalf | `security`; if on-behalf also: `on_behalf_action` |

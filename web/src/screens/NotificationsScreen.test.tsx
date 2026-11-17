@@ -9,7 +9,7 @@ import { NotificationsScreen } from './NotificationsScreen';
 const markNotificationsReadMock = vi.fn();
 const navigateMock = vi.fn();
 
-vi.mock('../api', () => ({
+vi.mock('../notifications/markRead', () => ({
   markNotificationsRead: (...args: unknown[]) => markNotificationsReadMock(...args),
 }));
 
@@ -87,7 +87,7 @@ describe('NotificationsScreen', () => {
     renderScreen();
 
     await user.click(screen.getByText('You have a new partner invite'));
-    expect(markNotificationsReadMock).toHaveBeenCalledWith({ ids: ['n1'] });
+    expect(markNotificationsReadMock).toHaveBeenCalledWith(['n1']);
     expect(navigateMock).toHaveBeenCalledWith('/session/2027/s1');
   });
 
@@ -116,6 +116,6 @@ describe('NotificationsScreen', () => {
     renderScreen();
 
     await user.click(screen.getByRole('button', { name: 'Mark all read' }));
-    expect(markNotificationsReadMock).toHaveBeenCalledWith({ ids: ['n1', 'n2'] });
+    expect(markNotificationsReadMock).toHaveBeenCalledWith(['n1', 'n2']);
   });
 });

@@ -429,12 +429,11 @@ final class NotificationsStore: ObservableObject {
         currentUid = nil
     }
 
-    /// Marks `ids` read locally, right now. The truth is written by the
-    /// `markNotificationsRead` callable, which can take a cold-start's worth
-    /// of seconds to land and come back through the listener; a tap on
-    /// "Mark all read" must not wait for that. The next snapshot overwrites
-    /// this with whatever the server says, so a failed callable is corrected
-    /// by calling `revertRead(ids:)` — or simply by the next real change.
+    /// Marks `ids` read locally, right now. The truth is written by
+    /// `Api.markNotificationsRead` — since 2026-11-17 a direct Firestore
+    /// batch (the design's one permitted client write) rather than the
+    /// callable, so it lands in the listener almost at once; this keeps the
+    /// UI honest in the gap and if the write fails (`revertRead(ids:)`).
     func markReadOptimistically(ids: [String]) {
         let set = Set(ids)
         notifications = notifications.map { n in
