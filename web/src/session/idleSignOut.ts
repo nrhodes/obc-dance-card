@@ -21,6 +21,7 @@ export interface ReadableStorage {
 
 export interface WritableStorage {
   setItem(key: string, value: string): void;
+  removeItem?(key: string): void;
 }
 
 /** The last-recorded activity time (epoch ms), or `null` if none is stored or storage is unavailable. */
@@ -49,6 +50,20 @@ export function writeLastActivity(storage: WritableStorage, now: number): void {
  * than 30 days before `now`. A brand-new device (nothing recorded yet)
  * never counts as idle-expired — there is nothing to expire.
  */
+/**
+ * Forget the recorded activity. Called when the idle rule has just signed
+ * someone out: leaving the stale stamp in place made every *later* sign-in
+ * bounce too (incident 2026-11-17 — a browser idle since September could not
+ * sign in at all, twice, until its site data was wiped).
+ */
+export function clearLastActivity(storage: WritableStorage): void {
+  try {
+    storage.removeItem?.(LAST_ACTIVITY_STORAGE_KEY);
+  } catch {
+    // Best effort.
+  }
+}
+
 export function isIdleExpired(lastActivity: number | null, now: number): boolean {
   if (lastActivity == null) return false;
   return now - lastActivity > IDLE_SIGN_OUT_MS;

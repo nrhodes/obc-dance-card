@@ -27,6 +27,7 @@ import { appCheckWorking, auth, db } from '../firebase';
 import { AuthContext, type AuthContextValue, type AuthStatus } from './AuthContext';
 import { classifyMemberDocError } from './memberDocError';
 import { classifyStall } from './connectivity';
+import { writeLastActivity } from '../session/idleSignOut';
 
 type MemberDocState = 'pending' | 'active' | 'notActive' | 'browser-not-verified' | 'unavailable' | 'blocked';
 
@@ -47,7 +48,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [memberDocState, setMemberDocState] = useState<MemberDocState>('pending');
 
   useEffect(() => {
+    let seenFirstState = false;
+    let previousUid: string | null = null;
     return onAuthStateChanged(auth, (u) => {
+      // A sign-in that happens in this page (null -> user, after the initial
+      // restored state) is activity. Stamp it before `AppShell` mounts and
+      // `useIdleSignOut` reads the stamp; otherwise a browser idle for 30+
+      // days signed the member out of the session they had just opened, on
+      // every attempt (incident 2026-11-17).
+      if (seenFirstState && u && previousUid === null && typeof localStorage !== 'undefined') {
+        writeLastActivity(localStorage, Date.now());
+      }
+      seenFirstState = true;
+      previousUid = u?.uid ?? null;
       setUser(u);
       setAuthReady(true);
       if (!u) {
