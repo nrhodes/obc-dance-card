@@ -1,0 +1,55 @@
+weekday,name,scoring,format,bestOfN,bestOfM,allowSubstitute,eligibilityNote,note,dates
+monday,Campbell Cave Pairs,Scr,Pairs,,,yes,,,2027-01-11;2027-01-18;2027-01-25;2027-02-01
+monday,Marion Taylor Pairs,Scr,Pairs,,,yes,,,2027-02-15;2027-02-22;2027-03-01
+monday,Dobson Pairs,Hcp,Pairs,,,yes,,,2027-03-08;2027-03-15;2027-03-22
+monday,George Spill Memorial Trophy Pairs,Scr,Pairs,,,yes,,,2027-04-05;2027-04-12;2027-04-19;2027-04-26
+monday,Summerset Mon Individual,Scr,Individual,4,5,yes,,,2027-05-03;2027-05-10;2027-05-17;2027-05-24;2027-05-31
+monday,Swiss Pairs,Scr,Pairs,,,yes,,,2027-06-14;2027-06-21;2027-06-28;2027-07-05
+monday,Rodney Pairs,Scr,Pairs,,,yes,,,2027-07-12;2027-07-19;2027-07-26;2027-08-02
+monday,Martyn Gillam Memorial Mon Champ Pairs,Scr,Pairs,5,6,no,,,2027-08-09;2027-08-16;2027-08-23;2027-08-30;2027-09-06;2027-09-13
+monday,Campbell Cave Teams,Scr,Teams,,,yes,"Max 1 open player, min 1 junior player",,2027-09-20;2027-09-27;2027-10-04
+monday,June Stuckey Trophy Pairs,Scr,Pairs,,,yes,,note Oct 25 is Holiday Bridge,2027-10-11;2027-10-18;2027-11-01
+monday,Winsome Bach Pairs,Hcp,Pairs,,,yes,,,2027-11-08;2027-11-15;2027-11-22;2027-11-29
+tuesday,February Pairs,Scr,Pairs,,,yes,,,2027-02-02;2027-02-09;2027-02-16;2027-02-23
+tuesday,March Pairs,Scr,Pairs,,,yes,,,2027-03-02;2027-03-09;2027-03-16;2027-03-23;2027-03-30
+tuesday,April Individual,Scr,Individual,,,yes,,,2027-04-06;2027-04-13;2027-04-20;2027-04-27
+tuesday,May Pairs,Scr,Pairs,,,yes,,,2027-05-04;2027-05-11;2027-05-18;2027-05-25
+tuesday,June Pairs,Scr,Pairs,,,yes,,,2027-06-01;2027-06-08;2027-06-15;2027-06-22;2027-06-29
+tuesday,July Individual,Scr,Individual,,,yes,,,2027-07-06;2027-07-13;2027-07-20;2027-07-27
+tuesday,August Pairs,Scr,Pairs,,,yes,,,2027-08-03;2027-08-10;2027-08-17;2027-08-24;2027-08-31
+tuesday,September Pairs,Scr,Pairs,,,yes,,,2027-09-07;2027-09-14;2027-09-21;2027-09-28
+tuesday,October Individual,Scr,Individual,,,yes,,,2027-10-05;2027-10-12;2027-10-19;2027-10-26
+tuesday,November Pairs,Scr,Pairs,,,yes,,,2027-11-02;2027-11-09;2027-11-16;2027-11-23;2027-11-30
+wednesday,GDR Builders Pairs,Hcp,Pairs,,,yes,,,2027-01-13;2027-01-20;2027-01-27;2027-02-03
+wednesday,Sybil Alderton Memorial,Scr,Pairs,,,yes,,,2027-02-10;2027-02-17;2027-02-24;2027-03-03
+wednesday,Summerset Wed Individual,Scr,Individual,4,5,yes,,,2027-03-10;2027-03-17;2027-03-24;2027-03-31;2027-04-07
+wednesday,Simson Junior Trophy Pairs,Hcp,Pairs,,,yes,,,2027-04-14;2027-04-21;2027-04-28;2027-05-05
+wednesday,Carol Harnish Pairs,Scr,Pairs,,,yes,,,2027-05-12;2027-05-19;2027-05-26;2027-06-02
+wednesday,Martyn Gillam Memorial Wed Champ Pairs,Scr,Pairs,5,6,no,,,2027-06-09;2027-06-16;2027-06-23;2027-06-30;2027-07-07;2027-07-14
+wednesday,Orewa Beach Pairs,Scr,Pairs,,,yes,,,2027-07-21;2027-07-28;2027-08-04;2027-08-11
+wednesday,Faye Holehan Pairs,Hcp,Pairs,,,yes,,,2027-08-18;2027-08-25;2027-09-01;2027-09-08
+wednesday,Thomson Pairs,Scr,Pairs,,,yes,,,2027-09-15;2027-09-22;2027-09-29;2027-10-06
+wednesday,West Hoe Pairs,Hcp,Pairs,,,yes,,,2027-10-13;2027-10-20;2027-10-27;2027-11-03
+wednesday,McClean Pairs,Scr,Pairs,,,yes,,,2027-11-10;2027-11-17;2027-11-24;2027-12-01
+thursday,Amandas Nutrimetics Pairs,Hcp,Pairs,,,yes,,,2027-01-14;2027-01-21;2027-01-28;2027-02-04
+thursday,Marion Sillick Pairs,Scr,Pairs,,,yes,,,2027-02-11;2027-02-18;2027-02-25;2027-03-04
+thursday,Thu Champ Pairs,Scr,Pairs,5,6,no,,,2027-03-11;2027-03-18;2027-03-25;2027-04-01;2027-04-08;2027-04-15
+thursday,Summerset Thu Individual,Scr,Individual,4,5,yes,,,2027-04-22;2027-04-29;2027-05-06;2027-05-13;2027-05-20
+thursday,Moana Pairs,Scr,Pairs,,,yes,,,2027-05-27;2027-06-03;2027-06-10;2027-06-17
+thursday,Matariki Pairs,Hcp,Pairs,,,yes,,,2027-06-24;2027-07-01;2027-07-08;2027-07-15
+thursday,Winkalotts Trophy Pairs,Scr,Pairs,,,yes,,,2027-07-22;2027-07-29;2027-08-05;2027-08-12
+thursday,Audika Pairs,Hcp,Pairs,,,yes,,,2027-08-19;2027-08-26;2027-09-02;2027-09-09
+thursday,Victor Eaves Pairs,Scr,Pairs,,,yes,,,2027-09-16;2027-09-23;2027-09-30;2027-10-07
+thursday,Eileen Sanger Pairs,Scr,Pairs,,,yes,,,2027-10-14;2027-10-21;2027-10-28;2027-11-04
+thursday,Ship & Anchor Pairs,Hcp,Pairs,,,yes,,,2027-11-11;2027-11-18;2027-11-25;2027-12-02
+friday,New Year Pairs,Scr,Pairs,,,yes,,,2027-01-15;2027-01-22;2027-01-29
+friday,PIE Funds Pairs,Hcp,Pairs,,,yes,,,2027-02-05;2027-02-12;2027-02-19;2027-02-26
+friday,Dickson Pairs,Scr,Pairs,,,yes,,,2027-03-05;2027-03-12;2027-03-19
+friday,Forrest Funerals Pairs,Scr,Pairs,,,yes,,,2027-04-02;2027-04-09;2027-04-16;2027-04-23
+friday,Campbell Cave Teams,Scr,Teams,,,yes,"Max 1 open player, min 1 junior player",,2027-04-30;2027-05-07;2027-05-14
+friday,North Harbour Painters Pairs,Scr,Pairs,,,yes,,,2027-05-21;2027-05-28;2027-06-04;2027-06-11;2027-06-18
+friday,Presidents Trophy,Scr,Pairs,,,yes,,,2027-07-02;2027-07-09;2027-07-16;2027-07-23
+friday,Summerset Fri Individual,Hcp,Individual,4,5,yes,,,2027-07-30;2027-08-06;2027-08-13;2027-08-20;2027-08-27
+friday,Friday Championship Pairs,Scr,Pairs,5,6,no,,,2027-09-03;2027-09-10;2027-09-17;2027-09-24;2027-10-01;2027-10-08
+friday,Olsen Well Well Well Pairs,Hcp,Pairs,,,yes,,,2027-10-15;2027-10-22;2027-10-29;2027-11-05
+friday,Connoisseur Kitchens Pairs,Scr,Pairs,,,yes,,,2027-11-12;2027-11-19;2027-11-26;2027-12-03
