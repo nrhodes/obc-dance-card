@@ -48,7 +48,7 @@ Severity: **High** = act before the next release · **Medium** = schedule soon �
 | M1 | Medium | Per-IP rate limits trust the first `x-forwarded-for` hop (client-controlled) — **fixed 2026-11-16** |
 | M2 | Medium | Login-code request timing still distinguishes known from unknown emails — **fixed 2026-11-16** |
 | M3 | Medium | App Check enforcement defaults to off; production value lives only in a gitignored file — **fixed 2026-11-16** |
-| L1 | Low | Targeted sign-in lockout via per-email limits (accepted trade-off, document it) |
+| L1 | Low | Targeted sign-in lockout via per-email limits — **accepted 2026-11-17, recorded in plan §8.1** |
 | L2 | Low | `notifications.readAt` is type-checked but not size-capped — **fixed 2026-11-16** |
 | L3 | Low | Admin direct reads of `memberPrivate` bypass the on-behalf audit and notification |
 | L4 | Low | Audit log has no retention job despite the stated two-year retention — **fixed 2026-11-16** |
@@ -222,6 +222,10 @@ in Secret Manager as now.
 ## Low
 
 ### L1. Targeted sign-in lockout via per-email limits
+
+> **Accepted 2026-11-17** by the club, as is (no per-code refinement for
+> now). Recorded in `docs/implementation-plan.md` §8.1, "Code-request
+> flooding" row, with the revisit condition.
 
 Three requests and ten verifies per address per 15 minutes mean anyone who
 knows a member's email can keep them from signing in by spamming the
