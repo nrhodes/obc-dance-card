@@ -1,0 +1,15 @@
+date,weekday,kind,title,partnerRequired
+2027-01-04,monday,holidayBridge,Holiday Bridge,yes
+2027-02-08,monday,holidayBridge,Waitangi Day - Holiday Bridge,yes
+2027-03-29,monday,holidayBridge,Easter Monday - Holiday Bridge,yes
+2027-06-07,monday,holidayBridge,King's Birthday - Holiday Bridge,yes
+2027-10-25,monday,holidayBridge,Labour Day - Holiday Bridge,yes
+2027-12-06,monday,holidayBridge,Holiday Bridge,yes
+2027-01-06,wednesday,holidayBridge,Holiday Bridge,yes
+2027-12-08,wednesday,holidayBridge,Holiday Bridge,yes
+2027-01-07,thursday,holidayBridge,Holiday Bridge,yes
+2027-12-09,thursday,holidayBridge,Holiday Bridge,yes
+2027-01-08,friday,holidayBridge,Holiday Bridge,yes
+2027-03-26,friday,noBridge,Good Friday - No Bridge,no
+2027-06-25,friday,holidayBridge,Matariki - Holiday Bridge,yes
+2027-12-10,friday,holidayBridge,Holiday Bridge,yes
