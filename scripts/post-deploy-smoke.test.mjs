@@ -1,6 +1,16 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { classifyCallableResponse, parseArgs } from './post-deploy-smoke.mjs';
+import { classifyCallableResponse, classifyVersionResponse, parseArgs } from './post-deploy-smoke.mjs';
+
+test('the functions version check passes only when the live build matches the deployed commit', () => {
+  const sha = 'a'.repeat(40);
+  assert.equal(classifyVersionResponse(200, JSON.stringify({ commit: sha, builtAt: 'x' }), sha).ok, true);
+  assert.equal(classifyVersionResponse(200, JSON.stringify({ commit: 'b'.repeat(40), builtAt: 'x' }), sha).ok, false);
+  assert.equal(classifyVersionResponse(200, JSON.stringify({ commit: 'unknown' }), sha).ok, false);
+  assert.equal(classifyVersionResponse(200, JSON.stringify({ commit: sha }), undefined).ok, true);
+  assert.equal(classifyVersionResponse(404, 'Not Found', sha).ok, false);
+  assert.equal(classifyVersionResponse(200, '<html>', sha).ok, false);
+});
 
 test('an App Check rejection proves the function is loaded', () => {
   const r = classifyCallableResponse(401, JSON.stringify({ error: { message: 'Unauthenticated', status: 'UNAUTHENTICATED' } }));

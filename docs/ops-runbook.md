@@ -89,10 +89,12 @@ the smoke test.
 
 `scripts/post-deploy-smoke.mjs` (also `npm run smoke -- --project <id>` from a
 laptop) checks that (1) the site root returns 200 with the right title, (2)
-`/version.json` reports the commit just deployed, and (3) one unauthenticated
+`/version.json` reports the commit just deployed, (3) one unauthenticated
 call to `requestLoginCode` gets the expected App Check rejection (HTTP 401
-`UNAUTHENTICATED`) — proof the functions bundle loaded. Any miss fails the
-job. **There is no automatic rollback.**
+`UNAUTHENTICATED`) — proof a functions bundle loaded — and (4) the functions'
+own public `version` endpoint reports the same commit (stamped into the
+bundle by `scripts/bundle.mjs`), proof the *new* bundle is the one serving.
+Any miss fails the job. **There is no automatic rollback.**
 
 ### Rolling back
 

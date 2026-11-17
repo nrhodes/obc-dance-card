@@ -56,6 +56,28 @@ export function parseArgs(argv) {
  * @param {string} bodyText
  * @returns {{ ok: boolean, detail: string }}
  */
+/**
+ * The functions' own `version` endpoint (src/version.ts). Mirrors the
+ * hosting `/version.json` check: a 200 with a `commit` that matches the
+ * deployed SHA proves the new functions bundle is the one serving, not just
+ * that *a* function answered.
+ */
+export function classifyVersionResponse(status, bodyText, expectSha) {
+  if (status === 404) return { ok: false, detail: 'HTTP 404 — the version endpoint is not deployed' };
+  if (status !== 200) return { ok: false, detail: `HTTP ${status} from the version endpoint` };
+  let commit;
+  try {
+    commit = JSON.parse(bodyText).commit;
+  } catch {
+    return { ok: false, detail: 'version endpoint did not return JSON' };
+  }
+  if (typeof commit !== 'string') return { ok: false, detail: 'version endpoint has no commit field' };
+  if (commit === 'unknown') return { ok: false, detail: 'functions report build "unknown" — the bundle was not stamped' };
+  if (!expectSha) return { ok: true, detail: `functions build ${commit.slice(0, 7)} (no --expect-sha given)` };
+  if (commit !== expectSha) return { ok: false, detail: `functions build ${commit.slice(0, 7)}, expected ${expectSha.slice(0, 7)}` };
+  return { ok: true, detail: `functions build ${commit.slice(0, 7)} matches` };
+}
+
 export function classifyCallableResponse(status, bodyText) {
   let body;
   try {
@@ -136,7 +158,13 @@ async function main() {
     return classifyCallableResponse(status, text);
   });
 
-  if (hostingOk && versionOk && functionsOk) {
+  const functionsVersionOk = await poll('functions version', deadline, async () => {
+    const url = `https://${args.region}-${args.project}.cloudfunctions.net/version${cacheBust}`;
+    const { status, text } = await fetchText(url);
+    return classifyVersionResponse(status, text, args.expectSha);
+  });
+
+  if (hostingOk && versionOk && functionsOk && functionsVersionOk) {
     console.log('Smoke test passed.');
     return;
   }
