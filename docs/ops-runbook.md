@@ -89,7 +89,9 @@ the smoke test.
 
 `scripts/post-deploy-smoke.mjs` (also `npm run smoke -- --project <id>` from a
 laptop) checks that (1) the site root returns 200 with the right title, (2)
-`/version.json` reports the commit just deployed, (3) one unauthenticated
+`/version.json` reports the commit just deployed (and the shell is served
+`Cache-Control: no-cache` — a cacheable shell let a browser keep running a
+replaced build for an hour, 2026-11-17), (3) one unauthenticated
 call to `requestLoginCode` gets the expected App Check rejection (HTTP 401
 `UNAUTHENTICATED`) — proof a functions bundle loaded — and (4) the functions'
 own public `version` endpoint reports the same commit (stamped into the

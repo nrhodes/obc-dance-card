@@ -134,3 +134,25 @@ describe('hosting isolation headers (security review L5)', () => {
     expect(value('Strict-Transport-Security')).toMatch(/max-age=\d+; includeSubDomains/);
   });
 });
+
+describe('hosting cache headers (incident 2026-11-17: a stale app shell outlived a deploy)', () => {
+  const config = JSON.parse(readFileSync(firebaseJsonPath, 'utf8')) as HostingConfig;
+  const rules = config.hosting.headers;
+  const catchAll = rules.find((h) => h.source === '**');
+  const assets = rules.find((h) => h.source === '/assets/**');
+
+  it('the shell, sw.js and manifest always revalidate', () => {
+    const cc = catchAll?.headers.find((h) => h.key === 'Cache-Control');
+    expect(cc?.value).toBe('no-cache');
+  });
+
+  it('content-hashed assets are immutable for a year', () => {
+    const cc = assets?.headers.find((h) => h.key === 'Cache-Control');
+    expect(cc?.value).toBe('public, max-age=31536000, immutable');
+  });
+
+  it('the assets rule comes after the catch-all, so its Cache-Control wins', () => {
+    expect(rules.indexOf(assets!)).toBeGreaterThan(rules.indexOf(catchAll!));
+  });
+});
+

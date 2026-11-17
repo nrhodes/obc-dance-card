@@ -1,6 +1,14 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { classifyCallableResponse, classifyVersionResponse, parseArgs } from './post-deploy-smoke.mjs';
+import { classifyCallableResponse, classifyShellCacheControl, classifyVersionResponse, parseArgs } from './post-deploy-smoke.mjs';
+
+test('the app shell must not be cacheable', () => {
+  assert.equal(classifyShellCacheControl('no-cache').ok, true);
+  assert.equal(classifyShellCacheControl('no-store').ok, true);
+  assert.equal(classifyShellCacheControl('max-age=3600').ok, false);
+  assert.equal(classifyShellCacheControl(undefined).ok, false);
+});
+
 
 test('the functions version check passes only when the live build matches the deployed commit', () => {
   const sha = 'a'.repeat(40);
