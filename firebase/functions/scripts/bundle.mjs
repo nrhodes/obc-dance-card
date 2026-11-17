@@ -9,6 +9,7 @@
  * Firebase CLI and emulator pick them up as usual.
  */
 import { build } from 'esbuild';
+import { execFileSync } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -18,6 +19,22 @@ const outDir = resolve(functionsDir, '..', 'functions-deploy');
 const pkg = JSON.parse(readFileSync(join(functionsDir, 'package.json'), 'utf8'));
 
 const RUNTIME_DEPS = ['firebase-admin', 'firebase-functions', 'nodemailer', 'papaparse'];
+
+// Stamp the build so `version` (src/version.ts) can report it and the
+// post-deploy smoke test can confirm the new bundle is the one serving.
+// `git rev-parse HEAD` first — in the deploy job that is the checked-out
+// `deploy_ref`, whereas GITHUB_SHA is the dispatched main head.
+function resolveCommit() {
+  try {
+    return execFileSync('git', ['rev-parse', 'HEAD'], { cwd: functionsDir, stdio: ['ignore', 'pipe', 'ignore'] })
+      .toString()
+      .trim();
+  } catch {
+    return process.env.GITHUB_SHA || 'unknown';
+  }
+}
+const buildCommit = resolveCommit();
+const buildAt = new Date().toISOString();
 const external = RUNTIME_DEPS.flatMap((d) => [d, `${d}/*`]);
 
 rmSync(outDir, { recursive: true, force: true });
@@ -32,6 +49,10 @@ await build({
   format: 'esm',
   sourcemap: true,
   external,
+  define: {
+    __OBC_BUILD_COMMIT__: JSON.stringify(buildCommit),
+    __OBC_BUILD_AT__: JSON.stringify(buildAt),
+  },
   logLevel: 'warning',
   banner: {
     // Some CommonJS deps reached through the bundle expect `require`.
@@ -65,4 +86,4 @@ for (const name of readdirSync(functionsDir)) {
   }
 }
 if (!existsSync(join(outDir, 'lib', 'index.js'))) throw new Error('bundle missing');
-console.log(`bundled -> ${outDir} (deps: ${RUNTIME_DEPS.join(', ')})`);
+console.log(`bundled -> ${outDir} (deps: ${RUNTIME_DEPS.join(', ')}; build ${buildCommit.slice(0, 7)})`);

@@ -1,5 +1,6 @@
 /**
- * `icalFeed` — the app's first unauthenticated read endpoint (plan §21 B1).
+ * `icalFeed` — the app's first unauthenticated read endpoint (plan §21 B1;
+ * the only other one is `version.ts`, which carries no member data).
  * Serves one member's bridge schedule as an RFC 5545 `text/calendar` feed so
  * Apple/Google Calendar can subscribe to it. Calendar clients can do neither
  * Firebase Auth nor App Check, so this is deliberately `onRequest`, not

@@ -73,3 +73,7 @@ export { verifyPairingConsistency, runPairingSweepCallable as runPairingSweep } 
 // unauthenticated HTTP endpoint (onRequest, not onCall); see its module doc.
 export { getIcalFeed, createIcalFeed, rotateIcalFeed, removeIcalFeed } from './ical/tokens.js';
 export { icalFeed } from './ical/feed.js';
+
+// Ops — which build is serving? Public, read-only, for the post-deploy smoke
+// test (plan §21 B12 item 9); see `version.ts` for why it is not a callable.
+export { version } from './version.js';
