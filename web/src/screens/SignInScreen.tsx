@@ -13,6 +13,7 @@ import { signInWithCustomToken, signInWithEmailAndPassword } from 'firebase/auth
 import { auth, toAppError } from '../firebase';
 import { EmailCodeStep } from '../auth/EmailCodeStep';
 import { mapPasswordSignInError } from '../auth/errors';
+import { resetSiteDataAndReload } from '../auth/resetSiteData';
 
 type Step = 'chooser' | 'code';
 
@@ -23,6 +24,7 @@ export function SignInScreen() {
   const [password, setPassword] = useState('');
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [passwordSubmitting, setPasswordSubmitting] = useState(false);
+  const [resetting, setResetting] = useState(false);
 
   const emailValid = /^\S+@\S+\.\S+$/.test(email.trim());
 
@@ -130,6 +132,22 @@ export function SignInScreen() {
       )}
       <p className="muted">
         <Link to="/privacy">Privacy</Link>
+      </p>
+      <p className="muted">
+        Having trouble signing in?{' '}
+        <button
+          type="button"
+          className="button-link"
+          disabled={resetting}
+          onClick={() => {
+            setResetting(true);
+            void resetSiteDataAndReload();
+          }}
+        >
+          {resetting ? 'Resetting…' : 'Reset this browser'}
+        </button>{' '}
+        clears what this site has saved here (nothing else). If you use an ad or privacy blocker, make sure it allows
+        this site.
       </p>
     </div>
   );

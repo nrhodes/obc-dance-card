@@ -122,6 +122,41 @@ describe('SignInScreen — email -> code step -> verify -> signed in', () => {
     expect(alert.textContent).toMatch(/Too many attempts/);
   });
 
+  it('does not claim an email went out when the first send is refused (rate limit)', async () => {
+    requestLoginCodeMock.mockRejectedValue({ code: 'resource-exhausted', message: 'x' });
+    const user = userEvent.setup();
+    render(<SignInScreen />, { wrapper: RouterWrapper });
+
+    await user.type(screen.getByLabelText('Email address'), 'member@example.org');
+    await user.click(screen.getByRole('button', { name: 'Email me a code' }));
+
+    await screen.findByRole('alert');
+    expect(screen.queryByText(/We've emailed a 6-digit code/)).toBeNull();
+    expect(screen.getByText(/We couldn't send a code to member@example.org/)).toBeTruthy();
+  });
+
+  it('shows an error when the code verifies but redeeming the token fails, instead of sitting silent', async () => {
+    requestLoginCodeMock.mockResolvedValue({ ok: true });
+    verifyLoginCodeMock.mockResolvedValue({ token: 'custom-token' });
+    signInWithCustomTokenMock.mockRejectedValue(new Error('auth/network-request-failed'));
+    const user = userEvent.setup();
+    render(<SignInScreen />, { wrapper: RouterWrapper });
+
+    await user.type(screen.getByLabelText('Email address'), 'member@example.org');
+    await user.click(screen.getByRole('button', { name: 'Email me a code' }));
+    await user.type(await screen.findByLabelText('6-digit code'), '123456');
+    await user.click(screen.getByRole('button', { name: 'Sign in' }));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toMatch(/signing in didn’t finish/);
+    expect(alert.textContent).not.toMatch(/auth\/network-request-failed/);
+  });
+
+  it('offers a reset of this browser from the sign-in screen', () => {
+    render(<SignInScreen />, { wrapper: RouterWrapper });
+    expect(screen.getByRole('button', { name: 'Reset this browser' })).toBeTruthy();
+  });
+
   it('disables resend immediately after sending, and re-enables it after the cooldown', async () => {
     // Fake timers are engaged for the whole interaction (including the
     // click that triggers the countdown's `setInterval`) — see

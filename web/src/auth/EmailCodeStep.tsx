@@ -30,6 +30,10 @@ export function EmailCodeStep({
 }: EmailCodeStepProps) {
   const { state, sendCode, verify } = useEmailCodeFlow();
   const [code, setCode] = useState('');
+  // Set when the code verified but what follows (redeeming the token with
+  // Firebase Auth, in the sign-in flow) threw. Without this the rejection
+  // was unhandled and the screen just sat there (incident 2026-11-17).
+  const [afterVerifyError, setAfterVerifyError] = useState<string | null>(null);
   // Lazy initializer: `useState(Date.now())` would re-evaluate Date.now() on
   // every render (react-hooks 7 `purity` rule catch on the 5.2->7.1 upgrade).
   const [now, setNow] = useState(() => Date.now());
@@ -54,11 +58,29 @@ export function EmailCodeStep({
       : 0;
 
   async function handleVerify() {
+    setAfterVerifyError(null);
     const token = await verify(email, code);
     if (token) {
-      await onVerified(token);
+      try {
+        await onVerified(token);
+      } catch {
+        setAfterVerifyError(
+          'Your code was right, but signing in didn’t finish. If you use an ad or privacy blocker, allow this site and try again.',
+        );
+      }
     }
   }
+
+  // Never claim an email went out before the request succeeded: the first
+  // send can be refused (rate limit, outage) and the old unconditional
+  // "We've emailed…" line then lied next to the error (incident 2026-11-17).
+  const sentAtLeastOnce = state.phase === 'sent' || state.phase === 'verifying' || state.resendAvailableAt !== null;
+  const intro = sentAtLeastOnce
+    ? (introText ?? `We've emailed a 6-digit code to ${email}. It's valid for 10 minutes.`)
+    : state.phase === 'sending'
+      ? `Sending a 6-digit code to ${email}…`
+      : `We couldn't send a code to ${email}.`;
+  const error = state.error ?? afterVerifyError;
 
   function handleCodeChange(value: string) {
     // Accept paste of a 6-digit code (may include spaces).
@@ -70,12 +92,10 @@ export function EmailCodeStep({
 
   return (
     <div className="stack">
-      <p>
-        {introText ?? `We've emailed a 6-digit code to ${email}. It's valid for 10 minutes.`}
-      </p>
-      {state.error && (
+      <p>{intro}</p>
+      {error && (
         <div className="alert alert-error" role="alert">
-          {state.error}
+          {error}
         </div>
       )}
       <div className="field">
