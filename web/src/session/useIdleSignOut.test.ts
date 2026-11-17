@@ -39,6 +39,13 @@ describe('useIdleSignOut', () => {
     expect(signOut).toHaveBeenCalledTimes(1);
   });
 
+  it('forgets the stale stamp when it signs out, so the next sign-in is not poisoned', () => {
+    const store = stubLocalStorage();
+    store.set(LAST_ACTIVITY_STORAGE_KEY, String(Date.now() - IDLE_SIGN_OUT_MS - 1));
+    renderHook(() => useIdleSignOut(vi.fn()));
+    expect(store.has(LAST_ACTIVITY_STORAGE_KEY)).toBe(false);
+  });
+
   it('does not sign out and records activity when recent activity exists', () => {
     const store = stubLocalStorage();
     store.set(LAST_ACTIVITY_STORAGE_KEY, String(Date.now() - 1000));

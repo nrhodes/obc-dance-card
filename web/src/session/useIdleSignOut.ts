@@ -4,13 +4,17 @@
  * Mounted once from `AppShell` (i.e. only while a member is signed in).
  *
  * On mount: if the last recorded activity was more than 30 days ago, signs
- * out immediately ("on next load", per the task brief). Otherwise, records
+ * out immediately ("on next load", per the task brief) and forgets the
+ * stamp, so the next sign-in starts clean. A sign-in made in this page is
+ * itself activity: `AuthProvider` stamps it before the shell mounts, so a
+ * member returning to a long-idle browser is never signed out of the
+ * session they just opened (incident 2026-11-17). Otherwise, records
  * activity now and on every subsequent pointer/keyboard interaction or tab
  * becoming visible again — throttled to at most once a minute so this never
  * spams `localStorage` on every keystroke.
  */
 import { useEffect, useRef } from 'react';
-import { isIdleExpired, readLastActivity, writeLastActivity } from './idleSignOut';
+import { clearLastActivity, isIdleExpired, readLastActivity, writeLastActivity } from './idleSignOut';
 
 const THROTTLE_MS = 60_000;
 
@@ -28,6 +32,7 @@ export function useIdleSignOut(signOut: () => void | Promise<void>): void {
 
     const last = readLastActivity(localStorage);
     if (isIdleExpired(last, Date.now())) {
+      clearLastActivity(localStorage);
       void signOutRef.current();
       return;
     }
