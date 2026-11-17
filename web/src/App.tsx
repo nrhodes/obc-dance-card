@@ -23,11 +23,13 @@ import { PrivacyScreen } from './screens/PrivacyScreen';
 import { HelpScreen } from './screens/HelpScreen';
 import { AdminRoutes } from './AdminRoutes';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { PwaUpdater } from './pwa/PwaUpdater';
 
 export function App() {
   return (
     <ErrorBoundary>
       <AuthProvider>
+        <PwaUpdater />
         <Routes>
           <Route
             path="/signin"

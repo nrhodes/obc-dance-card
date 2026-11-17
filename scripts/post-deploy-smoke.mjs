@@ -95,7 +95,19 @@ export function classifyCallableResponse(status, bodyText) {
 
 async function fetchText(url, init = {}) {
   const res = await fetch(url, { ...init, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS), redirect: 'follow' });
-  return { status: res.status, text: await res.text() };
+  return { status: res.status, text: await res.text(), headers: res.headers };
+}
+
+/**
+ * The app shell (and sw.js, manifest) must always revalidate: with a cached
+ * shell a browser can keep running a build the deploy replaced, for as long
+ * as the cache lifetime (incident 2026-11-17: an hour). Hosting's `**` rule
+ * sets `no-cache`; this check fails the deploy if that regresses.
+ */
+export function classifyShellCacheControl(value) {
+  const v = (value ?? '').toLowerCase();
+  if (/\bno-cache\b/.test(v) || /\bno-store\b/.test(v) || /\bmax-age=0\b/.test(v)) return { ok: true, detail: `Cache-Control: ${value}` };
+  return { ok: false, detail: `shell is cacheable (Cache-Control: ${value ?? 'missing'}) — a stale build could outlive this deploy` };
 }
 
 /** Retries `check` until it returns `{ ok: true }` or the deadline passes. */
@@ -127,10 +139,12 @@ async function main() {
   console.log(`Smoke test: ${args.baseUrl} (project ${args.project})`);
 
   const hostingOk = await poll('hosting serves the app', deadline, async () => {
-    const { status, text } = await fetchText(`${args.baseUrl}/${cacheBust}`);
+    const { status, text, headers } = await fetchText(`${args.baseUrl}/${cacheBust}`);
     if (status !== 200) return { ok: false, detail: `HTTP ${status}` };
     if (!text.includes(`<title>${EXPECTED_TITLE}</title>`)) return { ok: false, detail: 'HTTP 200 but the expected <title> is missing' };
-    return { ok: true, detail: 'HTTP 200 with the expected <title>' };
+    const cache = classifyShellCacheControl(headers.get('cache-control'));
+    if (!cache.ok) return cache;
+    return { ok: true, detail: `HTTP 200 with the expected <title>; ${cache.detail}` };
   });
 
   const versionOk = await poll('deployed version', deadline, async () => {
