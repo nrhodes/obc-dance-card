@@ -1458,6 +1458,19 @@ list here.
 > `roles/secretmanager.secretAccessor` on `SMTP_USER` for the functions runtime
 > account, granted by hand because the deployer may only *view* secrets — any
 > future new secret needs the same manual grant before its first deploy.
+>
+> **Amendment (2026-11-17, run 43991065586).** The first deploy that
+> *created* a public HTTP function (`version`, #126) failed the CLI's
+> pre-flight: creating a new HTTPS function requires
+> `cloudfunctions.functions.setIamPolicy` (to grant `allUsers` the invoker
+> role on it), which `roles/cloudfunctions.developer` lacks. Updating an
+> existing function never needs it, which is why every earlier deploy
+> passed. Per the procedure above, the deployer gets exactly the role the
+> failure names, `roles/cloudfunctions.admin`, which also carries the Cloud
+> Run `run.services.setIamPolicy` the gen2 invoker grant actually uses, and
+> which supersedes `roles/cloudfunctions.developer` (remove that binding).
+> The delta is IAM on functions and Eventarc resources; the account still
+> has no project-level IAM, owner or editor.
 
 **Work items (in order).**
 1. Security review **H1** lands first — the deploy job `needs:` a green
