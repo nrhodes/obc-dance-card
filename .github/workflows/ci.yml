@@ -169,37 +169,37 @@ jobs:
       # between a normal PR run and an on-demand one. Same posture as
       # `e2e-test`: deterministic checks always, full-stack on request.
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
-        if: github.event_name == 'workflow_dispatch'
+        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
         with:
           node-version: 22
           cache: npm
 
       - name: Set up Java (Firestore emulator)
-        if: github.event_name == 'workflow_dispatch'
+        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
         uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6
         with:
           distribution: temurin
           java-version: 21
 
       - name: Install and build backend
-        if: github.event_name == 'workflow_dispatch'
+        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
         run: |
           npm ci
           npm run build
 
       - name: Write local-dev secrets for the emulator
-        if: github.event_name == 'workflow_dispatch'
+        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
         run: |
           echo "LOGIN_CODE_PEPPER=ci-dev-pepper" > firebase/functions/.secret.local
           echo "SMTP_PASS=ci-dev-smtp-pass" >> firebase/functions/.secret.local
           echo "SMTP_USER=ci-dev-smtp-user" >> firebase/functions/.secret.local
 
       - name: Start emulators
-        if: github.event_name == 'workflow_dispatch'
+        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
         run: nohup npm run emulators > firebase-emulators.out 2>&1 &
 
       - name: Wait for emulators
-        if: github.event_name == 'workflow_dispatch'
+        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
         run: |
           for i in $(seq 1 90); do
             if grep -q "All emulators ready" firebase-emulators.out 2>/dev/null; then exit 0; fi
@@ -210,7 +210,7 @@ jobs:
           exit 1
 
       - name: Seed emulator data
-        if: github.event_name == 'workflow_dispatch'
+        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
         env:
           FIRESTORE_EMULATOR_HOST: localhost:8080
           FIREBASE_AUTH_EMULATOR_HOST: localhost:9099
@@ -347,9 +347,12 @@ jobs:
     #
     # STAGED ROLLOUT (B12 item 8): for now this runs on manual dispatch only
     # (Actions → CI → Run workflow → pick the project). There is no dev
-    # project, so the dry run is a dispatched production deploy. Once that has
-    # worked, add `|| (github.event_name == 'push' && github.ref == 'refs/heads/main')`
-    # to the `if:` below and merges to main deploy themselves.
+    # project, so the dry run was a dispatched production deploy. Five of
+    # those were clean on 2026-11-17 (smoke test incl. the functions-version
+    # check), so merges to main now deploy themselves (plan §21 B12 item 8);
+    # dispatch remains for rollback (`deploy_ref`) and for re-running. A
+    # merge-triggered run is gated exactly like a dispatched one: the same
+    # five jobs, with the iOS emulator steps widened above to run on main.
     #
     # Credentials: Workload Identity Federation — GitHub's OIDC token is
     # exchanged for a ~1 h Google token; there is no key or secret anywhere.
@@ -358,8 +361,9 @@ jobs:
     # required-reviewer rule so a deploy waits for a click.
     needs: [build-test, secret-scan, emulator-tests, ios-build-test, e2e-test]
     if: >-
-      github.event_name == 'workflow_dispatch' && inputs.deploy_project != 'none' &&
-      (inputs.deploy_project != 'obc-dance-card' || github.ref == 'refs/heads/main')
+      (github.event_name == 'workflow_dispatch' && inputs.deploy_project != 'none' &&
+       (inputs.deploy_project != 'obc-dance-card' || github.ref == 'refs/heads/main'))
+      || (github.event_name == 'push' && github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
     environment: production
     concurrency:

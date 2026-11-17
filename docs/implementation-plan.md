@@ -1382,7 +1382,7 @@ entry for that session. Open points to settle before building:
 - Also notify when the request is withdrawn or filled? (Probably not in v1.)
 - Still no extra *permissions* for stewards — this is notification-only.
 
-### B12. Continuous deployment from `main` (GitHub Actions + Workload Identity Federation) — planned 2026-11-17; first deploy from CI 2026-11-17 (manual dispatch; deploy-on-merge not yet switched on)
+### B12. Continuous deployment from `main` (GitHub Actions + Workload Identity Federation) — planned 2026-11-17; first deploy from CI 2026-11-17; deploy-on-merge switched on 2026-11-17 (the `production` environment's reviewer click still gates each deploy)
 
 **Intent.** Today nothing deploys automatically: `npm run deploy` runs the
 Firebase CLI from whichever laptop someone is sitting at, authenticated as that
@@ -1500,6 +1500,11 @@ list here.
    how to rotate nothing (there is no key).
 8. Dry run: dispatch to `obc-dance-card-dev` from a branch; fix roles; then a
    no-op deploy to prod from `main`; then switch the push trigger on.
+   **Done 2026-11-17:** there is no dev project, so the dry runs were five
+   dispatched production deploys that day, each verified by the smoke test
+   (item 9, including the functions-version check). The push trigger is on;
+   the iOS job's emulator steps were widened to run on pushes to `main` too,
+   so a merge-triggered deploy is gated exactly as a dispatched one was.
 9. **Post-deploy smoke test** (added 2026-11-17 — the CLI exiting 0 only
    means the upload was accepted; it does not prove the site serves or the
    functions bundle starts, e.g. a missing runtime dependency). A final step
