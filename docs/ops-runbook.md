@@ -116,8 +116,18 @@ normally grants that during a deploy, but the deployer may only *view*
 secrets — **repeat this for any new secret before its first deploy**);
 `roles/iam.serviceAccountUser` for the deployer on
 `obc-dance-card@appspot.gserviceaccount.com`; and project-level
-`roles/cloudscheduler.admin` for the deployer. The full verified role list is
+`roles/cloudscheduler.admin` for the deployer. A fifth followed on
+2026-11-17: `roles/cloudfunctions.admin` in place of
+`roles/cloudfunctions.developer`, needed the first time a deploy *creates* a
+public HTTP function (plan §21 B12 amendment). The full verified role list is
 in plan §21 B12.
+
+If a dispatched deploy fails at **Deploy functions** with *"Missing required
+permission … cloudfunctions.functions.setIamPolicy … to deploy new HTTPS
+functions"*, nothing was deployed (the CLI checks before uploading); the
+deployer's role list has drifted from the plan — compare with
+`gcloud projects get-iam-policy PROJECT --flatten='bindings[].members'
+--filter='bindings.members:obc-deployer@' --format='value(bindings.role)'`.
 
 **A dispatched run scans the whole git history for secrets** (a push or PR
 scans only its new commits), so `.gitleaks.toml` allowlists the public web
