@@ -28,7 +28,7 @@
     "smoke": "node scripts/post-deploy-smoke.mjs"
   },
   "devDependencies": {
-    "eslint": "^10.14.0",
+    "eslint": "^10.15.0",
     "firebase-tools": "^15.36.0",
     "prettier": "^3.10.1",
     "typescript": "^5.7.2",
