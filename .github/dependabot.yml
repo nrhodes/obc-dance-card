@@ -7,6 +7,16 @@ updates:
     schedule:
       interval: weekly
     groups:
+      # The Firebase web SDK and its rules-testing harness pin each other's
+      # major (`@firebase/rules-unit-testing` 5 ↔ `firebase` 12, 6 ↔ 13).
+      # Bumped separately, each PR installs a second, mismatched copy of
+      # `firebase/firestore` and every rules test fails with "Expected first
+      # argument to doc() to be … FirebaseFirestore" (PRs #121/#122,
+      # 2026-11-17). Always bump them together, majors included.
+      firebase-web-sdk:
+        patterns:
+          - firebase
+          - "@firebase/*"
       npm-minor-patch:
         update-types:
           - minor
