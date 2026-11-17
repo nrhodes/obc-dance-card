@@ -144,7 +144,7 @@ docs lack it until `firebase/scripts/backfill-member-emails.ts` runs against the
 UI must tolerate absence. No tokens here — device tokens stay on `memberPrivate`
 (owner + admin only, §5.2).
 
-### 5.2 `memberPrivate/{memberId}` — owner + admin only
+### 5.2 `memberPrivate/{memberId}` — owner only from clients (admins via callables)
 
 ```
 id, emailLower (unique, login identity), notificationPrefs {
@@ -342,7 +342,7 @@ re-validates inside its transaction before commit; the nightly sweep runs both.
 | Asset | Threat | Controls |
 |---|---|---|
 | Member roster (names, phones) | Unauthenticated read; scraping by ex-member | Rules require active member (checked via `get()` of caller's member doc — no stale claims); deactivation revokes refresh tokens; App Check |
-| Device tokens | Read by other members | Kept on `memberPrivate` only; owner/admin read |
+| Device tokens | Read by other members | Kept on `memberPrivate` only; owner-only client read (admins only through audited callables — security review L3, 2026-11-17) |
 | Member emails | Scraping by ex-member / non-admin misuse | Amended 2026-09-05 (§2 Visibility, Neil's sign-off): denormalised onto `members` and readable by any active member — same control as name/grade/phone (active-member gating via rules `get()`, revoked on deactivation, App Check). Residual risk: an ex-member who scraped the directory before deactivation retains emails as well as phones; mitigation is unchanged (active-member gating + refresh-token revocation on deactivation), not a new exposure this amendment introduces beyond what already applied to phones. |
 | Visitor PII | Read by non-sponsors | `visitors` readable by sponsor + admin only; only `displayName` denormalised onto entries |
 | Accounts | Login-code brute force | CSPRNG 6-digit; HMAC-SHA256 with secret pepper; 10-min TTL; 5 attempts then invalidated; single use; new request invalidates old; constant-time compare |
@@ -545,7 +545,7 @@ helpers:
 
 members/{id}             read:  isAdmin() || (isActiveMember() && resource.data.cohort == callerCohort() && (resource.data.active == true || isSelf(id)))
                          write: false
-memberPrivate/{id}       read:  isSelf(id) && isActiveMember() || isAdmin()
+memberPrivate/{id}       read:  isSelf(id) && isActiveMember()        // admins: callables only (L3, 2026-11-17)
                          write: false
 visitors/{id}            read:  isAdmin() || (isActiveMember() && resource.data.createdByMemberId == request.auth.uid)
                          write: false

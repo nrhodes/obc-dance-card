@@ -64,8 +64,8 @@ describe('memberPrivate collection rules', () => {
     await assertFails(getDoc(doc(clientAs(env, 'bob'), 'memberPrivate/alice')));
   });
 
-  it('admin: can read any member\'s private doc', async () => {
-    await assertSucceeds(getDoc(doc(clientAs(env, 'admin1'), 'memberPrivate/alice')));
+  it('admin: cannot read another member\'s private doc from the client — callables only (security review L3)', async () => {
+    await assertFails(getDoc(doc(clientAs(env, 'admin1'), 'memberPrivate/alice')));
   });
 
   it('nobody may write memberPrivate from the client, even their own', async () => {

@@ -66,7 +66,12 @@ service cloud.firestore {
     /* ------------------------ memberPrivate -------------------------- */
 
     match /memberPrivate/{id} {
-      allow read: if (isSelf(id) && isActiveMember()) || isAdmin();
+      // Owner only. Admins reach a member's private data (email, device
+      // tokens, the plaintext iCal token) through callables such as
+      // `getIcalFeed({ onBehalfOfMemberId })`, which write an audit row and
+      // notify the member; a direct client read did neither, and no admin
+      // screen used one (security review 2026-11-16 L3, fixed 2026-11-17).
+      allow read: if isSelf(id) && isActiveMember();
       allow write: if false;
     }
 
