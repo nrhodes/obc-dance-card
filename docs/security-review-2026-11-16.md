@@ -50,7 +50,7 @@ Severity: **High** = act before the next release · **Medium** = schedule soon �
 | M3 | Medium | App Check enforcement defaults to off; production value lives only in a gitignored file — **fixed 2026-11-16** |
 | L1 | Low | Targeted sign-in lockout via per-email limits — **accepted 2026-11-17, recorded in plan §8.1** |
 | L2 | Low | `notifications.readAt` is type-checked but not size-capped — **fixed 2026-11-16** |
-| L3 | Low | Admin direct reads of `memberPrivate` bypass the on-behalf audit and notification |
+| L3 | Low | Admin direct reads of `memberPrivate` bypass the on-behalf audit and notification — **fixed (PR open)** |
 | L4 | Low | Audit log has no retention job despite the stated two-year retention — **fixed 2026-11-16** |
 | L5 | Low | CSP `connect-src` wildcards; HSTS without `preload`; no COOP — **connect-src pinned and COOP added 2026-11-16; preload deliberately not** |
 | L6 | Low | Branch protection requires 3 of 5 CI jobs; e2e not required; admins exempt — **done 2026-11-16** |
@@ -246,6 +246,11 @@ can store up to the 1 MB document limit in their own notifications. Add
 `request.resource.data.readAt.size() <= 40`.
 
 ### L3. Admin direct reads of `memberPrivate` bypass the on-behalf audit
+
+> **Fixed 2026-11-17.** No admin screen on web or iOS read another member's
+> private document directly (verified by grep), so `isAdmin()` is dropped
+> from the rule; the rules test now asserts the admin read fails. Admins
+> keep the audited, notifying callable path.
 
 The `memberPrivate` rule allows any admin to read any member's document from
 a client: email, device tokens, and the plaintext iCal token. The same data
