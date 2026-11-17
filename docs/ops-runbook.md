@@ -65,15 +65,23 @@ project ids. Copy `firebase/functions/.env.example` to `.env` for local runs.
 
 ## Deploying from GitHub Actions (plan §21 B12)
 
-**Status: working, manual dispatch only.** The first deploy from CI succeeded
-on 2026-11-17 (commit `9c7b8ff`). Deploying from a laptop (`npm run deploy`,
-same order: functions → rules + indexes → hosting) still works and is still
-the fallback. Merges to `main` do **not** deploy yet — that switch is the last
-step below.
+**Status: merges to `main` deploy themselves** (switched on 2026-11-17 after
+five clean dispatched production deploys that day; the first deploy from CI
+was commit `9c7b8ff` the same morning). Every merge runs the five CI jobs
+and then the deploy job, which waits at the `production` environment gate
+for a reviewer's click before touching the project. Deploying from a laptop
+(`npm run deploy`, same order: functions → rules + indexes → hosting) still
+works and is still the fallback.
 
 ### How a deploy runs
 
-GitHub → **Actions → CI → Run workflow**, branch `main`, then:
+**Normal path:** merge a PR to `main`. Watch **Actions → CI**; when the five
+jobs are green the `deploy` job shows *Waiting* — approve it under *Review
+deployments*. Two merges in quick succession queue (the concurrency group
+never interleaves deploys to one project).
+
+**Manual path** (rollback, or re-running a deploy): GitHub → **Actions →
+CI → Run workflow**, branch `main`, then:
 
 | Input | Value |
 |---|---|
