@@ -226,12 +226,25 @@ enum Api {
         try await Callable.call("cancelEntry", ["entryId": entryId])
     }
 
+    /// Marks the member's own notifications read with a direct Firestore
+    /// write — the one client write the design permits (plan §2), enforced
+    /// by rules (owner only; `read` boolean; short `readAt`; nothing else).
+    /// The `markNotificationsRead` callable did the same thing behind a Cloud
+    /// Run cold start of several seconds; the local write lands in the
+    /// listener immediately (2026-11-17, with the web).
     static func markNotificationsRead(ids: [String]) async throws {
-        guard !ids.isEmpty else { return }
-        // The schema caps a batch at 200 ids.
-        for chunk in stride(from: 0, to: ids.count, by: 200) {
-            let slice = Array(ids[chunk..<min(chunk + 200, ids.count)])
-            try await Callable.call("markNotificationsRead", ["ids": slice])
+        let unique = Array(Set(ids))
+        guard !unique.isEmpty else { return }
+        let readAt = ISO8601DateFormatter().string(from: Date())
+        // Firestore caps a batch at 500 operations; stay well inside it.
+        for chunk in stride(from: 0, to: unique.count, by: 400) {
+            let batch = FirebaseService.db.batch()
+            for id in unique[chunk..<min(chunk + 400, unique.count)] {
+                batch.setData(["read": true, "readAt": readAt],
+                              forDocument: FirebaseService.db.document(Paths.notification(id)),
+                              merge: true)
+            }
+            try await batch.commit()
         }
     }
 
