@@ -182,9 +182,16 @@ final class EmulatorSignInTests: XCTestCase {
     /// Polls until `condition` holds, or fails the test after `timeout`.
     /// Firestore listeners resolve asynchronously and there is no completion
     /// to await, so polling is the honest way to wait for one.
+    /// Polls `condition` until it holds or `timeout` passes. The default is
+    /// generous on purpose: these waits are on Firestore listeners reaching a
+    /// simulator from the local emulator, and on a shared CI macOS runner
+    /// with another job alongside, 15 s was not always enough (2026-11-17,
+    /// run 44049590976: every wait timed out while the same commit passed
+    /// two seconds earlier on the parallel run). A healthy run returns in
+    /// well under a second either way; only the failure case gets slower.
     private func waitUntil(
         _ what: String,
-        timeout: TimeInterval = 15,
+        timeout: TimeInterval = 60,
         _ condition: () -> Bool
     ) async throws {
         let deadline = Date().addingTimeInterval(timeout)
@@ -198,7 +205,7 @@ final class EmulatorSignInTests: XCTestCase {
     /// Reads the newest login-code email addressed to `to` from
     /// `emulatorOutbox` and pulls the 6 digits out of it. Polls, because the
     /// outbox write lands slightly after the callable returns.
-    private func waitForLoginCode(to: String, since: Date, timeout: TimeInterval = 15) async throws -> String {
+    private func waitForLoginCode(to: String, since: Date, timeout: TimeInterval = 60) async throws -> String {
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {
             if let code = try await latestCode(to: to, since: since) { return code }
