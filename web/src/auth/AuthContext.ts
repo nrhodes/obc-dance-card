@@ -17,7 +17,7 @@ export type AuthStatus = 'loading' | 'signedOut' | 'signedIn' | 'notActive' | 'u
 export interface AuthContextValue {
   status: AuthStatus;
   /** Set only when `status === 'unavailable'`: why the member record could not be loaded. */
-  problem: 'browser-not-verified' | 'unavailable' | null;
+  problem: 'browser-not-verified' | 'unavailable' | 'blocked' | null;
   user: User | null;
   member: Member | null;
   memberPrivate: MemberPrivate | null;

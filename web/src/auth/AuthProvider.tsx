@@ -26,8 +26,18 @@ import { paths, type Member, type MemberPrivate } from '@obc/shared';
 import { appCheckWorking, auth, db } from '../firebase';
 import { AuthContext, type AuthContextValue, type AuthStatus } from './AuthContext';
 import { classifyMemberDocError } from './memberDocError';
+import { classifyStall } from './connectivity';
 
-type MemberDocState = 'pending' | 'active' | 'notActive' | 'browser-not-verified' | 'unavailable';
+type MemberDocState = 'pending' | 'active' | 'notActive' | 'browser-not-verified' | 'unavailable' | 'blocked';
+
+/**
+ * How long the member doc may stay unresolved before we stop showing
+ * "Loading…" and explain. A healthy read takes well under a second; the
+ * Firestore SDK never errors when its transport is blocked in-browser, so
+ * without this the app would spin forever (see `connectivity.ts`). The
+ * listener stays live: if the doc arrives later, the state flips to active.
+ */
+export const MEMBER_LOAD_STALL_MS = 8000;
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [authReady, setAuthReady] = useState(false);
@@ -52,10 +62,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!user) return;
     setMemberDocState('pending');
     let cancelled = false;
+    let resolved = false;
+
+    const stallTimer = window.setTimeout(() => {
+      if (cancelled || resolved) return;
+      void classifyStall().then((cause) => {
+        if (cancelled || resolved) return;
+        setMemberDocState(cause);
+      });
+    }, MEMBER_LOAD_STALL_MS);
 
     const unsubMember = onSnapshot(
       doc(db, paths.member(user.uid)),
       (snap) => {
+        resolved = true;
         if (!snap.exists()) {
           setMember(null);
           setMemberDocState('notActive');
@@ -66,6 +86,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setMemberDocState(data.active === true ? 'active' : 'notActive');
       },
       (err) => {
+        resolved = true;
         setMember(null);
         // A deactivated member's read of their own doc is denied by rules
         // (plan §10) — that arrives here as `permission-denied`. But so does
@@ -89,6 +110,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     return () => {
       cancelled = true;
+      window.clearTimeout(stallTimer);
       unsubMember();
       unsubPrivate();
     };
@@ -105,7 +127,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const value = useMemo<AuthContextValue>(
     () => ({
       status,
-      problem: memberDocState === 'browser-not-verified' || memberDocState === 'unavailable' ? memberDocState : null,
+      problem:
+        memberDocState === 'browser-not-verified' || memberDocState === 'unavailable' || memberDocState === 'blocked'
+          ? memberDocState
+          : null,
       user,
       member: status === 'signedIn' ? member : null,
       memberPrivate: status === 'signedIn' ? memberPrivate : null,

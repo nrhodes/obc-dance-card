@@ -8,7 +8,11 @@ import { resetSiteDataAndReload } from '../auth/resetSiteData';
  * Check could not verify the browser, or the service could not be reached.
  * Never renders member data (same rule as `NotActiveScreen`).
  */
-export function MembershipUnavailableScreen({ problem }: { problem: 'browser-not-verified' | 'unavailable' }) {
+export function MembershipUnavailableScreen({
+  problem,
+}: {
+  problem: 'browser-not-verified' | 'unavailable' | 'blocked';
+}) {
   const { signOut } = useAuth();
   const [resetting, setResetting] = useState(false);
 
@@ -22,8 +26,23 @@ export function MembershipUnavailableScreen({ problem }: { problem: 'browser-not
             shown. This is a problem with this browser, not a sign that your membership has lapsed, and it is usually
             temporary.
           </p>
+        ) : problem === 'blocked' ? (
+          <>
+            <p>
+              You are signed in, but something in this browser is blocking the club’s system. That is usually an ad or
+              privacy blocker, or a filter on a work network — this site reaches Google’s servers (googleapis.com) to
+              load your dance card.
+            </p>
+            <p>
+              Allow <strong>obc-dance-card.web.app</strong> in your blocker (or turn it off for this site) and try
+              again. A private window, where extensions are off, is a quick way to check.
+            </p>
+          </>
         ) : (
-          <p>You are signed in, but the club’s system couldn’t be reached. Check your connection and try again.</p>
+          <>
+            <p>You are signed in, but the club’s system couldn’t be reached. Check your connection and try again.</p>
+            <p className="muted">If you use an ad or privacy blocker, make sure it allows this site.</p>
+          </>
         )}
         <p>
           <button type="button" className="button button-primary" onClick={() => window.location.reload()}>

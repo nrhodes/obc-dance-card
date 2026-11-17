@@ -14,7 +14,13 @@ export type MemberDocProblem =
   /** App Check could not verify this browser, so nothing can be read. */
   | 'browser-not-verified'
   /** Anything else (network, service unavailable, an unexpected code). */
-  | 'unavailable';
+  | 'unavailable'
+  /**
+   * The read never completed and a probe showed this browser reaches our
+   * origin but not googleapis.com: an ad/privacy blocker or network filter
+   * (`connectivity.ts`). Set by the stall timeout, never by this classifier.
+   */
+  | 'blocked';
 
 export function classifyMemberDocError(firestoreCode: string | undefined, appCheckOk: boolean): MemberDocProblem {
   if (firestoreCode === 'permission-denied') {
