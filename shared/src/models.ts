@@ -35,7 +35,8 @@ import type { EmailLower, Id, IsoDate, IsoDateTime, Timestamps, TimeOfDay } from
 /* -------------------------------------------------------------------------- */
 
 /**
- * `memberId` is the Firebase Auth uid. Created only by `importMembers`. No
+ * `memberId` is the Firebase Auth uid. Created only by `importMembers` or
+ * `addMember` (both via `provisionMember`). No
  * email, no tokens: those live in `MemberPrivate`.
  */
 export interface Member extends Timestamps {

@@ -29,6 +29,8 @@ import type {
   CreateTeamResult,
   CreateVisitorInput,
   CreateVisitorResult,
+  AddMemberInput,
+  AddMemberResult,
   DeactivateMemberInput,
   DeactivateMemberResult,
   DeleteVisitorInput,
@@ -75,6 +77,8 @@ import type {
   SetBulkSoloStatusInput,
   SetBulkSoloStatusResult,
   SetMemberRoleInput,
+  UpdateMemberInput,
+  UpdateMemberResult,
   SetMemberRoleResult,
   SetSoloStatusInput,
   SetSoloStatusResult,
@@ -157,6 +161,8 @@ export const clearTeamSessionSubstitute = callable<ClearTeamSessionSubstituteInp
 );
 
 // Admin: members / on-behalf / integrity (plan §9.2, §16 Phase 6 — Phase 6b task)
+export const addMember = callable<AddMemberInput, AddMemberResult>('addMember');
+export const updateMember = callable<UpdateMemberInput, UpdateMemberResult>('updateMember');
 export const setMemberRole = callable<SetMemberRoleInput, SetMemberRoleResult>('setMemberRole');
 export const deactivateMember = callable<DeactivateMemberInput, DeactivateMemberResult>('deactivateMember');
 export const reactivateMember = callable<ReactivateMemberInput, ReactivateMemberResult>('reactivateMember');

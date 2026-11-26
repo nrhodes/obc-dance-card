@@ -4,6 +4,9 @@
  * Admins may read every member doc, active or not (rules §10) — this
  * subscribes to the whole `members` collection, unlike
  * `MembersDirectoryProvider` (active-only, member-facing).
+ *
+ * "Add member" and each row's "Edit" open `MemberEditDialog` (`addMember` /
+ * `updateMember`, amended 2026-11-27).
  */
 import { useEffect, useMemo, useState } from 'react';
 import { collection, onSnapshot } from 'firebase/firestore';
@@ -11,6 +14,7 @@ import { paths, type Member, type MemberRole } from '@obc/shared';
 import { db } from '../../firebase';
 import type { AppError } from '../../firebase';
 import { deactivateMember, eraseMember, reactivateMember, setMemberRole } from '../../api';
+import { MemberEditDialog } from './MemberEditDialog';
 import { mapAdminActionError } from '../../admin/adminErrors';
 import { useActingAs } from '../../admin/useActingAs';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
@@ -25,6 +29,8 @@ function fullName(m: Member): string {
 }
 
 type RowDialog =
+  | { kind: 'add' }
+  | { kind: 'edit'; member: Member }
   | { kind: 'role'; member: Member; nextRole: MemberRole }
   | { kind: 'deactivate'; member: Member }
   | { kind: 'reactivate'; member: Member }
@@ -66,7 +72,7 @@ export function MembersTable() {
     return members
       .filter((m) => (activeFilter === 'active' ? m.active : activeFilter === 'inactive' ? !m.active : true))
       .filter((m) => (roleFilter === 'admin' ? m.role === 'admin' : true))
-      .filter((m) => (q ? fullName(m).toLowerCase().includes(q) : true))
+      .filter((m) => (q ? fullName(m).toLowerCase().includes(q) || (m.email ?? '').includes(q) : true))
       .sort((a, b) => fullName(a).localeCompare(fullName(b)));
   }, [members, search, activeFilter, roleFilter]);
 
@@ -105,7 +111,7 @@ export function MembersTable() {
 
       <div className="card">
         <div className="field">
-          <label htmlFor="members-search">Search by name</label>
+          <label htmlFor="members-search">Search by name or email</label>
           <input
             id="members-search"
             type="search"
@@ -134,6 +140,9 @@ export function MembersTable() {
               <option value="admin">Admins only</option>
             </select>
           </label>
+          <button type="button" className="button button-primary" onClick={() => setDialog({ kind: 'add' })}>
+            Add member
+          </button>
         </div>
       </div>
 
@@ -146,6 +155,7 @@ export function MembersTable() {
               <thead>
                 <tr>
                   <th>Name</th>
+                  <th>Email</th>
                   <th>Grade</th>
                   <th>Phone</th>
                   <th>Role</th>
@@ -161,6 +171,7 @@ export function MembersTable() {
                       {fullName(m)}
                       {actingAs?.memberId === m.id && <span className="badge">Acting as</span>}
                     </td>
+                    <td>{m.email || '—'}</td>
                     <td>{m.grade}</td>
                     <td>{m.phone || '—'}</td>
                     <td>{m.role}</td>
@@ -168,6 +179,15 @@ export function MembersTable() {
                     <td>{m.lastImportId ?? '—'}</td>
                     <td>
                       <div className="actions-row">
+                        {!m.erasedAt && (
+                          <button
+                            type="button"
+                            className="button button-link"
+                            onClick={() => setDialog({ kind: 'edit', member: m })}
+                          >
+                            Edit
+                          </button>
+                        )}
                         <button
                           type="button"
                           className="button button-link"
@@ -217,6 +237,17 @@ export function MembersTable() {
           </div>
         )}
       </div>
+
+      {(dialog?.kind === 'add' || dialog?.kind === 'edit') && (
+        <MemberEditDialog
+          member={dialog.kind === 'edit' ? dialog.member : null}
+          onClose={closeDialog}
+          onSaved={(message) => {
+            setDialog(null);
+            setNotice(message);
+          }}
+        />
+      )}
 
       {dialog?.kind === 'role' && (
         <ConfirmDialog

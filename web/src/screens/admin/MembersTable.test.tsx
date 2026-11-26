@@ -30,12 +30,16 @@ const setMemberRoleMock = vi.fn();
 const deactivateMemberMock = vi.fn();
 const reactivateMemberMock = vi.fn();
 const eraseMemberMock = vi.fn();
+const addMemberMock = vi.fn();
+const updateMemberMock = vi.fn();
 
 vi.mock('../../api', () => ({
   setMemberRole: (...args: unknown[]) => setMemberRoleMock(...args),
   deactivateMember: (...args: unknown[]) => deactivateMemberMock(...args),
   reactivateMember: (...args: unknown[]) => reactivateMemberMock(...args),
   eraseMember: (...args: unknown[]) => eraseMemberMock(...args),
+  addMember: (...args: unknown[]) => addMemberMock(...args),
+  updateMember: (...args: unknown[]) => updateMemberMock(...args),
 }));
 
 function member(overrides: Partial<Member> = {}): Member {
@@ -59,6 +63,8 @@ beforeEach(() => {
   deactivateMemberMock.mockReset();
   reactivateMemberMock.mockReset();
   eraseMemberMock.mockReset();
+  addMemberMock.mockReset();
+  updateMemberMock.mockReset();
   startActingAsMock.mockReset();
 });
 
@@ -76,10 +82,10 @@ describe('MembersTable', () => {
     expect(screen.getByText('John Smith')).toBeTruthy();
     expect(screen.getByText('Amy Lee')).toBeTruthy();
 
-    await user.type(screen.getByLabelText('Search by name'), 'john');
+    await user.type(screen.getByLabelText('Search by name or email'), 'john');
     expect(screen.queryByText('Jane Doe')).toBeNull();
     expect(screen.getByText('John Smith')).toBeTruthy();
-    await user.clear(screen.getByLabelText('Search by name'));
+    await user.clear(screen.getByLabelText('Search by name or email'));
 
     await user.selectOptions(screen.getByLabelText('Filter by status'), 'inactive');
     expect(screen.getByText('John Smith')).toBeTruthy();
@@ -165,5 +171,104 @@ describe('MembersTable', () => {
     render(<MembersTable />);
     await user.click(screen.getByRole('button', { name: 'Act on behalf' }));
     expect(startActingAsMock).toHaveBeenCalledWith({ memberId: 'm1', name: 'Jane Doe' });
+  });
+
+  it('"Add member" sends the trimmed, lower-cased form to addMember and confirms', async () => {
+    membersFixture = [];
+    addMemberMock.mockResolvedValueOnce({ member: member({ id: 'new' }) });
+    const user = userEvent.setup();
+    render(<MembersTable />);
+
+    await user.click(screen.getByRole('button', { name: 'Add member' }));
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).getByText(/deactivated by that import/)).toBeTruthy();
+    await user.type(within(dialog).getByLabelText('First name'), ' Ada ');
+    await user.type(within(dialog).getByLabelText('Last name'), 'Byron');
+    await user.type(within(dialog).getByLabelText('Email'), 'Ada@Example.org');
+    await user.type(within(dialog).getByLabelText('Phone'), '021 555 0199');
+    await user.selectOptions(within(dialog).getByLabelText('Grade'), 'Junior');
+    await user.click(within(dialog).getByRole('button', { name: 'Add member' }));
+
+    expect(addMemberMock).toHaveBeenCalledWith({
+      firstName: 'Ada',
+      lastName: 'Byron',
+      email: 'ada@example.org',
+      phone: '021 555 0199',
+      grade: 'Junior',
+    });
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(screen.getByRole('status').textContent).toContain('Ada Byron has been added');
+  });
+
+  it('"Add member" validates locally and shows a duplicate-email server error verbatim', async () => {
+    membersFixture = [];
+    addMemberMock.mockRejectedValueOnce({
+      code: 'failed-precondition',
+      message: 'A member with this email address already exists.',
+    });
+    const user = userEvent.setup();
+    render(<MembersTable />);
+
+    await user.click(screen.getByRole('button', { name: 'Add member' }));
+    const dialog = screen.getByRole('dialog');
+    await user.type(within(dialog).getByLabelText('First name'), 'Ada');
+    await user.type(within(dialog).getByLabelText('Last name'), 'Byron');
+    await user.type(within(dialog).getByLabelText('Email'), 'not-an-email');
+    await user.click(within(dialog).getByRole('button', { name: 'Add member' }));
+    expect(within(dialog).getByText('Enter a valid email address.')).toBeTruthy();
+    expect(addMemberMock).not.toHaveBeenCalled();
+
+    await user.clear(within(dialog).getByLabelText('Email'));
+    await user.type(within(dialog).getByLabelText('Email'), 'ada@example.org');
+    await user.click(within(dialog).getByRole('button', { name: 'Add member' }));
+    expect(within(dialog).getByText('A member with this email address already exists.')).toBeTruthy();
+  });
+
+  it('"Edit" prefills the form and sends only the changed fields to updateMember', async () => {
+    membersFixture = [member({ id: 'm1', email: 'jane@example.org' })];
+    updateMemberMock.mockResolvedValueOnce({ member: member({ id: 'm1' }), changed: true });
+    const user = userEvent.setup();
+    render(<MembersTable />);
+
+    await user.click(screen.getByRole('button', { name: 'Edit' }));
+    const dialog = screen.getByRole('dialog');
+    expect((within(dialog).getByLabelText('First name') as HTMLInputElement).value).toBe('Jane');
+    expect((within(dialog).getByLabelText('Email') as HTMLInputElement).value).toBe('jane@example.org');
+
+    await user.clear(within(dialog).getByLabelText('Last name'));
+    await user.type(within(dialog).getByLabelText('Last name'), 'Smith');
+    await user.clear(within(dialog).getByLabelText('Phone'));
+    await user.click(within(dialog).getByRole('button', { name: 'Save changes' }));
+
+    expect(updateMemberMock).toHaveBeenCalledWith({ memberId: 'm1', patch: { lastName: 'Smith', phone: '' } });
+    expect(screen.getByRole('status').textContent).toContain('Jane Smith updated.');
+  });
+
+  it('"Edit" warns when the sign-in email changes, and makes no call when nothing changed', async () => {
+    membersFixture = [member({ id: 'm1', email: 'jane@example.org' })];
+    const user = userEvent.setup();
+    render(<MembersTable />);
+
+    await user.click(screen.getByRole('button', { name: 'Edit' }));
+    let dialog = screen.getByRole('dialog');
+    await user.click(within(dialog).getByRole('button', { name: 'Save changes' }));
+    expect(updateMemberMock).not.toHaveBeenCalled();
+    expect(screen.getByRole('status').textContent).toContain('nothing changed');
+
+    updateMemberMock.mockResolvedValueOnce({ member: member({ id: 'm1' }), changed: true });
+    await user.click(screen.getByRole('button', { name: 'Edit' }));
+    dialog = screen.getByRole('dialog');
+    expect(within(dialog).queryByText(/changes the address Jane signs in with/)).toBeNull();
+    await user.clear(within(dialog).getByLabelText('Email'));
+    await user.type(within(dialog).getByLabelText('Email'), 'jane.new@example.org');
+    expect(within(dialog).getByText(/changes the address Jane signs in with/)).toBeTruthy();
+    await user.click(within(dialog).getByRole('button', { name: 'Save changes' }));
+    expect(updateMemberMock).toHaveBeenCalledWith({ memberId: 'm1', patch: { email: 'jane.new@example.org' } });
+  });
+
+  it('does not offer Edit for an erased member', () => {
+    membersFixture = [member({ id: 'm1', active: false, erasedAt: '2027-03-01T00:00:00.000Z' })];
+    render(<MembersTable />);
+    expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
   });
 });

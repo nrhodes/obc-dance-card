@@ -46,7 +46,7 @@ and must never leak the roster.
 | Backend | Firebase: Auth (with Identity Platform upgrade for blocking functions), Firestore, Cloud Functions gen2 (TypeScript, **Node 22**), FCM, Hosting, App Check, Cloud Scheduler. Region `australia-southeast1`. |
 | Web | React 18 + Vite + TypeScript PWA. Serves desktop and Android. |
 | iOS | Native SwiftUI, Firebase iOS SDK. Optional Face ID app-lock. |
-| Membership | Closed. Only admin-imported members can sign in. Import creates the Auth user. |
+| Membership | Closed. Only admin-provisioned members can sign in: the CSV import, or (amended 2026-11-27, Neil's request) an admin adding one member by hand with `addMember`. Both create the Auth user through the same `provisionMember` path. |
 | Visitors | A member may pair with a **visitor** (name required; email/phone optional). Visitors have **no account, cannot sign in, ever**. Their contact details are visible only to the sponsoring member and admins. |
 | Login | (a) Emailed **6-digit code**, or (b) **email + password** for members who set one. **No magic links.** No self-signup. No password-reset email (forgot password → use the code). |
 | Sessions | Persistent (Keychain / browser local). Users stay signed in until sign-out or deactivation. |
@@ -121,7 +121,8 @@ the code must match. `Timestamps` = `{ createdAt, updatedAt }` ISO strings.
 
 ### 5.1 `members/{memberId}` — public-to-members profile
 
-`memberId` **is the Firebase Auth uid.** Created only by `importMembers`.
+`memberId` **is the Firebase Auth uid.** Created only by `importMembers` or `addMember`
+(amended 2026-11-27), both via `provisionMember`.
 
 ```
 id, firstName, lastName, phone, email?, grade, role ('member'|'admin'),
@@ -464,6 +465,8 @@ export const sendInvite = onCall(opts, async (req) => {
 | `updateMyPrefs` | member | `NotificationPrefs` | — | `memberPrivate.notificationPrefs` | — | — |
 | `registerDevice` / `unregisterDevice` | member | `{token, platform, label?}` | ≤10 devices | `memberPrivate.devices` | — | — |
 | `importMembers` | admin | `{csv, dryRun?, allowMassDeactivation?}` | size limits; refuses to deactivate more than max(5, 20% of active) without opt-in | §8.2 provisioning; `imports/{id}` | `member_import` | — |
+| `addMember` (amended 2026-11-27) | admin | `{firstName, lastName, email, phone?, grade}` (strict — no role, no cohort) | email not already a member's, active or inactive (inactive → use `reactivateMember`) | same `provisionMember` path as an import row (Auth user + `members` + `memberPrivate`, always `'club'`/`'member'`); visitor promotion §12.5. A later CSV import still deactivates anyone absent from its file | `member_added` | — |
+| `updateMember` (amended 2026-11-27) | admin | `{memberId, patch: {firstName?, lastName?, email?, phone?, grade?}}` (strict — role/active have their own callables) | member exists, not erased; new email not another member's | merges changed fields; email change updates Auth user first, then `memberPrivate.emailLower` + `members.email` in one transaction (Auth rolled back if that fails); a rename rewrites the denormalised `displayName` on entries and team rosters | `member_updated` (changed field names only, never values) | target, on email change only: `security` |
 | `setMemberRole` | admin | `{memberId, role}` | not last admin | role; revoke tokens | `role_changed` | target: "you are now an admin" |
 | `deactivateMember` / `reactivateMember` | admin | `{memberId}` | — | active flag; Auth disabled; revoke; cancel future entries (cascade §9.3) | `member_deactivated` | partners of cancelled sessions |
 | `eraseMember` | admin | `{memberId, confirmName}` | inactive ≥ 30 days | scrub PII (names → "Former member", phone/email removed, visitors owned → deleted), keep entries anonymised | `member_erased` | — |
@@ -706,7 +709,10 @@ Unchanged from v1 in format (see `docs/csv-formats.md`, templates in
 - `series.csv` gains optional `teamMin`, `teamMax` columns (integers; ignored unless
   `format=Teams`; defaults 4 and 6). Update `shared/templates/series.csv` and
   `docs/csv-formats.md`.
-- `importMembers` is the only path that creates Auth users. Emails are normalised;
+- `importMembers` and `addMember` (amended 2026-11-27) are the only paths that create
+  Auth users, both through `provisionMember`. A hand-added or hand-edited member gets
+  no special treatment from a later import: it still matches by email and still
+  deactivates anyone absent from its file. Emails are normalised;
   duplicates within the file are an error. A member is protected from
   deactivation if their email appears *anywhere* in the file, even on a row that
   failed validation. Deactivating more than max(5, 20% of active members) in one

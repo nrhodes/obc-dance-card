@@ -255,6 +255,16 @@ export interface ListAuditLogResult {
 
 /* --------------------------- admin: members --------------------------- */
 
+export interface AddMemberResult {
+  member: Member;
+}
+
+export interface UpdateMemberResult {
+  member: Member;
+  /** False when the patch matched what was already stored — nothing was written. */
+  changed: boolean;
+}
+
 export interface SetMemberRoleResult {
   member: Member;
 }

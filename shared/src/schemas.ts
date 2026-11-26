@@ -7,7 +7,7 @@
  */
 
 import { z } from 'zod';
-import { AUDIT_ACTIONS, MEMBER_ROLES, SCORING_TYPES, SERIES_FORMATS, SESSION_KINDS, WEEKDAYS } from './enums.js';
+import { AUDIT_ACTIONS, MEMBER_GRADES, MEMBER_ROLES, SCORING_TYPES, SERIES_FORMATS, SESSION_KINDS, WEEKDAYS } from './enums.js';
 
 /* ------------------------------- primitives ------------------------------ */
 
@@ -121,6 +121,46 @@ export const EraseMemberInputSchema = z.object({
   confirmName: z.string().trim().min(1).max(200),
 });
 export type EraseMemberInput = z.infer<typeof EraseMemberInputSchema>;
+
+/** A member's first or last name, as an admin types it (plan §9.2 `addMember`/`updateMember`). */
+const memberName = z.string().trim().min(1).max(80);
+
+/**
+ * `addMember` (amended 2026-11-27): one member, typed in by an admin — the
+ * same five fields as a `members.csv` row. Never a role or a cohort: a new
+ * member always starts as a `'club'` `'member'` (role via `setMemberRole`).
+ */
+export const AddMemberInputSchema = z
+  .object({
+    firstName: memberName,
+    lastName: memberName,
+    email,
+    phone: phone.optional(),
+    grade: z.enum(MEMBER_GRADES),
+  })
+  .strict();
+export type AddMemberInput = z.infer<typeof AddMemberInputSchema>;
+
+export const UpdateMemberPatchSchema = z
+  .object({
+    firstName: memberName.optional(),
+    lastName: memberName.optional(),
+    /** Changing this changes the member's sign-in identity. */
+    email: email.optional(),
+    /** An empty string clears the phone number. */
+    phone: phone.optional(),
+    grade: z.enum(MEMBER_GRADES).optional(),
+  })
+  .strict();
+export type UpdateMemberPatch = z.infer<typeof UpdateMemberPatchSchema>;
+
+export const UpdateMemberInputSchema = z
+  .object({
+    memberId: id,
+    patch: UpdateMemberPatchSchema,
+  })
+  .strict();
+export type UpdateMemberInput = z.infer<typeof UpdateMemberInputSchema>;
 
 /* --------------------------- admin: programme ------------------------------ */
 
