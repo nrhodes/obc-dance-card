@@ -60,7 +60,7 @@ export { onNotificationCreated } from './notifications/dispatch.js';
 export { sendSessionReminders, sendDailyDigest, purgeExpired } from './notifications/scheduled.js';
 
 // Phase 6 — admin extras + integrity
-export { setMemberRole, deactivateMember, reactivateMember, eraseMember } from './admin/members.js';
+export { addMember, updateMember, setMemberRole, deactivateMember, reactivateMember, eraseMember } from './admin/members.js';
 export { updateSeries, updateSession, updateWeekday } from './admin/programmeEdit.js';
 export { broadcast, listAuditLog } from './admin/misc.js';
 // The deployed callable name is `runPairingSweep` (plan §9.2's canonical

@@ -10,6 +10,10 @@ import {
   type RespondToInviteInput,
   type SendInviteInput,
   type SetMemberRoleInput,
+  type AddMemberInput,
+  type Member,
+  type MemberPrivate,
+  type UpdateMemberInput,
 } from '@obc/shared';
 import { auth, db } from '../../lib/admin.js';
 import {
@@ -24,7 +28,14 @@ import {
 import { entryId } from '../../entries/lib.js';
 import { sendInviteHandler, respondToInviteHandler } from '../../entries/invites.js';
 import { createTeamHandler, inviteToTeamHandler } from '../../teams/teams.js';
-import { deactivateMemberHandler, eraseMemberHandler, reactivateMemberHandler, setMemberRoleHandler } from '../members.js';
+import {
+  addMemberHandler,
+  deactivateMemberHandler,
+  eraseMemberHandler,
+  reactivateMemberHandler,
+  setMemberRoleHandler,
+  updateMemberHandler,
+} from '../members.js';
 import { createIcalFeedHandler } from '../../ical/tokens.js';
 import { createHash } from 'node:crypto';
 
@@ -375,5 +386,197 @@ describe('eraseMember', () => {
 
     const auditSnap = await db.collection(paths.auditLog()).where('action', '==', 'member_erased').get();
     expect(auditSnap.docs.some((d) => d.data().targetMemberId === member)).toBe(true);
+  });
+});
+
+describe('addMember', () => {
+  it('creates the Auth user, member and memberPrivate docs exactly as an import row would, and audits it', async () => {
+    const admin = await makeMember('add-admin@example.org', { role: 'admin' });
+
+    const result = await addMemberHandler(
+      fakeCallableRequest<AddMemberInput>(
+        // Raw wire input: the schema trims and lower-cases.
+        { firstName: ' Ada ', lastName: 'Byron', email: 'Add-New@Example.org', phone: '021 555 0199', grade: 'Junior' },
+        { uid: admin },
+      ),
+    );
+
+    const m = result.member;
+    expect(m).toMatchObject({
+      firstName: 'Ada',
+      lastName: 'Byron',
+      email: 'add-new@example.org',
+      phone: '021 555 0199',
+      grade: 'Junior',
+      role: 'member',
+      cohort: 'club',
+      active: true,
+    });
+    const user = await auth.getUserByEmail('add-new@example.org');
+    expect(user.uid).toBe(m.id);
+    expect(user.disabled).toBe(false);
+    const priv = (await db.doc(paths.memberPrivate(m.id)).get()).data() as MemberPrivate;
+    expect(priv.emailLower).toBe('add-new@example.org');
+
+    const auditSnap = await db.collection(paths.auditLog()).where('action', '==', 'member_added').get();
+    expect(auditSnap.docs.some((d) => d.data().targetMemberId === m.id && d.data().actorMemberId === admin)).toBe(true);
+  });
+
+  it('refuses an email an existing member already has, and points an inactive one at reactivate', async () => {
+    const admin = await makeMember('add-dup-admin@example.org', { role: 'admin' });
+    await makeMember('add-dup-active@example.org');
+    await makeMember('add-dup-inactive@example.org', { active: false });
+
+    await expect(
+      addMemberHandler(
+        fakeCallableRequest<AddMemberInput>(
+          { firstName: 'A', lastName: 'B', email: 'add-dup-active@example.org', grade: 'Open' },
+          { uid: admin },
+        ),
+      ),
+    ).rejects.toMatchObject({ code: 'failed-precondition' });
+
+    await expect(
+      addMemberHandler(
+        fakeCallableRequest<AddMemberInput>(
+          { firstName: 'A', lastName: 'B', email: 'add-dup-inactive@example.org', grade: 'Open' },
+          { uid: admin },
+        ),
+      ),
+    ).rejects.toMatchObject({ code: 'failed-precondition', message: expect.stringContaining('reactivate') });
+  });
+
+  it('is admin-only and rejects role/cohort smuggled into the input', async () => {
+    const admin = await makeMember('add-guard-admin@example.org', { role: 'admin' });
+    const member = await makeMember('add-guard-member@example.org');
+
+    await expect(
+      addMemberHandler(
+        fakeCallableRequest<AddMemberInput>(
+          { firstName: 'A', lastName: 'B', email: 'add-guard-new@example.org', grade: 'Open' },
+          { uid: member },
+        ),
+      ),
+    ).rejects.toMatchObject({ code: 'permission-denied' });
+
+    await expect(
+      addMemberHandler(
+        fakeCallableRequest(
+          { firstName: 'A', lastName: 'B', email: 'add-guard-new@example.org', grade: 'Open', role: 'admin', cohort: 'review' } as unknown as AddMemberInput,
+          { uid: admin },
+        ),
+      ),
+    ).rejects.toMatchObject({ code: 'invalid-argument' });
+  });
+});
+
+describe('updateMember', () => {
+  it('updates name, phone and grade; renames the member on partners\' entries; audits field names only', async () => {
+    const admin = await makeMember('upd-admin@example.org', { role: 'admin' });
+    const target = await makeMember('upd-target@example.org', { firstName: 'Jane', lastName: 'Doe' });
+    const partner = await makeMember('upd-partner@example.org');
+    const date = sessionInPast();
+    const sessionId = `upd-rename-${target}`;
+    await db.doc(paths.entry(entryId(sessionId, partner))).set(pastPairEntry(sessionId, date, partner, target, 'Jane Doe'));
+
+    const result = await updateMemberHandler(
+      fakeCallableRequest<UpdateMemberInput>(
+        { memberId: target, patch: { lastName: 'Smith', phone: '09 555 0100', grade: 'Intermediate' } },
+        { uid: admin },
+      ),
+    );
+
+    expect(result.changed).toBe(true);
+    expect(result.member).toMatchObject({ firstName: 'Jane', lastName: 'Smith', phone: '09 555 0100', grade: 'Intermediate' });
+    const entry = (await db.doc(paths.entry(entryId(sessionId, partner))).get()).data() as Entry;
+    expect(entry.partner).toMatchObject({ memberId: target, displayName: 'Jane Smith' });
+
+    const auditSnap = await db.collection(paths.auditLog()).where('action', '==', 'member_updated').get();
+    const mine = auditSnap.docs.map((d) => d.data()).find((d) => d.targetMemberId === target);
+    expect(mine?.detail).toEqual({ fields: ['lastName', 'phone', 'grade'] });
+    expect(JSON.stringify(mine)).not.toContain('Smith');
+    // Not an email change: no security notification.
+    expect(await notificationsFor(target, 'security')).toHaveLength(0);
+  });
+
+  it('changes the sign-in email in Auth, memberPrivate and members together, and notifies the member', async () => {
+    const admin = await makeMember('upd-email-admin@example.org', { role: 'admin' });
+    const target = await makeMember('upd-email-old@example.org');
+
+    const result = await updateMemberHandler(
+      fakeCallableRequest<UpdateMemberInput>(
+        { memberId: target, patch: { email: 'Upd-Email-New@example.org' } },
+        { uid: admin },
+      ),
+    );
+
+    expect(result.member.email).toBe('upd-email-new@example.org');
+    expect((await auth.getUser(target)).email).toBe('upd-email-new@example.org');
+    const priv = (await db.doc(paths.memberPrivate(target)).get()).data() as MemberPrivate;
+    expect(priv.emailLower).toBe('upd-email-new@example.org');
+    await expect(auth.getUserByEmail('upd-email-old@example.org')).rejects.toBeDefined();
+    expect(await notificationsFor(target, 'security')).toHaveLength(1);
+  });
+
+  it('refuses an email another member already has and leaves everything untouched', async () => {
+    const admin = await makeMember('upd-clash-admin@example.org', { role: 'admin' });
+    const target = await makeMember('upd-clash-target@example.org');
+    await makeMember('upd-clash-other@example.org');
+
+    await expect(
+      updateMemberHandler(
+        fakeCallableRequest<UpdateMemberInput>(
+          { memberId: target, patch: { email: 'upd-clash-other@example.org' } },
+          { uid: admin },
+        ),
+      ),
+    ).rejects.toMatchObject({ code: 'failed-precondition' });
+
+    expect((await auth.getUser(target)).email).toBe('upd-clash-target@example.org');
+    const m = (await db.doc(paths.member(target)).get()).data() as Member;
+    expect(m.email).toBe('upd-clash-target@example.org');
+  });
+
+  it('is a no-op when the patch matches what is stored', async () => {
+    const admin = await makeMember('upd-noop-admin@example.org', { role: 'admin' });
+    const target = await makeMember('upd-noop-target@example.org', { firstName: 'Same', lastName: 'Name' });
+    const before = (await db.doc(paths.member(target)).get()).data() as Member;
+
+    const result = await updateMemberHandler(
+      fakeCallableRequest<UpdateMemberInput>(
+        { memberId: target, patch: { firstName: 'Same', email: 'upd-noop-target@example.org' } },
+        { uid: admin },
+      ),
+    );
+
+    expect(result.changed).toBe(false);
+    const after = (await db.doc(paths.member(target)).get()).data() as Member;
+    expect(after.updatedAt).toBe(before.updatedAt);
+  });
+
+  it('is admin-only, 404s an unknown member, and cannot touch role or active', async () => {
+    const admin = await makeMember('upd-guard-admin@example.org', { role: 'admin' });
+    const member = await makeMember('upd-guard-member@example.org');
+
+    await expect(
+      updateMemberHandler(
+        fakeCallableRequest<UpdateMemberInput>({ memberId: admin, patch: { firstName: 'Hacked' } }, { uid: member }),
+      ),
+    ).rejects.toMatchObject({ code: 'permission-denied' });
+
+    await expect(
+      updateMemberHandler(
+        fakeCallableRequest<UpdateMemberInput>({ memberId: 'no-such-member', patch: { firstName: 'X' } }, { uid: admin }),
+      ),
+    ).rejects.toMatchObject({ code: 'not-found' });
+
+    await expect(
+      updateMemberHandler(
+        fakeCallableRequest(
+          { memberId: member, patch: { role: 'admin', active: false } } as unknown as UpdateMemberInput,
+          { uid: admin },
+        ),
+      ),
+    ).rejects.toMatchObject({ code: 'invalid-argument' });
   });
 });

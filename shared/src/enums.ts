@@ -168,6 +168,10 @@ export type DigestMode = (typeof DIGEST_MODES)[number];
 export const AUDIT_ACTIONS = [
   // System / admin actions
   'member_import',
+  /** An admin added one member by hand (`addMember`, amended 2026-11-27). */
+  'member_added',
+  /** An admin edited a member's name/email/phone/grade (`updateMember`, amended 2026-11-27). */
+  'member_updated',
   'role_changed',
   'member_deactivated',
   'member_reactivated',

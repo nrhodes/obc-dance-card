@@ -1,5 +1,7 @@
 /**
- * `setMemberRole`, `deactivateMember`, `reactivateMember`, `eraseMember`
+ * `addMember`, `updateMember` (amended 2026-11-27 — the by-hand counterpart
+ * of the CSV import), `setMemberRole`, `deactivateMember`,
+ * `reactivateMember`, `eraseMember`
  * (plan §8.1 "Privilege"/"Privacy law", §8.2 "Deactivation / role change",
  * §9.2, §16 Phase 6). Admin-only. Every mutation here re-reads inside a
  * transaction, enforces the last-admin guard, and — for deactivation — reuses
@@ -10,13 +12,17 @@
 import { createHash } from 'node:crypto';
 import { onCall, HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
 import {
+  AddMemberInputSchema,
   DEFAULT_NOTIFICATION_PREFS,
   DeactivateMemberInputSchema,
   EraseMemberInputSchema,
   ReactivateMemberInputSchema,
   SetMemberRoleInputSchema,
+  UpdateMemberInputSchema,
   paths,
   todayNZ,
+  type AddMemberInput,
+  type AddMemberResult,
   type DeactivateMemberInput,
   type DeactivateMemberResult,
   type Entry,
@@ -30,6 +36,8 @@ import {
   type SetMemberRoleInput,
   type SetMemberRoleResult,
   type Team,
+  type UpdateMemberInput,
+  type UpdateMemberResult,
 } from '@obc/shared';
 import { auth, db } from '../lib/admin.js';
 import { audit } from '../lib/audit.js';
@@ -41,8 +49,247 @@ import { parseInput } from '../lib/parseInput.js';
 import { cancelEntryInTx, type CancelEntryNotification } from '../entries/lib.js';
 import { removeMemberFromAllTeams } from '../teams/lib.js';
 import { createNotification } from '../notifications/create.js';
+import { promoteVisitorsForNewMember } from '../visitors/promotion.js';
+import { provisionMember } from './provisionMember.js';
 
 const THIRTY_DAYS_MS = 30 * 24 * 3600 * 1000;
+
+/**
+ * Rewrites the denormalised `displayName` on every `PartnerRef` that points
+ * at this member — entries (partner / substitute / partnerSubstitute, any
+ * date) and team rosters. Shared by `updateMember` (a rename) and
+ * `eraseMember` (anonymising to "Former member"). Queues onto `writer`; the
+ * caller flushes.
+ */
+async function rewriteMemberDisplayName(
+  writer: BatchWriter,
+  memberId: string,
+  displayName: string,
+  now: string,
+): Promise<void> {
+  const patchByEntryId = new Map<string, Record<string, unknown>>();
+  for (const field of ['partner', 'substitute', 'partnerSubstitute'] as const) {
+    const snap = await db.collection(paths.entries()).where(`${field}.memberId`, '==', memberId).get();
+    for (const doc of snap.docs) {
+      const entry = doc.data() as Entry;
+      const ref = entry[field];
+      if (!ref || ref.kind !== 'member' || ref.memberId !== memberId) continue;
+      if (ref.displayName === displayName) continue;
+      const patch = patchByEntryId.get(doc.id) ?? {};
+      patch[field] = { ...ref, displayName };
+      patchByEntryId.set(doc.id, patch);
+    }
+  }
+  for (const [id, patch] of patchByEntryId) {
+    writer.update(db.doc(paths.entry(id)), { ...patch, updatedAt: now });
+  }
+
+  const teamsSnap = await db.collection(paths.teams()).get();
+  for (const doc of teamsSnap.docs) {
+    const team = doc.data() as Team;
+    let changed = false;
+    const members = team.members.map((m) => {
+      if (m.ref.kind === 'member' && m.ref.memberId === memberId && m.ref.displayName !== displayName) {
+        changed = true;
+        return { ...m, ref: { ...m.ref, displayName } };
+      }
+      return m;
+    });
+    if (changed) writer.update(doc.ref, { members, updatedAt: now });
+  }
+}
+
+function authErrorCode(err: unknown): string | undefined {
+  return (err as { code?: string } | undefined)?.code;
+}
+
+/* ------------------------------------ addMember --------------------------------- */
+
+/**
+ * One member, typed in by an admin. Goes through the very same
+ * `provisionMember` path a CSV row does (Auth user + `members` +
+ * `memberPrivate`, always `'club'` / `'member'`), so a hand-added member is
+ * indistinguishable from an imported one — including to the NEXT import,
+ * which still deactivates anyone absent from its file (plan §13).
+ *
+ * Refuses an email that already belongs to a member, active or not: for an
+ * inactive one the right action is `reactivateMember`, which this must not
+ * silently stand in for (it would skip that callable's audit + notification).
+ */
+export async function addMemberHandler(req: CallableRequest<AddMemberInput>): Promise<AddMemberResult> {
+  const input = parseInput(AddMemberInputSchema, req.data);
+  const caller = await requireAdmin(req);
+
+  const existing = await db.collection(paths.memberPrivates()).where('emailLower', '==', input.email).limit(1).get();
+  if (!existing.empty) {
+    const existingMember = (await db.doc(paths.member(existing.docs[0]!.id)).get()).data() as Member | undefined;
+    throw new HttpsError(
+      'failed-precondition',
+      existingMember && !existingMember.active
+        ? `${existingMember.firstName} ${existingMember.lastName} already has this email address but is inactive — reactivate them instead.`
+        : 'A member with this email address already exists.',
+    );
+  }
+
+  const { memberId } = await provisionMember(
+    {
+      firstName: input.firstName,
+      lastName: input.lastName,
+      emailLower: input.email,
+      phone: input.phone ?? '',
+      grade: input.grade,
+    },
+    { dryRun: false },
+  );
+  if (!memberId) throw new HttpsError('internal', 'The member could not be created.');
+
+  // Plan §12.5, exactly as the import does for a brand-new member.
+  await promoteVisitorsForNewMember(memberId, input.email, caller.uid);
+
+  const memberRef = db.doc(paths.member(memberId));
+  await audit({
+    actorMemberId: caller.uid,
+    action: 'member_added',
+    targetMemberId: memberId,
+    entityRef: memberRef.path,
+  });
+
+  const member = (await memberRef.get()).data() as Member;
+  return { member };
+}
+
+export const addMember = onCall(callableOptions, addMemberHandler);
+
+/* ----------------------------------- updateMember ------------------------------- */
+
+/**
+ * Edit a member's name, email, phone or grade. Role and active state have
+ * their own callables (`setMemberRole`, `deactivateMember`/`reactivateMember`)
+ * with their own guards, and are deliberately not editable here.
+ *
+ * Email is the sign-in identity and lives in three places: the Auth user
+ * (what `requestLoginCode` and password sign-in resolve), and
+ * `memberPrivate.emailLower` + `members.email`. Auth goes first — it is the
+ * hard uniqueness check — and is rolled back if the Firestore write then
+ * fails, so the three never end up disagreeing.
+ */
+export async function updateMemberHandler(req: CallableRequest<UpdateMemberInput>): Promise<UpdateMemberResult> {
+  const input = parseInput(UpdateMemberInputSchema, req.data);
+  const caller = await requireAdmin(req);
+
+  const memberRef = db.doc(paths.member(input.memberId));
+  const privateRef = db.doc(paths.memberPrivate(input.memberId));
+  const [memberSnap, privateSnap] = await Promise.all([memberRef.get(), privateRef.get()]);
+  const current = memberSnap.data() as Member | undefined;
+  const currentPrivate = privateSnap.data() as MemberPrivate | undefined;
+  if (!current || !currentPrivate) throw new HttpsError('not-found', 'Member not found.');
+  if (current.erasedAt) throw new HttpsError('failed-precondition', 'This member has been erased and cannot be edited.');
+
+  const { patch } = input;
+  const fields: string[] = [];
+  const memberPatch: Partial<Member> = {};
+  if (patch.firstName !== undefined && patch.firstName !== current.firstName) {
+    memberPatch.firstName = patch.firstName;
+    fields.push('firstName');
+  }
+  if (patch.lastName !== undefined && patch.lastName !== current.lastName) {
+    memberPatch.lastName = patch.lastName;
+    fields.push('lastName');
+  }
+  if (patch.phone !== undefined && patch.phone !== current.phone) {
+    memberPatch.phone = patch.phone;
+    fields.push('phone');
+  }
+  if (patch.grade !== undefined && patch.grade !== current.grade) {
+    memberPatch.grade = patch.grade;
+    fields.push('grade');
+  }
+  const previousEmail = currentPrivate.emailLower;
+  const emailChanged = patch.email !== undefined && patch.email !== previousEmail;
+  if (emailChanged) {
+    memberPatch.email = patch.email!;
+    fields.push('email');
+  } else if (patch.email !== undefined && current.email !== patch.email) {
+    // Same login address, but `members.email` predates the denormalised field: backfill it.
+    memberPatch.email = patch.email;
+  }
+
+  if (fields.length === 0 && Object.keys(memberPatch).length === 0) {
+    return { member: current, changed: false };
+  }
+
+  const newEmail = emailChanged ? patch.email! : undefined;
+  if (newEmail) {
+    const clash = await db.collection(paths.memberPrivates()).where('emailLower', '==', newEmail).limit(1).get();
+    if (!clash.empty) {
+      throw new HttpsError('failed-precondition', 'Another member already has this email address.');
+    }
+    try {
+      await auth.updateUser(input.memberId, { email: newEmail, emailVerified: true });
+    } catch (err) {
+      if (authErrorCode(err) === 'auth/email-already-exists') {
+        throw new HttpsError('failed-precondition', 'Another account already has this email address.');
+      }
+      if (authErrorCode(err) === 'auth/invalid-email') {
+        throw new HttpsError('invalid-argument', 'That email address is not valid.');
+      }
+      throw err;
+    }
+  }
+
+  const now = new Date().toISOString();
+  let updated: Member;
+  try {
+    updated = await db.runTransaction(async (tx) => {
+      const snap = await tx.get(memberRef);
+      const m = snap.data() as Member | undefined;
+      if (!m) throw new HttpsError('not-found', 'Member not found.');
+      if (m.erasedAt) throw new HttpsError('failed-precondition', 'This member has been erased and cannot be edited.');
+      const next: Member = { ...m, ...memberPatch, updatedAt: now };
+      tx.set(memberRef, next);
+      if (newEmail) tx.update(privateRef, { emailLower: newEmail, updatedAt: now });
+      return next;
+    });
+  } catch (err) {
+    if (newEmail) {
+      try {
+        await auth.updateUser(input.memberId, { email: previousEmail, emailVerified: true });
+      } catch {
+        logger.error('member_update_email_rollback_failed', { targetMemberId: input.memberId });
+      }
+    }
+    throw err;
+  }
+
+  if (memberPatch.firstName !== undefined || memberPatch.lastName !== undefined) {
+    const writer = new BatchWriter();
+    await rewriteMemberDisplayName(writer, input.memberId, `${updated.firstName} ${updated.lastName}`, now);
+    await writer.flush();
+  }
+
+  // Field names only — never the values (names, phone, email are PII).
+  await audit({
+    actorMemberId: caller.uid,
+    action: 'member_updated',
+    targetMemberId: input.memberId,
+    entityRef: memberRef.path,
+    detail: { fields },
+  });
+
+  if (newEmail && updated.active) {
+    await createNotification(
+      input.memberId,
+      'security',
+      'Your sign-in email was changed',
+      'An admin changed the email address you sign in with. If this was unexpected, contact the club.',
+      {},
+    );
+  }
+
+  return { member: updated, changed: true };
+}
+
+export const updateMember = onCall(callableOptions, updateMemberHandler);
 
 /* ---------------------------------- setMemberRole ------------------------------ */
 
@@ -352,38 +599,9 @@ export async function eraseMemberHandler(req: CallableRequest<EraseMemberInput>)
   const visitorsSnap = await db.collection(paths.visitors()).where('createdByMemberId', '==', input.memberId).get();
   for (const doc of visitorsSnap.docs) writer.delete(doc.ref);
 
-  // 4. entries referencing this member as partner/substitute/partnerSubstitute
-  //    (any date — history is kept, only the denormalised name is anonymised).
-  const patchByEntryId = new Map<string, Record<string, unknown>>();
-  for (const field of ['partner', 'substitute', 'partnerSubstitute'] as const) {
-    const snap = await db.collection(paths.entries()).where(`${field}.memberId`, '==', input.memberId).get();
-    for (const doc of snap.docs) {
-      const entry = doc.data() as Entry;
-      const ref = entry[field];
-      if (!ref || ref.kind !== 'member' || ref.memberId !== input.memberId) continue;
-      const patch = patchByEntryId.get(doc.id) ?? {};
-      patch[field] = { ...ref, displayName: 'Former member' };
-      patchByEntryId.set(doc.id, patch);
-    }
-  }
-  for (const [id, patch] of patchByEntryId) {
-    writer.update(db.doc(paths.entry(id)), { ...patch, updatedAt: now });
-  }
-
-  // 5. teams.members[].ref displayName -> 'Former member' wherever this member appears.
-  const teamsSnap = await db.collection(paths.teams()).get();
-  for (const doc of teamsSnap.docs) {
-    const team = doc.data() as Team;
-    let changed = false;
-    const members = team.members.map((m) => {
-      if (m.ref.kind === 'member' && m.ref.memberId === input.memberId && m.ref.displayName !== 'Former member') {
-        changed = true;
-        return { ...m, ref: { ...m.ref, displayName: 'Former member' } };
-      }
-      return m;
-    });
-    if (changed) writer.update(doc.ref, { members, updatedAt: now });
-  }
+  // 4–5. entries (partner/substitute/partnerSubstitute, any date — history is
+  //      kept, only the denormalised name is anonymised) and team rosters.
+  await rewriteMemberDisplayName(writer, input.memberId, 'Former member', now);
 
   // 6. notifications addressed to this member: delete.
   const notificationsSnap = await db.collection(paths.notifications()).where('memberId', '==', input.memberId).get();
