@@ -14,13 +14,13 @@ import {
   VerifyLoginCodeInputSchema,
   paths,
   type EmailLoginCode,
-  type Member,
   type RequestLoginCodeInput,
   type RequestLoginCodeResult,
   type VerifyLoginCodeInput,
   type VerifyLoginCodeResult,
 } from '@obc/shared';
 import { auth, db } from '../lib/admin.js';
+import { activeMembershipsOf } from '../lib/clubs.js';
 import { callableOptions } from '../lib/callable.js';
 import { assertRateLimit } from '../lib/rateLimit.js';
 import { clientIpFromForwardedFor, trustedHopsFromEnv } from '../lib/clientIp.js';
@@ -110,9 +110,8 @@ export async function requestLoginCodeHandler(
 
   let isActiveMember = false;
   if (uid) {
-    const memberSnap = await db.doc(paths.member(uid)).get();
-    const member = memberSnap.data() as Member | undefined;
-    isActiveMember = member?.active === true;
+    // Sign-in is about the person, not a club: any active membership will do.
+    isActiveMember = (await activeMembershipsOf(uid)).length > 0;
   }
 
   const provider = getEmailProvider();
@@ -220,9 +219,7 @@ export async function verifyLoginCodeHandler(
   // Defence in depth: the code was only issued to an active member, but the
   // member may have been deactivated inside the code's 10-minute window.
   // (`beforeSignIn` would also reject the custom token, but do not rely on it.)
-  const memberSnap = await db.doc(paths.member(userRecord.uid)).get();
-  const member = memberSnap.data() as Member | undefined;
-  if (!member || member.active !== true || userRecord.disabled) {
+  if (userRecord.disabled || (await activeMembershipsOf(userRecord.uid)).length === 0) {
     throw new HttpsError('invalid-argument', INVALID_CODE_MESSAGE);
   }
 

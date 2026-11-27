@@ -16,6 +16,7 @@ import {
   type MemberGrade,
   type MemberPrivate,
   type MemberRole,
+  type ClubPaths,
 } from '@obc/shared';
 import { auth, db } from '../lib/admin.js';
 import type { BatchWriter } from '../lib/batchWriter.js';
@@ -69,18 +70,19 @@ async function writeDoc(
 }
 
 export async function provisionMember(
+  cp: ClubPaths,
   row: MemberRow,
   opts: ProvisionOptions = { dryRun: false },
 ): Promise<ProvisionResult> {
   const existingPrivate = await db
-    .collection('memberPrivate')
+    .collection(paths.memberPrivates())
     .where('emailLower', '==', row.emailLower)
     .limit(1)
     .get();
 
   if (!existingPrivate.empty) {
     const uid = existingPrivate.docs[0]!.id;
-    const memberRef = db.doc(paths.member(uid));
+    const memberRef = db.doc(cp.member(uid));
     const memberSnap = await memberRef.get();
     const member = memberSnap.data() as Member | undefined;
     const wasInactive = !member || member.active !== true;
@@ -159,7 +161,7 @@ export async function provisionMember(
     updatedAt: now,
   };
 
-  await writeDoc(opts.writer, db.doc(paths.member(uid)), member, false);
+  await writeDoc(opts.writer, db.doc(cp.member(uid)), member, false);
   await writeDoc(opts.writer, db.doc(paths.memberPrivate(uid)), memberPrivate, false);
 
   return { outcome: 'added', memberId: uid };

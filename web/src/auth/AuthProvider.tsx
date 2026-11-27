@@ -28,6 +28,7 @@ import { AuthContext, type AuthContextValue, type AuthStatus } from './AuthConte
 import { classifyMemberDocError } from './memberDocError';
 import { classifyStall } from './connectivity';
 import { writeLastActivity } from '../session/idleSignOut';
+import { useClub } from '../club/useClub';
 
 type MemberDocState = 'pending' | 'active' | 'notActive' | 'browser-not-verified' | 'unavailable' | 'blocked';
 
@@ -41,6 +42,7 @@ type MemberDocState = 'pending' | 'active' | 'notActive' | 'browser-not-verified
 export const MEMBER_LOAD_STALL_MS = 8000;
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const cp = useClub();
   const [authReady, setAuthReady] = useState(false);
   const [user, setUser] = useState<User | null>(null);
   const [member, setMember] = useState<Member | null>(null);
@@ -86,7 +88,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }, MEMBER_LOAD_STALL_MS);
 
     const unsubMember = onSnapshot(
-      doc(db, paths.member(user.uid)),
+      doc(db, cp.member(user.uid)),
       (snap) => {
         resolved = true;
         if (!snap.exists()) {
@@ -127,7 +129,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       unsubMember();
       unsubPrivate();
     };
-  }, [user]);
+  }, [user, cp]);
 
   const status: AuthStatus = useMemo(() => {
     if (!authReady) return 'loading';

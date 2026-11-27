@@ -28,13 +28,14 @@ import {
   type Entry,
   type EntryStatus,
   type IcalToken,
-  type Member,
   type Session,
   type Team,
   type Weekday,
   type WeekdayProgramme,
+  type ClubPaths,
 } from '@obc/shared';
 import { db } from '../lib/admin.js';
+import { activeMembershipsOf } from '../lib/clubs.js';
 import { assertRateLimit } from '../lib/rateLimit.js';
 import { clientIpFromForwardedFor, forwardedForEntries, trustedHopsFromEnv } from '../lib/clientIp.js';
 import { logger } from '../lib/logger.js';
@@ -130,15 +131,19 @@ export async function icalFeedHandler(req: Request, res: Response): Promise<void
       return;
     }
 
-    const memberSnap = await db.doc(paths.member(tokenDoc.memberId)).get();
-    const member = memberSnap.data() as Member | undefined;
-    if (!member || member.active !== true) {
-      // Deactivation kills the feed immediately (plan §21 B1 step 3).
+    // The feed belongs to the person and merges every club they are active in
+    // (plan §21 B14.5). Deactivation everywhere kills the feed immediately
+    // (plan §21 B1 step 3); deactivation in one club drops only that club.
+    const memberships = await activeMembershipsOf(tokenDoc.memberId);
+    if (memberships.length === 0) {
       sendUniformNotFound(res, method);
       return;
     }
 
-    const events = await loadFeedEvents(member.id);
+    const events: IcsEvent[] = [];
+    for (const { cp } of memberships) {
+      events.push(...(await loadFeedEvents(cp, tokenDoc.memberId)));
+    }
     const icsText = buildCalendar(events, { prodId: PROD_ID });
 
     res
@@ -150,7 +155,7 @@ export async function icalFeedHandler(req: Request, res: Response): Promise<void
 
     logger.info('ical_feed_served', {
       tokenPrefix: tokenHashPrefix,
-      memberId: member.id,
+      memberId: tokenDoc.memberId,
       entries: events.length,
       status: 200,
       // How many `x-forwarded-for` entries arrived (a count, never an
@@ -173,10 +178,10 @@ export async function icalFeedHandler(req: Request, res: Response): Promise<void
  * distinct session/weekday/team lookup once per request rather than once per
  * entry.
  */
-async function loadFeedEvents(memberId: string): Promise<IcsEvent[]> {
+async function loadFeedEvents(cp: ClubPaths, memberId: string): Promise<IcsEvent[]> {
   const cutoff = addDaysNZ(todayNZ(), -LOOKBACK_DAYS);
   const entriesSnap = await db
-    .collection(paths.entries())
+    .collection(cp.entries())
     .where('memberId', '==', memberId)
     .where('date', '>=', cutoff)
     .orderBy('date')
@@ -193,7 +198,7 @@ async function loadFeedEvents(memberId: string): Promise<IcsEvent[]> {
   async function loadSession(year: number, sessionId: string): Promise<Session | null> {
     const key = `${year}/${sessionId}`;
     if (!sessionCache.has(key)) {
-      const snap = await db.doc(paths.session(year, sessionId)).get();
+      const snap = await db.doc(cp.session(year, sessionId)).get();
       sessionCache.set(key, (snap.data() as Session | undefined) ?? null);
     }
     return sessionCache.get(key) ?? null;
@@ -202,7 +207,7 @@ async function loadFeedEvents(memberId: string): Promise<IcsEvent[]> {
   async function loadStartTime(year: number, weekday: Weekday): Promise<string> {
     const key = `${year}/${weekday}`;
     if (!weekdayCache.has(key)) {
-      const snap = await db.doc(paths.weekday(year, weekday)).get();
+      const snap = await db.doc(cp.weekday(year, weekday)).get();
       weekdayCache.set(key, (snap.data() as WeekdayProgramme | undefined) ?? null);
     }
     return weekdayCache.get(key)?.startTime ?? DEFAULT_START_TIME;
@@ -210,7 +215,7 @@ async function loadFeedEvents(memberId: string): Promise<IcsEvent[]> {
 
   async function loadTeamName(teamId: string): Promise<string | null> {
     if (!teamCache.has(teamId)) {
-      const snap = await db.doc(paths.team(teamId)).get();
+      const snap = await db.doc(cp.team(teamId)).get();
       teamCache.set(teamId, (snap.data() as Team | undefined) ?? null);
     }
     return teamCache.get(teamId)?.name ?? null;

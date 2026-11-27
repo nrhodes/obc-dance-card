@@ -33,6 +33,7 @@ import { db } from '../lib/admin.js';
 import { audit } from '../lib/audit.js';
 import { callableOptions } from '../lib/callable.js';
 import { requireMember, resolveActingMember } from '../lib/context.js';
+import { clubOf } from '../lib/clubs.js';
 import { parseInput } from '../lib/parseInput.js';
 import { createNotification } from '../notifications/create.js';
 
@@ -59,7 +60,8 @@ export function icalFeedUrls(token: string): { url: string; webcalUrl: string } 
 
 export async function getIcalFeedHandler(req: CallableRequest<GetIcalFeedInput>): Promise<GetIcalFeedResult> {
   const input = parseInput(GetIcalFeedInputSchema, req.data);
-  const caller = await requireMember(req);
+  const cp = clubOf(input);
+  const caller = await requireMember(req, cp);
   const actor = await resolveActingMember(caller, input.onBehalfOfMemberId);
 
   const snap = await db.doc(paths.memberPrivate(actor.memberId)).get();
@@ -69,7 +71,7 @@ export async function getIcalFeedHandler(req: CallableRequest<GetIcalFeedInput>)
   }
 
   if (actor.onBehalfBy) {
-    await audit({
+    await audit(cp, {
       actorMemberId: actor.onBehalfBy,
       action: 'get_ical_feed_on_behalf',
       targetMemberId: actor.memberId,
@@ -96,7 +98,8 @@ export async function createIcalFeedHandler(
   req: CallableRequest<CreateIcalFeedInput>,
 ): Promise<CreateIcalFeedResult> {
   const input = parseInput(CreateIcalFeedInputSchema, req.data);
-  const caller = await requireMember(req);
+  const cp = clubOf(input);
+  const caller = await requireMember(req, cp);
   const actor = await resolveActingMember(caller, input.onBehalfOfMemberId);
 
   const token = generateToken();
@@ -119,7 +122,7 @@ export async function createIcalFeedHandler(
   });
 
   if (actor.onBehalfBy) {
-    await audit({
+    await audit(cp, {
       actorMemberId: actor.onBehalfBy,
       action: 'create_ical_feed_on_behalf',
       targetMemberId: actor.memberId,
@@ -152,7 +155,8 @@ export async function rotateIcalFeedHandler(
   req: CallableRequest<RotateIcalFeedInput>,
 ): Promise<RotateIcalFeedResult> {
   const input = parseInput(RotateIcalFeedInputSchema, req.data);
-  const caller = await requireMember(req);
+  const cp = clubOf(input);
+  const caller = await requireMember(req, cp);
   const actor = await resolveActingMember(caller, input.onBehalfOfMemberId);
 
   const newToken = generateToken();
@@ -174,7 +178,7 @@ export async function rotateIcalFeedHandler(
   });
 
   if (actor.onBehalfBy) {
-    await audit({
+    await audit(cp, {
       actorMemberId: actor.onBehalfBy,
       action: 'rotate_ical_feed_on_behalf',
       targetMemberId: actor.memberId,
@@ -207,7 +211,8 @@ export async function removeIcalFeedHandler(
   req: CallableRequest<RemoveIcalFeedInput>,
 ): Promise<RemoveIcalFeedResult> {
   const input = parseInput(RemoveIcalFeedInputSchema, req.data);
-  const caller = await requireMember(req);
+  const cp = clubOf(input);
+  const caller = await requireMember(req, cp);
   const actor = await resolveActingMember(caller, input.onBehalfOfMemberId);
 
   const memberPrivateRef = db.doc(paths.memberPrivate(actor.memberId));
@@ -234,7 +239,7 @@ export async function removeIcalFeedHandler(
   }
 
   if (actor.onBehalfBy) {
-    await audit({
+    await audit(cp, {
       actorMemberId: actor.onBehalfBy,
       action: 'remove_ical_feed_on_behalf',
       targetMemberId: actor.memberId,

@@ -7,7 +7,7 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
-import { paths, todayNZ, WEEKDAYS, type Entry, type Weekday } from '@obc/shared';
+import { todayNZ, WEEKDAYS, type Entry, type Weekday } from '@obc/shared';
 import type { AppError } from '../../firebase';
 import { db } from '../../firebase';
 import { broadcast } from '../../api';
@@ -15,6 +15,7 @@ import { mapAdminActionError } from '../../admin/adminErrors';
 import { useMembersDirectory } from '../../members/useMembersDirectory';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { SubscriptionError } from '../../components/SubscriptionError';
+import { useClub } from '../../club/useClub';
 
 const WEEKDAY_LABELS: Record<Weekday, string> = {
   monday: 'Monday',
@@ -25,6 +26,7 @@ const WEEKDAY_LABELS: Record<Weekday, string> = {
 };
 
 export function BroadcastScreen() {
+  const cp = useClub();
   const { members: activeMembers, error: membersError } = useMembersDirectory();
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
@@ -39,7 +41,7 @@ export function BroadcastScreen() {
   useEffect(() => {
     const today = todayNZ();
     return onSnapshot(
-      query(collection(db, paths.entries()), where('date', '>=', today)),
+      query(collection(db, cp.entries()), where('date', '>=', today)),
       (snap) => {
         setFutureEntries(snap.docs.map((d) => d.data() as Entry));
         setEntriesError(null);
@@ -49,7 +51,7 @@ export function BroadcastScreen() {
         setEntriesError({ code: err.code });
       },
     );
-  }, []);
+  }, [cp]);
 
   const previewCount = useMemo(() => {
     if (weekdays.length === 0) return activeMembers.length;

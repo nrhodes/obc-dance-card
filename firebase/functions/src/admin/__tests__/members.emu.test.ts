@@ -24,6 +24,7 @@ import {
   notificationsFor,
   sessionInFuture,
   sessionInPast,
+  cp,
 } from '../../testing/fixtures.js';
 import { entryId } from '../../entries/lib.js';
 import { sendInviteHandler, respondToInviteHandler } from '../../entries/invites.js';
@@ -49,7 +50,7 @@ import { createHash } from 'node:crypto';
  * afterwards.
  */
 async function neutraliseOtherActiveAdmins(exceptUid: string): Promise<void> {
-  const snap = await db.collection(paths.members()).where('role', '==', 'admin').where('active', '==', true).get();
+  const snap = await db.collection(cp.members()).where('role', '==', 'admin').where('active', '==', true).get();
   await Promise.all(
     snap.docs.filter((d) => d.id !== exceptUid).map((d) => d.ref.update({ active: false })),
   );
@@ -93,7 +94,7 @@ describe('setMemberRole', () => {
     expect(after.tokensValidAfterTime).toBeDefined();
     expect(after.tokensValidAfterTime).not.toBe(before.tokensValidAfterTime);
 
-    const auditSnap = await db.collection(paths.auditLog()).where('action', '==', 'role_changed').get();
+    const auditSnap = await db.collection(cp.auditLog()).where('action', '==', 'role_changed').get();
     expect(auditSnap.docs.some((d) => d.data().targetMemberId === member)).toBe(true);
     expect(await notificationsFor(member, 'security')).toHaveLength(1);
   });
@@ -164,15 +165,15 @@ describe('deactivateMember', () => {
     const afterAuth = await auth.getUser(a);
     expect(afterAuth.disabled).toBe(true);
 
-    const bEntry = await db.doc(paths.entry(entryId(prog.sessionIds[0]!, b))).get();
+    const bEntry = await db.doc(cp.entry(entryId(prog.sessionIds[0]!, b))).get();
     expect(bEntry.data()?.status).toBe('looking_for_partner');
     expect(await notificationsFor(b, 'partner_cancelled')).toHaveLength(1);
 
-    const aToCSnap = await db.doc(paths.invite(aToC.id)).get();
+    const aToCSnap = await db.doc(cp.invite(aToC.id)).get();
     expect(aToCSnap.data()?.status).toBe('expired');
     expect(await notificationsFor(c, 'invite_expired')).toHaveLength(2);
 
-    const cToASnap = await db.doc(paths.invite(cToA.id)).get();
+    const cToASnap = await db.doc(cp.invite(cToA.id)).get();
     expect(cToASnap.data()?.status).toBe('expired');
   });
 
@@ -183,13 +184,13 @@ describe('deactivateMember', () => {
     const date = sessionInPast('monday');
     const sessionId = `history-${Date.now()}`;
 
-    await db.doc(paths.entry(entryId(sessionId, a))).set(pastPairEntry(sessionId, date, a, b, 'B Original'));
-    await db.doc(paths.entry(entryId(sessionId, b))).set(pastPairEntry(sessionId, date, b, a, 'A Original'));
+    await db.doc(cp.entry(entryId(sessionId, a))).set(pastPairEntry(sessionId, date, a, b, 'B Original'));
+    await db.doc(cp.entry(entryId(sessionId, b))).set(pastPairEntry(sessionId, date, b, a, 'A Original'));
 
     await deactivateMemberHandler(fakeCallableRequest<DeactivateMemberInput>({ memberId: a }, { uid: admin }));
 
-    const aEntry = (await db.doc(paths.entry(entryId(sessionId, a))).get()).data() as Entry;
-    const bEntry = (await db.doc(paths.entry(entryId(sessionId, b))).get()).data() as Entry;
+    const aEntry = (await db.doc(cp.entry(entryId(sessionId, a))).get()).data() as Entry;
+    const bEntry = (await db.doc(cp.entry(entryId(sessionId, b))).get()).data() as Entry;
     expect(aEntry.status).toBe('confirmed');
     expect(bEntry.status).toBe('confirmed');
     expect(bEntry.partner).toEqual({ kind: 'member', memberId: a, displayName: 'A Original' });
@@ -240,7 +241,7 @@ describe('reactivateMember', () => {
 describe('eraseMember', () => {
   async function backdateDeactivation(memberId: string, daysAgo: number): Promise<void> {
     const at = new Date(Date.now() - daysAgo * 24 * 3600 * 1000).toISOString();
-    await db.doc(paths.member(memberId)).set({ deactivatedAt: at }, { merge: true });
+    await db.doc(cp.member(memberId)).set({ deactivatedAt: at }, { merge: true });
   }
 
   it('refuses while the member is still active', async () => {
@@ -297,7 +298,7 @@ describe('eraseMember', () => {
 
     // A visitor owned by the erased member.
     const visitorId = 'erase-full-visitor';
-    await db.doc(paths.visitor(visitorId)).set({
+    await db.doc(cp.visitor(visitorId)).set({
       id: visitorId,
       displayName: 'Their Visitor',
       createdByMemberId: member,
@@ -310,8 +311,8 @@ describe('eraseMember', () => {
     // A past pairing so `other`'s entry keeps pointing at `member` after deactivation's cascade (which only touches future entries).
     const date = sessionInPast('monday');
     const sessionId = `erase-history-${Date.now()}`;
-    await db.doc(paths.entry(entryId(sessionId, member))).set(pastPairEntry(sessionId, date, member, other, 'Other Person'));
-    await db.doc(paths.entry(entryId(sessionId, other))).set(pastPairEntry(sessionId, date, other, member, 'Erase Full'));
+    await db.doc(cp.entry(entryId(sessionId, member))).set(pastPairEntry(sessionId, date, member, other, 'Other Person'));
+    await db.doc(cp.entry(entryId(sessionId, other))).set(pastPairEntry(sessionId, date, other, member, 'Erase Full'));
 
     await deactivateMemberHandler(fakeCallableRequest<DeactivateMemberInput>({ memberId: member }, { uid: admin }));
     await backdateDeactivation(member, 31);
@@ -323,7 +324,7 @@ describe('eraseMember', () => {
     // Erasure itself doesn't care when the team was created — it just scans
     // every team doc at erase time.
     const teamId = `erase-full-team-${Date.now()}`;
-    await db.doc(paths.team(teamId)).set({
+    await db.doc(cp.team(teamId)).set({
       id: teamId,
       year: Number(date.slice(0, 4)),
       seriesId: 'erase-full-series',
@@ -357,7 +358,7 @@ describe('eraseMember', () => {
     );
     expect(result.ok).toBe(true);
 
-    const memberDoc = (await db.doc(paths.member(member)).get()).data();
+    const memberDoc = (await db.doc(cp.member(member)).get()).data();
     expect(memberDoc?.firstName).toBe('Former');
     expect(memberDoc?.lastName).toBe('Member');
     expect(memberDoc?.phone).toBe('');
@@ -370,21 +371,21 @@ describe('eraseMember', () => {
 
     await expect(auth.getUser(member)).rejects.toMatchObject({ code: 'auth/user-not-found' });
 
-    const visitorSnap = await db.doc(paths.visitor(visitorId)).get();
+    const visitorSnap = await db.doc(cp.visitor(visitorId)).get();
     expect(visitorSnap.exists).toBe(false);
 
-    const otherEntry = (await db.doc(paths.entry(entryId(sessionId, other))).get()).data() as Entry;
+    const otherEntry = (await db.doc(cp.entry(entryId(sessionId, other))).get()).data() as Entry;
     expect(otherEntry.partner).toEqual({ kind: 'member', memberId: member, displayName: 'Former member' });
-    const ownEntry = (await db.doc(paths.entry(entryId(sessionId, member))).get()).data() as Entry;
+    const ownEntry = (await db.doc(cp.entry(entryId(sessionId, member))).get()).data() as Entry;
     expect(ownEntry.memberId).toBe(member); // history retained, not deleted
 
-    const teamDoc = (await db.doc(paths.team(teamId)).get()).data() as { members: Array<{ ref: { kind: string; memberId?: string; displayName: string } }> };
+    const teamDoc = (await db.doc(cp.team(teamId)).get()).data() as { members: Array<{ ref: { kind: string; memberId?: string; displayName: string } }> };
     const memberRef = teamDoc.members.find((m) => m.ref.kind === 'member' && m.ref.memberId === member);
     expect(memberRef?.ref.displayName).toBe('Former member');
 
     expect(await notificationsFor(member)).toEqual([]);
 
-    const auditSnap = await db.collection(paths.auditLog()).where('action', '==', 'member_erased').get();
+    const auditSnap = await db.collection(cp.auditLog()).where('action', '==', 'member_erased').get();
     expect(auditSnap.docs.some((d) => d.data().targetMemberId === member)).toBe(true);
   });
 });
@@ -418,7 +419,7 @@ describe('addMember', () => {
     const priv = (await db.doc(paths.memberPrivate(m.id)).get()).data() as MemberPrivate;
     expect(priv.emailLower).toBe('add-new@example.org');
 
-    const auditSnap = await db.collection(paths.auditLog()).where('action', '==', 'member_added').get();
+    const auditSnap = await db.collection(cp.auditLog()).where('action', '==', 'member_added').get();
     expect(auditSnap.docs.some((d) => d.data().targetMemberId === m.id && d.data().actorMemberId === admin)).toBe(true);
   });
 
@@ -477,7 +478,7 @@ describe('updateMember', () => {
     const partner = await makeMember('upd-partner@example.org');
     const date = sessionInPast();
     const sessionId = `upd-rename-${target}`;
-    await db.doc(paths.entry(entryId(sessionId, partner))).set(pastPairEntry(sessionId, date, partner, target, 'Jane Doe'));
+    await db.doc(cp.entry(entryId(sessionId, partner))).set(pastPairEntry(sessionId, date, partner, target, 'Jane Doe'));
 
     const result = await updateMemberHandler(
       fakeCallableRequest<UpdateMemberInput>(
@@ -488,10 +489,10 @@ describe('updateMember', () => {
 
     expect(result.changed).toBe(true);
     expect(result.member).toMatchObject({ firstName: 'Jane', lastName: 'Smith', phone: '09 555 0100', grade: 'Intermediate' });
-    const entry = (await db.doc(paths.entry(entryId(sessionId, partner))).get()).data() as Entry;
+    const entry = (await db.doc(cp.entry(entryId(sessionId, partner))).get()).data() as Entry;
     expect(entry.partner).toMatchObject({ memberId: target, displayName: 'Jane Smith' });
 
-    const auditSnap = await db.collection(paths.auditLog()).where('action', '==', 'member_updated').get();
+    const auditSnap = await db.collection(cp.auditLog()).where('action', '==', 'member_updated').get();
     const mine = auditSnap.docs.map((d) => d.data()).find((d) => d.targetMemberId === target);
     expect(mine?.detail).toEqual({ fields: ['lastName', 'phone', 'grade'] });
     expect(JSON.stringify(mine)).not.toContain('Smith');
@@ -533,14 +534,14 @@ describe('updateMember', () => {
     ).rejects.toMatchObject({ code: 'failed-precondition' });
 
     expect((await auth.getUser(target)).email).toBe('upd-clash-target@example.org');
-    const m = (await db.doc(paths.member(target)).get()).data() as Member;
+    const m = (await db.doc(cp.member(target)).get()).data() as Member;
     expect(m.email).toBe('upd-clash-target@example.org');
   });
 
   it('is a no-op when the patch matches what is stored', async () => {
     const admin = await makeMember('upd-noop-admin@example.org', { role: 'admin' });
     const target = await makeMember('upd-noop-target@example.org', { firstName: 'Same', lastName: 'Name' });
-    const before = (await db.doc(paths.member(target)).get()).data() as Member;
+    const before = (await db.doc(cp.member(target)).get()).data() as Member;
 
     const result = await updateMemberHandler(
       fakeCallableRequest<UpdateMemberInput>(
@@ -550,7 +551,7 @@ describe('updateMember', () => {
     );
 
     expect(result.changed).toBe(false);
-    const after = (await db.doc(paths.member(target)).get()).data() as Member;
+    const after = (await db.doc(cp.member(target)).get()).data() as Member;
     expect(after.updatedAt).toBe(before.updatedAt);
   });
 
@@ -574,6 +575,48 @@ describe('updateMember', () => {
       updateMemberHandler(
         fakeCallableRequest(
           { memberId: member, patch: { role: 'admin', active: false } } as unknown as UpdateMemberInput,
+          { uid: admin },
+        ),
+      ),
+    ).rejects.toMatchObject({ code: 'invalid-argument' });
+  });
+});
+
+describe('club scoping (plan §21 B14, stage 1a)', () => {
+  it('acts in the default club when clubId is absent or names it, and refuses an unknown club', async () => {
+    const admin = await makeMember('club-scope-admin@example.org', { role: 'admin' });
+    const target = await makeMember('club-scope-target@example.org');
+
+    const implicit = await updateMemberHandler(
+      fakeCallableRequest<UpdateMemberInput>({ memberId: target, patch: { phone: '09 111 1111' } }, { uid: admin }),
+    );
+    expect(implicit.member.phone).toBe('09 111 1111');
+
+    const explicit = await updateMemberHandler(
+      fakeCallableRequest<UpdateMemberInput>(
+        { clubId: 'orewa', memberId: target, patch: { phone: '09 222 2222' } },
+        { uid: admin },
+      ),
+    );
+    expect(explicit.member.phone).toBe('09 222 2222');
+
+    // The path builders do not include the club yet, so an unknown club must
+    // be refused outright rather than quietly run against the default club.
+    await expect(
+      updateMemberHandler(
+        fakeCallableRequest<UpdateMemberInput>(
+          { clubId: 'some-other-club', memberId: target, patch: { phone: '09 333 3333' } },
+          { uid: admin },
+        ),
+      ),
+    ).rejects.toMatchObject({ code: 'not-found' });
+    expect(((await db.doc(cp.member(target)).get()).data() as Member).phone).toBe('09 222 2222');
+
+    // A clubId that is not a slug never reaches a path.
+    await expect(
+      updateMemberHandler(
+        fakeCallableRequest<UpdateMemberInput>(
+          { clubId: '../members', memberId: target, patch: { phone: '09 444 4444' } },
           { uid: admin },
         ),
       ),

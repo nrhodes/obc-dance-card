@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { collection, onSnapshot, orderBy, query, where } from 'firebase/firestore';
-import { paths, type Visitor } from '@obc/shared';
+import { type Visitor } from '@obc/shared';
 import { db } from '../firebase';
 import { useEffectiveMember } from '../admin/useEffectiveMember';
 import { VisitorsContext, type VisitorsContextValue } from './VisitorsContext';
+import { useClub } from '../club/useClub';
 
 export function VisitorsProvider({ children }: { children: ReactNode }) {
+  const cp = useClub();
   // Plan Phase 6b task deliverable 2: while an admin is acting on behalf of a
   // member, "my visitors" reads that member's visitors — an admin may read
   // any visitor doc (rules §10), so this query is unaffected either way.
@@ -23,7 +25,7 @@ export function VisitorsProvider({ children }: { children: ReactNode }) {
       return;
     }
     setLoading(true);
-    const q = query(collection(db, paths.visitors()), where('createdByMemberId', '==', uid), orderBy('lastUsedAt', 'desc'));
+    const q = query(collection(db, cp.visitors()), where('createdByMemberId', '==', uid), orderBy('lastUsedAt', 'desc'));
     return onSnapshot(
       q,
       (snap) => {
@@ -38,7 +40,7 @@ export function VisitorsProvider({ children }: { children: ReactNode }) {
         setLoading(false);
       },
     );
-  }, [uid]);
+  }, [uid, cp]);
 
   const value = useMemo<VisitorsContextValue>(() => ({ visitors, loading, error }), [visitors, loading, error]);
 

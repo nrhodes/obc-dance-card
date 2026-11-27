@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-  paths,
   type AddTeamSessionSubstituteInput,
   type CancelEntryInput,
   type ClearTeamSessionSubstituteInput,
@@ -10,7 +9,7 @@ import {
   type RespondToInviteInput,
 } from '@obc/shared';
 import { db } from '../../lib/admin.js';
-import { assertTeamValid, fakeCallableRequest, makeMember, makeProgramme, notificationsFor, sessionInFuture } from '../../testing/fixtures.js';
+import { assertTeamValid, fakeCallableRequest, makeMember, makeProgramme, notificationsFor, sessionInFuture, cp } from '../../testing/fixtures.js';
 import { cancelEntryHandler } from '../../entries/entries.js';
 import { entryId } from '../../entries/lib.js';
 import { respondToInviteHandler } from '../../entries/invites.js';
@@ -79,7 +78,7 @@ describe('addTeamSessionSubstitute', () => {
     expect(result.team.sessionVisitors?.[sessionId]?.some((r) => r.kind === 'visitor' && r.visitorId === visitor.visitor.id)).toBe(true);
     await assertTeamValid(teamId);
 
-    const entrySnap = await db.doc(paths.entry(entryId(sessionId, visitor.visitor.id))).get();
+    const entrySnap = await db.doc(cp.entry(entryId(sessionId, visitor.visitor.id))).get();
     expect(entrySnap.exists).toBe(false);
   });
 });

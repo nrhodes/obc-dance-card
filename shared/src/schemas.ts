@@ -24,6 +24,15 @@ const message200 = z.string().trim().max(200);
 const displayName = z.string().trim().min(1).max(80);
 const weekday = z.enum(WEEKDAYS);
 const onBehalfOfMemberId = id.optional();
+/**
+ * Which club a club-scoped callable acts in (plan §21 B14). Optional during
+ * stage 1a/1b — the server falls back to `DEFAULT_CLUB_ID` — and required
+ * from stage 1c. A slug, never free text: it ends up in a document path.
+ */
+const clubId = z
+  .string()
+  .regex(/^[a-z0-9][a-z0-9-]{0,39}$/, 'expected a club id')
+  .optional();
 const year = z.number().int().min(2000).max(2100);
 /** Admin-only override of a locked session's cutoff (plan §6); enforced server-side. */
 const force = z.boolean().optional();
@@ -64,7 +73,7 @@ export type RemovePasswordInput = z.infer<typeof RemovePasswordInputSchema>;
 
 /* --------------------------------- profile -------------------------------- */
 
-export const UpdateMyContactInputSchema = z.object({ phone: phone.optional() });
+export const UpdateMyContactInputSchema = z.object({ clubId, phone: phone.optional() });
 export type UpdateMyContactInput = z.infer<typeof UpdateMyContactInputSchema>;
 
 export const NotificationPrefsInputSchema = z.object({
@@ -93,6 +102,7 @@ export type UnregisterDeviceInput = z.infer<typeof UnregisterDeviceInputSchema>;
 const csvText = z.string().max(1_000_000, 'CSV must be 1 MB or smaller');
 
 export const ImportMembersInputSchema = z.object({
+  clubId,
   csv: csvText,
   dryRun: z.boolean().optional(),
   /** Required to deactivate more than max(5, 20% of active members) in one import. */
@@ -101,21 +111,24 @@ export const ImportMembersInputSchema = z.object({
 export type ImportMembersInput = z.infer<typeof ImportMembersInputSchema>;
 
 export const SetMemberRoleInputSchema = z.object({
+  clubId,
   memberId: id,
   role: z.enum(MEMBER_ROLES),
 });
 export type SetMemberRoleInput = z.infer<typeof SetMemberRoleInputSchema>;
 
 export const DeactivateMemberInputSchema = z.object({
+  clubId,
   memberId: id,
   reason: z.string().trim().max(500).optional(),
 });
 export type DeactivateMemberInput = z.infer<typeof DeactivateMemberInputSchema>;
 
-export const ReactivateMemberInputSchema = z.object({ memberId: id });
+export const ReactivateMemberInputSchema = z.object({ clubId, memberId: id });
 export type ReactivateMemberInput = z.infer<typeof ReactivateMemberInputSchema>;
 
 export const EraseMemberInputSchema = z.object({
+  clubId,
   memberId: id,
   /** Must equal the member's current full name — a confirmation, not a lookup. */
   confirmName: z.string().trim().min(1).max(200),
@@ -132,6 +145,7 @@ const memberName = z.string().trim().min(1).max(80);
  */
 export const AddMemberInputSchema = z
   .object({
+    clubId,
     firstName: memberName,
     lastName: memberName,
     email,
@@ -156,6 +170,7 @@ export type UpdateMemberPatch = z.infer<typeof UpdateMemberPatchSchema>;
 
 export const UpdateMemberInputSchema = z
   .object({
+    clubId,
     memberId: id,
     patch: UpdateMemberPatchSchema,
   })
@@ -165,6 +180,7 @@ export type UpdateMemberInput = z.infer<typeof UpdateMemberInputSchema>;
 /* --------------------------- admin: programme ------------------------------ */
 
 export const ImportProgrammeInputSchema = z.object({
+  clubId,
   year: z.number().int().min(2000).max(2100),
   weekdaysCsv: csvText,
   seriesCsv: csvText,
@@ -175,7 +191,7 @@ export const ImportProgrammeInputSchema = z.object({
 });
 export type ImportProgrammeInput = z.infer<typeof ImportProgrammeInputSchema>;
 
-export const PublishProgrammeInputSchema = z.object({ year: z.number().int().min(2000).max(2100) });
+export const PublishProgrammeInputSchema = z.object({ clubId, year: z.number().int().min(2000).max(2100) });
 export type PublishProgrammeInput = z.infer<typeof PublishProgrammeInputSchema>;
 
 const bestOfPatch = z
@@ -199,6 +215,7 @@ export type UpdateSeriesPatch = z.infer<typeof UpdateSeriesPatchSchema>;
 
 export const UpdateSeriesInputSchema = z
   .object({
+    clubId,
     year: z.number().int().min(2000).max(2100),
     seriesId: id,
     patch: UpdateSeriesPatchSchema,
@@ -220,6 +237,7 @@ export type UpdateSessionPatch = z.infer<typeof UpdateSessionPatchSchema>;
 
 export const UpdateSessionInputSchema = z
   .object({
+    clubId,
     year: z.number().int().min(2000).max(2100),
     sessionId: id,
     patch: UpdateSessionPatchSchema,
@@ -245,6 +263,7 @@ export type UpdateWeekdayPatch = z.infer<typeof UpdateWeekdayPatchSchema>;
 
 export const UpdateWeekdayInputSchema = z
   .object({
+    clubId,
     year: z.number().int().min(2000).max(2100),
     weekday,
     patch: UpdateWeekdayPatchSchema,
@@ -256,6 +275,7 @@ export type UpdateWeekdayInput = z.infer<typeof UpdateWeekdayInputSchema>;
 
 export const SendInviteInputSchema = z
   .object({
+    clubId,
     scope: z.enum(['session', 'series']),
     year,
     sessionId: id.optional(),
@@ -271,6 +291,7 @@ export const SendInviteInputSchema = z
 export type SendInviteInput = z.infer<typeof SendInviteInputSchema>;
 
 export const RespondToInviteInputSchema = z.object({
+  clubId,
   inviteId: id,
   accept: z.boolean(),
   onBehalfOfMemberId,
@@ -278,12 +299,13 @@ export const RespondToInviteInputSchema = z.object({
 });
 export type RespondToInviteInput = z.infer<typeof RespondToInviteInputSchema>;
 
-export const CancelInviteInputSchema = z.object({ inviteId: id, onBehalfOfMemberId });
+export const CancelInviteInputSchema = z.object({ clubId, inviteId: id, onBehalfOfMemberId });
 export type CancelInviteInput = z.infer<typeof CancelInviteInputSchema>;
 
 /* ---------------------------------- entries -------------------------------- */
 
 export const SetSoloStatusInputSchema = z.object({
+  clubId,
   year,
   sessionId: id,
   status: z.enum(['looking_for_partner', 'available', 'unavailable']),
@@ -301,6 +323,7 @@ export type SetSoloStatusInput = z.infer<typeof SetSoloStatusInputSchema>;
  * report for the reasoning.
  */
 export const ClearSoloStatusInputSchema = z.object({
+  clubId,
   year,
   sessionId: id,
   force,
@@ -308,6 +331,7 @@ export const ClearSoloStatusInputSchema = z.object({
 export type ClearSoloStatusInput = z.infer<typeof ClearSoloStatusInputSchema>;
 
 export const ClaimLookingForPartnerInputSchema = z.object({
+  clubId,
   year,
   sessionId: id,
   posterMemberId: id,
@@ -341,6 +365,7 @@ export type BulkSoloStatusFilter = z.infer<typeof BulkSoloStatusFilterSchema>;
 
 export const SetBulkSoloStatusInputSchema = z
   .object({
+    clubId,
     status: z.enum(['available', 'unavailable', 'clear']),
     filter: BulkSoloStatusFilterSchema,
     onBehalfOfMemberId,
@@ -350,6 +375,7 @@ export type SetBulkSoloStatusInput = z.infer<typeof SetBulkSoloStatusInputSchema
 
 export const SignUpWithVisitorInputSchema = z
   .object({
+    clubId,
     scope: z.enum(['session', 'series']),
     year,
     sessionId: id.optional(),
@@ -367,6 +393,7 @@ export type SignUpWithVisitorInput = z.infer<typeof SignUpWithVisitorInputSchema
 const coverFor = z.enum(['self', 'partner']).optional();
 
 export const SetSubstituteInputSchema = z.object({
+  clubId,
   entryId: id,
   substitute: partnerRefInput,
   onBehalfOfMemberId,
@@ -375,10 +402,10 @@ export const SetSubstituteInputSchema = z.object({
 });
 export type SetSubstituteInput = z.infer<typeof SetSubstituteInputSchema>;
 
-export const ClearSubstituteInputSchema = z.object({ entryId: id, onBehalfOfMemberId });
+export const ClearSubstituteInputSchema = z.object({ clubId, entryId: id, onBehalfOfMemberId });
 export type ClearSubstituteInput = z.infer<typeof ClearSubstituteInputSchema>;
 
-export const CancelEntryInputSchema = z.object({ entryId: id, onBehalfOfMemberId, force });
+export const CancelEntryInputSchema = z.object({ clubId, entryId: id, onBehalfOfMemberId, force });
 export type CancelEntryInput = z.infer<typeof CancelEntryInputSchema>;
 
 /* ---------------------------------- visitors ------------------------------- */
@@ -386,6 +413,7 @@ export type CancelEntryInput = z.infer<typeof CancelEntryInputSchema>;
 const visitorNotes = z.string().trim().max(500);
 
 export const CreateVisitorInputSchema = z.object({
+  clubId,
   displayName,
   email: email.optional(),
   phone: phone.optional(),
@@ -396,6 +424,7 @@ export const CreateVisitorInputSchema = z.object({
 export type CreateVisitorInput = z.infer<typeof CreateVisitorInputSchema>;
 
 export const UpdateVisitorInputSchema = z.object({
+  clubId,
   visitorId: id,
   displayName: displayName.optional(),
   email: email.optional(),
@@ -405,12 +434,13 @@ export const UpdateVisitorInputSchema = z.object({
 });
 export type UpdateVisitorInput = z.infer<typeof UpdateVisitorInputSchema>;
 
-export const DeleteVisitorInputSchema = z.object({ visitorId: id });
+export const DeleteVisitorInputSchema = z.object({ clubId, visitorId: id });
 export type DeleteVisitorInput = z.infer<typeof DeleteVisitorInputSchema>;
 
 /* ----------------------------------- teams --------------------------------- */
 
 export const CreateTeamInputSchema = z.object({
+  clubId,
   year,
   seriesId: id,
   name: z.string().trim().min(1).max(200).optional(),
@@ -420,6 +450,7 @@ export const CreateTeamInputSchema = z.object({
 export type CreateTeamInput = z.infer<typeof CreateTeamInputSchema>;
 
 export const InviteToTeamInputSchema = z.object({
+  clubId,
   teamId: id,
   toMemberId: id,
   message: message200.optional(),
@@ -429,6 +460,7 @@ export const InviteToTeamInputSchema = z.object({
 export type InviteToTeamInput = z.infer<typeof InviteToTeamInputSchema>;
 
 export const AddVisitorToTeamInputSchema = z.object({
+  clubId,
   teamId: id,
   visitorId: id,
   onBehalfOfMemberId,
@@ -436,16 +468,18 @@ export const AddVisitorToTeamInputSchema = z.object({
 export type AddVisitorToTeamInput = z.infer<typeof AddVisitorToTeamInputSchema>;
 
 export const RemoveVisitorFromTeamInputSchema = z.object({
+  clubId,
   teamId: id,
   visitorId: id,
   onBehalfOfMemberId,
 });
 export type RemoveVisitorFromTeamInput = z.infer<typeof RemoveVisitorFromTeamInputSchema>;
 
-export const LeaveTeamInputSchema = z.object({ teamId: id, onBehalfOfMemberId, force });
+export const LeaveTeamInputSchema = z.object({ clubId, teamId: id, onBehalfOfMemberId, force });
 export type LeaveTeamInput = z.infer<typeof LeaveTeamInputSchema>;
 
 export const RemoveFromTeamInputSchema = z.object({
+  clubId,
   teamId: id,
   ref: partnerRefInput,
   onBehalfOfMemberId,
@@ -454,16 +488,18 @@ export const RemoveFromTeamInputSchema = z.object({
 export type RemoveFromTeamInput = z.infer<typeof RemoveFromTeamInputSchema>;
 
 export const TransferCaptaincyInputSchema = z.object({
+  clubId,
   teamId: id,
   toMemberId: id,
   onBehalfOfMemberId,
 });
 export type TransferCaptaincyInput = z.infer<typeof TransferCaptaincyInputSchema>;
 
-export const DisbandTeamInputSchema = z.object({ teamId: id, onBehalfOfMemberId, force });
+export const DisbandTeamInputSchema = z.object({ clubId, teamId: id, onBehalfOfMemberId, force });
 export type DisbandTeamInput = z.infer<typeof DisbandTeamInputSchema>;
 
 export const AddTeamSessionSubstituteInputSchema = z.object({
+  clubId,
   teamId: id,
   sessionId: id,
   ref: partnerRefInput,
@@ -473,6 +509,7 @@ export const AddTeamSessionSubstituteInputSchema = z.object({
 export type AddTeamSessionSubstituteInput = z.infer<typeof AddTeamSessionSubstituteInputSchema>;
 
 export const ClearTeamSessionSubstituteInputSchema = z.object({
+  clubId,
   teamId: id,
   sessionId: id,
   ref: partnerRefInput,
@@ -490,31 +527,33 @@ export type MarkNotificationsReadInput = z.infer<typeof MarkNotificationsReadInp
 
 /* ------------------------------- ical feed (plan §21 B1) ------------------- */
 
-export const GetIcalFeedInputSchema = z.object({ onBehalfOfMemberId }).strict();
+export const GetIcalFeedInputSchema = z.object({ clubId, onBehalfOfMemberId }).strict();
 export type GetIcalFeedInput = z.infer<typeof GetIcalFeedInputSchema>;
 
-export const CreateIcalFeedInputSchema = z.object({ onBehalfOfMemberId }).strict();
+export const CreateIcalFeedInputSchema = z.object({ clubId, onBehalfOfMemberId }).strict();
 export type CreateIcalFeedInput = z.infer<typeof CreateIcalFeedInputSchema>;
 
-export const RotateIcalFeedInputSchema = z.object({ onBehalfOfMemberId }).strict();
+export const RotateIcalFeedInputSchema = z.object({ clubId, onBehalfOfMemberId }).strict();
 export type RotateIcalFeedInput = z.infer<typeof RotateIcalFeedInputSchema>;
 
-export const RemoveIcalFeedInputSchema = z.object({ onBehalfOfMemberId }).strict();
+export const RemoveIcalFeedInputSchema = z.object({ clubId, onBehalfOfMemberId }).strict();
 export type RemoveIcalFeedInput = z.infer<typeof RemoveIcalFeedInputSchema>;
 
 /* --------------------------------- admin: misc ------------------------------ */
 
 export const BroadcastInputSchema = z.object({
+  clubId,
   title: z.string().trim().min(1).max(80),
   body: z.string().trim().min(1).max(1000),
   weekdays: z.array(weekday).max(5, 'at most five weekdays').optional(),
 });
 export type BroadcastInput = z.infer<typeof BroadcastInputSchema>;
 
-export const RunPairingSweepInputSchema = z.object({ repair: z.boolean().optional() });
+export const RunPairingSweepInputSchema = z.object({ clubId, repair: z.boolean().optional() });
 export type RunPairingSweepInput = z.infer<typeof RunPairingSweepInputSchema>;
 
 export const ListAuditLogInputSchema = z.object({
+  clubId,
   limit: z.number().int().min(1).max(100).optional(),
   /** ISO instant cursor: return entries strictly before this `at`. */
   before: z.string().trim().min(1).max(40).optional(),

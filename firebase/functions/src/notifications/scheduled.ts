@@ -20,8 +20,10 @@ import {
   type NotificationType,
   type Session,
   type Visitor,
+  type ClubPaths,
 } from '@obc/shared';
 import { db } from '../lib/admin.js';
+import { activePersonIds, allClubs } from '../lib/clubs.js';
 import { audit } from '../lib/audit.js';
 import { BatchWriter } from '../lib/batchWriter.js';
 import { logger } from '../lib/logger.js';
@@ -43,9 +45,9 @@ const ALWAYS_IMMEDIATE_EMAIL_TYPES: readonly NotificationType[] = ['security', '
  * back to the session's title, e.g. for a Holiday Bridge single) and who the
  * member is playing with, or that they are listed as looking for a partner.
  */
-async function reminderContent(entry: Entry): Promise<{ title: string; body: string }> {
+async function reminderContent(cp: ClubPaths, entry: Entry): Promise<{ title: string; body: string }> {
   const year = Number(entry.date.slice(0, 4));
-  const sessionSnap = await db.doc(paths.session(year, entry.sessionId)).get();
+  const sessionSnap = await db.doc(cp.session(year, entry.sessionId)).get();
   const session = sessionSnap.data() as Session | undefined;
   const label = session?.seriesName ?? session?.title ?? 'bridge';
   const title = `Reminder: ${entry.date}`;
@@ -71,7 +73,17 @@ export interface ReminderReport {
 
 export async function runSendSessionReminders(now: Date = new Date()): Promise<ReminderReport> {
   let sent = 0;
-  const membersSnap = await db.collection(paths.members()).where('active', '==', true).get();
+  for (const cp of await allClubs()) {
+    sent += await sendSessionRemindersForClub(cp, now);
+  }
+  logger.info('send_session_reminders_done', { sent });
+  return { sent };
+}
+
+/** One club's reminders: its active members' entries in that club. */
+async function sendSessionRemindersForClub(cp: ClubPaths, now: Date): Promise<number> {
+  let sent = 0;
+  const membersSnap = await db.collection(cp.members()).where('active', '==', true).get();
 
   for (const memberDoc of membersSnap.docs) {
     const memberId = memberDoc.id;
@@ -81,7 +93,7 @@ export async function runSendSessionReminders(now: Date = new Date()): Promise<R
 
     const targetDate = addDaysNZ(todayNZ(now), mp.notificationPrefs.reminderDaysBefore);
     const entriesSnap = await db
-      .collection(paths.entries())
+      .collection(cp.entries())
       .where('memberId', '==', memberId)
       .where('date', '==', targetDate)
       .get();
@@ -104,7 +116,7 @@ export async function runSendSessionReminders(now: Date = new Date()): Promise<R
       if (entry.status === 'cancelled' || entry.status === 'unavailable') continue;
       if (alreadyReminded.has(entry.id)) continue;
 
-      const { title, body } = await reminderContent(entry);
+      const { title, body } = await reminderContent(cp, entry);
       await createNotification(memberId, 'session_reminder', title, body, {
         entryId: entry.id,
         sessionId: entry.sessionId,
@@ -113,8 +125,7 @@ export async function runSendSessionReminders(now: Date = new Date()): Promise<R
     }
   }
 
-  logger.info('send_session_reminders_done', { sent });
-  return { sent };
+  return sent;
 }
 
 export const sendSessionReminders = onSchedule(
@@ -134,9 +145,9 @@ export async function runSendDailyDigest(now: Date = new Date()): Promise<Digest
   let emailsSent = 0;
   const cutoffIso = new Date(now.getTime() - 24 * 3600 * 1000).toISOString();
 
-  const membersSnap = await db.collection(paths.members()).where('active', '==', true).get();
-  for (const memberDoc of membersSnap.docs) {
-    const memberId = memberDoc.id;
+  // The digest is per person — one email however many clubs they are in —
+  // because notifications are person-level (plan §21 B14.5).
+  for (const memberId of await activePersonIds()) {
     const privateSnap = await db.doc(paths.memberPrivate(memberId)).get();
     const mp = privateSnap.data() as MemberPrivate | undefined;
     if (!mp || !mp.notificationPrefs.email || mp.notificationPrefs.digest !== 'daily') continue;
@@ -192,9 +203,9 @@ const AUDIT_LOG_RETENTION_YEARS = 2;
 const IMPORT_RETENTION_YEARS = 2;
 
 /** Every visitorId referenced by a non-cancelled entry dated today or later. */
-async function visitorIdsWithFutureEntries(now: Date): Promise<Set<string>> {
+async function visitorIdsWithFutureEntries(cp: ClubPaths, now: Date): Promise<Set<string>> {
   const today = todayNZ(now);
-  const snap = await db.collection(paths.entries()).where('date', '>=', today).get();
+  const snap = await db.collection(cp.entries()).where('date', '>=', today).get();
   const ids = new Set<string>();
   for (const doc of snap.docs) {
     const entry = doc.data() as Entry;
@@ -214,6 +225,75 @@ export interface PurgeReport {
   notificationsDeleted: number;
   auditLogDeleted: number;
   importsDeleted: number;
+}
+
+/** The club-owned part of the purge: stale invites, unused visitors, old audit rows and import reports. */
+async function purgeClub(cp: ClubPaths, now: Date, writer: BatchWriter, counts: PurgeReport): Promise<void> {
+  const nowIso = now.toISOString();
+
+  // 3. pending invites past expiresAt -> expired, notify the sender.
+  const invitesSnap = await db
+    .collection(cp.invites())
+    .where('status', '==', 'pending')
+    .where('expiresAt', '<', nowIso)
+    .get();
+  for (const doc of invitesSnap.docs) {
+    const invite = doc.data() as Invite;
+    writer.update(doc.ref, { status: 'expired', updatedAt: nowIso });
+    counts.invitesExpired += 1;
+    await createNotification(
+      invite.fromMemberId,
+      'invite_expired',
+      'Your invite expired',
+      'Your partner invite expired without a response.',
+      { inviteId: invite.id },
+    );
+  }
+
+  // 4. visitors unused 18+ months with no future non-cancelled entries -> delete.
+  const visitorCutoff = new Date(now);
+  visitorCutoff.setUTCMonth(visitorCutoff.getUTCMonth() - VISITOR_UNUSED_MONTHS);
+  const busyVisitorIds = await visitorIdsWithFutureEntries(cp, now);
+  const visitorsSnap = await db.collection(cp.visitors()).where('lastUsedAt', '<', visitorCutoff.toISOString()).get();
+  for (const doc of visitorsSnap.docs) {
+    const visitor = doc.data() as Visitor;
+    if (busyVisitorIds.has(visitor.id)) continue;
+    writer.delete(doc.ref);
+    counts.visitorsPurged += 1;
+    // No member is "acting" for an automated purge; `'system'` is the
+    // sentinel actor id for scheduled-job audit rows (there is no earlier
+    // convention in this codebase for a system actor — the nightly pairing
+    // sweep this mirrors is Phase 6).
+    await audit(cp, {
+      actorMemberId: 'system',
+      action: 'visitor_purged',
+      targetMemberId: visitor.createdByMemberId,
+      entityRef: cp.visitor(visitor.id),
+    });
+  }
+
+  // 6. auditLog rows older than the 2-year retention window -> delete.
+  // Erasure (`eraseMember`) deliberately leaves audit rows alone so the
+  // accountability trail survives the member; this is the one place they
+  // ever go, and only by age.
+  const auditCutoff = new Date(now);
+  auditCutoff.setUTCFullYear(auditCutoff.getUTCFullYear() - AUDIT_LOG_RETENTION_YEARS);
+  const auditSnap = await db.collection(cp.auditLog()).where('at', '<', auditCutoff.toISOString()).get();
+  for (const doc of auditSnap.docs) {
+    writer.delete(doc.ref);
+    counts.auditLogDeleted += 1;
+  }
+
+  // 7. import reports older than the retention window -> delete. They are
+  // server-only and already redacted of raw CSV rows, but still name members
+  // in warnings; nothing reads them after the admin's screen closes.
+  const importCutoff = new Date(now);
+  importCutoff.setUTCFullYear(importCutoff.getUTCFullYear() - IMPORT_RETENTION_YEARS);
+  const importsSnap = await db.collection(cp.imports()).where('startedAt', '<', importCutoff.toISOString()).get();
+  for (const doc of importsSnap.docs) {
+    writer.delete(doc.ref);
+    counts.importsDeleted += 1;
+  }
 }
 
 export async function runPurgeExpired(now: Date = new Date()): Promise<PurgeReport> {
@@ -244,45 +324,9 @@ export async function runPurgeExpired(now: Date = new Date()): Promise<PurgeRepo
     counts.rateLimitsDeleted += 1;
   }
 
-  // 3. pending invites past expiresAt -> expired, notify the sender.
-  const invitesSnap = await db
-    .collection(paths.invites())
-    .where('status', '==', 'pending')
-    .where('expiresAt', '<', nowIso)
-    .get();
-  for (const doc of invitesSnap.docs) {
-    const invite = doc.data() as Invite;
-    writer.update(doc.ref, { status: 'expired', updatedAt: nowIso });
-    counts.invitesExpired += 1;
-    await createNotification(
-      invite.fromMemberId,
-      'invite_expired',
-      'Your invite expired',
-      'Your partner invite expired without a response.',
-      { inviteId: invite.id },
-    );
-  }
-
-  // 4. visitors unused 18+ months with no future non-cancelled entries -> delete.
-  const visitorCutoff = new Date(now);
-  visitorCutoff.setUTCMonth(visitorCutoff.getUTCMonth() - VISITOR_UNUSED_MONTHS);
-  const busyVisitorIds = await visitorIdsWithFutureEntries(now);
-  const visitorsSnap = await db.collection(paths.visitors()).where('lastUsedAt', '<', visitorCutoff.toISOString()).get();
-  for (const doc of visitorsSnap.docs) {
-    const visitor = doc.data() as Visitor;
-    if (busyVisitorIds.has(visitor.id)) continue;
-    writer.delete(doc.ref);
-    counts.visitorsPurged += 1;
-    // No member is "acting" for an automated purge; `'system'` is the
-    // sentinel actor id for scheduled-job audit rows (there is no earlier
-    // convention in this codebase for a system actor — the nightly pairing
-    // sweep this mirrors is Phase 6).
-    await audit({
-      actorMemberId: 'system',
-      action: 'visitor_purged',
-      targetMemberId: visitor.createdByMemberId,
-      entityRef: paths.visitor(visitor.id),
-    });
+  // 3, 4, 6, 7: everything a club owns, club by club.
+  for (const cp of await allClubs()) {
+    await purgeClub(cp, now, writer, counts);
   }
 
   // 5. notifications older than 180 days -> delete.
@@ -291,29 +335,6 @@ export async function runPurgeExpired(now: Date = new Date()): Promise<PurgeRepo
   for (const doc of notificationsSnap.docs) {
     writer.delete(doc.ref);
     counts.notificationsDeleted += 1;
-  }
-
-  // 6. auditLog rows older than the 2-year retention window -> delete.
-  // Erasure (`eraseMember`) deliberately leaves audit rows alone so the
-  // accountability trail survives the member; this is the one place they
-  // ever go, and only by age.
-  const auditCutoff = new Date(now);
-  auditCutoff.setUTCFullYear(auditCutoff.getUTCFullYear() - AUDIT_LOG_RETENTION_YEARS);
-  const auditSnap = await db.collection(paths.auditLog()).where('at', '<', auditCutoff.toISOString()).get();
-  for (const doc of auditSnap.docs) {
-    writer.delete(doc.ref);
-    counts.auditLogDeleted += 1;
-  }
-
-  // 7. import reports older than the retention window -> delete. They are
-  // server-only and already redacted of raw CSV rows, but still name members
-  // in warnings; nothing reads them after the admin's screen closes.
-  const importCutoff = new Date(now);
-  importCutoff.setUTCFullYear(importCutoff.getUTCFullYear() - IMPORT_RETENTION_YEARS);
-  const importsSnap = await db.collection(paths.imports()).where('startedAt', '<', importCutoff.toISOString()).get();
-  for (const doc of importsSnap.docs) {
-    writer.delete(doc.ref);
-    counts.importsDeleted += 1;
   }
 
   await writer.flush();

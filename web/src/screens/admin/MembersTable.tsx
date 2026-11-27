@@ -10,7 +10,7 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import { collection, onSnapshot } from 'firebase/firestore';
-import { paths, type Member, type MemberRole } from '@obc/shared';
+import { type Member, type MemberRole } from '@obc/shared';
 import { db } from '../../firebase';
 import type { AppError } from '../../firebase';
 import { deactivateMember, eraseMember, reactivateMember, setMemberRole } from '../../api';
@@ -20,6 +20,7 @@ import { useActingAs } from '../../admin/useActingAs';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { Dialog } from '../../components/Dialog';
 import { SubscriptionError } from '../../components/SubscriptionError';
+import { useClub } from '../../club/useClub';
 
 type ActiveFilter = 'all' | 'active' | 'inactive';
 type RoleFilter = 'all' | 'admin';
@@ -37,6 +38,7 @@ type RowDialog =
   | { kind: 'erase'; member: Member };
 
 export function MembersTable() {
+  const cp = useClub();
   const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
   const [subError, setSubError] = useState<{ code: string } | null>(null);
@@ -44,7 +46,7 @@ export function MembersTable() {
 
   useEffect(() => {
     return onSnapshot(
-      collection(db, paths.members()),
+      collection(db, cp.members()),
       (snap) => {
         setMembers(snap.docs.map((d) => d.data() as Member));
         setSubError(null);
@@ -57,7 +59,7 @@ export function MembersTable() {
         setLoading(false);
       },
     );
-  }, []);
+  }, [cp]);
 
   const [search, setSearch] = useState('');
   const [activeFilter, setActiveFilter] = useState<ActiveFilter>('all');

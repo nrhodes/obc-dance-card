@@ -5,13 +5,15 @@
  */
 import { useEffect, useState } from 'react';
 import { collection, onSnapshot, orderBy, query } from 'firebase/firestore';
-import { paths, type Programme } from '@obc/shared';
+import { type Programme } from '@obc/shared';
 import { db, toAppError } from '../../firebase';
 import { publishProgramme } from '../../api';
 import { mapGenericError } from '../../auth/errors';
 import { SubscriptionError } from '../../components/SubscriptionError';
+import { useClub } from '../../club/useClub';
 
 export function AdminProgrammeList() {
+  const cp = useClub();
   const [programmes, setProgrammes] = useState<Programme[]>([]);
   const [loading, setLoading] = useState(true);
   const [publishingYear, setPublishingYear] = useState<number | null>(null);
@@ -19,7 +21,7 @@ export function AdminProgrammeList() {
   const [subError, setSubError] = useState<{ code: string } | null>(null);
 
   useEffect(() => {
-    const q = query(collection(db, paths.programmes()), orderBy('year', 'desc'));
+    const q = query(collection(db, cp.programmes()), orderBy('year', 'desc'));
     return onSnapshot(
       q,
       (snap) => {
@@ -34,7 +36,7 @@ export function AdminProgrammeList() {
         setLoading(false);
       },
     );
-  }, []);
+  }, [cp]);
 
   async function handlePublish(year: number) {
     if (!window.confirm(`Publish the ${year} programme? Members will be notified.`)) return;

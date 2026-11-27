@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { CreateVisitorInput, DeleteVisitorInput, Entry, UpdateVisitorInput } from '@obc/shared';
-import { paths } from '@obc/shared';
 import { db } from '../../lib/admin.js';
-import { fakeCallableRequest, makeMember, makeProgramme, sessionInFuture } from '../../testing/fixtures.js';
+import { fakeCallableRequest, makeMember, makeProgramme, sessionInFuture, cp } from '../../testing/fixtures.js';
 import { entryId } from '../../entries/lib.js';
 import { createVisitorHandler, deleteVisitorHandler, updateVisitorHandler } from '../visitors.js';
 
@@ -66,7 +65,7 @@ describe('createVisitor', () => {
     );
     expect(result.visitor.createdByMemberId).toBe(member);
 
-    const auditSnap = await db.collection(paths.auditLog()).where('action', '==', 'create_visitor_on_behalf').get();
+    const auditSnap = await db.collection(cp.auditLog()).where('action', '==', 'create_visitor_on_behalf').get();
     expect(auditSnap.docs.some((d) => d.data().actorMemberId === admin && d.data().targetMemberId === member)).toBe(true);
   });
 });
@@ -103,7 +102,7 @@ describe('updateVisitor', () => {
     };
     // Use the real future session date so the `date >= today` sweep finds it.
     futureEntry.date = sessionInFuture('monday');
-    await db.doc(paths.entry(futureEntry.id)).set(futureEntry);
+    await db.doc(cp.entry(futureEntry.id)).set(futureEntry);
 
     const pastEntry: Entry = {
       ...futureEntry,
@@ -111,7 +110,7 @@ describe('updateVisitor', () => {
       sessionId: `${sessionId}-past`,
       date: '2000-01-01',
     };
-    await db.doc(paths.entry(pastEntry.id)).set(pastEntry);
+    await db.doc(cp.entry(pastEntry.id)).set(pastEntry);
 
     const cancelledEntry: Entry = {
       ...futureEntry,
@@ -119,19 +118,19 @@ describe('updateVisitor', () => {
       sessionId: `${sessionId}-cancelled`,
       status: 'cancelled',
     };
-    await db.doc(paths.entry(cancelledEntry.id)).set(cancelledEntry);
+    await db.doc(cp.entry(cancelledEntry.id)).set(cancelledEntry);
 
     await updateVisitorHandler(
       fakeCallableRequest<UpdateVisitorInput>({ visitorId: visitor.id, displayName: 'New Name' }, { uid: a }),
     );
 
-    const updatedFuture = (await db.doc(paths.entry(futureEntry.id)).get()).data() as Entry;
+    const updatedFuture = (await db.doc(cp.entry(futureEntry.id)).get()).data() as Entry;
     expect(updatedFuture.partner?.displayName).toBe('New Name');
 
-    const updatedPast = (await db.doc(paths.entry(pastEntry.id)).get()).data() as Entry;
+    const updatedPast = (await db.doc(cp.entry(pastEntry.id)).get()).data() as Entry;
     expect(updatedPast.partner?.displayName).toBe('Old Name');
 
-    const updatedCancelled = (await db.doc(paths.entry(cancelledEntry.id)).get()).data() as Entry;
+    const updatedCancelled = (await db.doc(cp.entry(cancelledEntry.id)).get()).data() as Entry;
     expect(updatedCancelled.partner?.displayName).toBe('Old Name');
   });
 
@@ -192,17 +191,17 @@ describe('deleteVisitor', () => {
       createdAt: now,
       updatedAt: now,
     };
-    await db.doc(paths.entry(entry.id)).set(entry);
+    await db.doc(cp.entry(entry.id)).set(entry);
 
     await expect(
       deleteVisitorHandler(fakeCallableRequest<DeleteVisitorInput>({ visitorId: visitor.id }, { uid: a })),
     ).rejects.toMatchObject({ code: 'failed-precondition' });
 
-    await db.doc(entry.id ? paths.entry(entry.id) : '').set({ ...entry, status: 'cancelled' }, { merge: true });
+    await db.doc(entry.id ? cp.entry(entry.id) : '').set({ ...entry, status: 'cancelled' }, { merge: true });
     const result = await deleteVisitorHandler(fakeCallableRequest<DeleteVisitorInput>({ visitorId: visitor.id }, { uid: a }));
     expect(result.ok).toBe(true);
 
-    const gone = await db.doc(paths.visitor(visitor.id)).get();
+    const gone = await db.doc(cp.visitor(visitor.id)).get();
     expect(gone.exists).toBe(false);
   });
 

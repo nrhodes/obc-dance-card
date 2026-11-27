@@ -27,7 +27,6 @@
 import { HttpsError, onCall, type CallableRequest } from 'firebase-functions/v2/https';
 import {
   SetBulkSoloStatusInputSchema,
-  paths,
   todayNZ,
   type BulkSoloStatusFilter,
   type BulkSoloStatusSkip,
@@ -37,11 +36,13 @@ import {
   type SetBulkSoloStatusResult,
   type Session,
   type WeekdayProgramme,
+  type ClubPaths,
 } from '@obc/shared';
 import { db } from '../lib/admin.js';
 import { audit } from '../lib/audit.js';
 import { callableOptions } from '../lib/callable.js';
 import { requireMember, resolveActingMember } from '../lib/context.js';
+import { clubOf } from '../lib/clubs.js';
 import { parseInput } from '../lib/parseInput.js';
 import { assertRateLimit } from '../lib/rateLimit.js';
 import { createNotification } from '../notifications/create.js';
@@ -101,11 +102,12 @@ export function expandBulkSoloStatusSessions(
  * so this stays inside the callable's single transaction.
  */
 async function loadCandidates(
+  cp: ClubPaths,
   tx: FirebaseFirestore.Transaction,
   filter: BulkSoloStatusFilter,
   today: string,
 ): Promise<BulkSoloStatusCandidate[]> {
-  const programmesSnap = await tx.get(db.collection(paths.programmes()).where('status', '==', 'published'));
+  const programmesSnap = await tx.get(db.collection(cp.programmes()).where('status', '==', 'published'));
   const programmes = programmesSnap.docs.map((d) => d.data() as Programme);
 
   const effectiveFrom = filter.fromDate && filter.fromDate > today ? filter.fromDate : today;
@@ -113,7 +115,7 @@ async function loadCandidates(
   const candidates: BulkSoloStatusCandidate[] = [];
   for (const programme of programmes) {
     let sessionsQuery = db
-      .collection(paths.sessions(programme.year))
+      .collection(cp.sessions(programme.year))
       .where('weekday', 'in', filter.weekdays)
       .where('date', '>=', effectiveFrom);
     if (filter.toDate) {
@@ -126,7 +128,7 @@ async function loadCandidates(
     const weekdaysSeen = [...new Set(sessions.map((s) => s.weekday))];
     const weekdayDocs = new Map<string, WeekdayProgramme>();
     for (const wd of weekdaysSeen) {
-      const wdSnap = await tx.get(db.doc(paths.weekday(programme.year, wd)));
+      const wdSnap = await tx.get(db.doc(cp.weekday(programme.year, wd)));
       const wdDoc = wdSnap.data() as WeekdayProgramme | undefined;
       // Defensive only — every session's `weekday` should always have a
       // matching weekday-programme doc in the same published year; skip
@@ -147,14 +149,15 @@ export async function setBulkSoloStatusHandler(
   req: CallableRequest<SetBulkSoloStatusInput>,
 ): Promise<SetBulkSoloStatusResult> {
   const input = parseInput(SetBulkSoloStatusInputSchema, req.data);
-  const caller = await requireMember(req);
+  const cp = clubOf(input);
+  const caller = await requireMember(req, cp);
   const actor = await resolveActingMember(caller, input.onBehalfOfMemberId);
 
   await assertRateLimit('entries:setBulkSoloStatus', actor.memberId, BULK_SOLO_STATUS_LIMIT, BULK_SOLO_STATUS_WINDOW_SEC);
 
   const result = await db.runTransaction(async (tx) => {
     const today = todayNZ();
-    const candidates = await loadCandidates(tx, input.filter, today);
+    const candidates = await loadCandidates(cp, tx, input.filter, today);
     const targetSessions = expandBulkSoloStatusSessions(candidates, input.filter, today);
 
     // Firestore transactions require every read before any write — so every
@@ -163,7 +166,7 @@ export async function setBulkSoloStatusHandler(
     // *inside* the transaction", here done for the whole target set up front).
     const existingBySession = new Map<string, Entry | null>();
     for (const session of targetSessions) {
-      existingBySession.set(session.id, await readEntry(tx, session.id, actor.memberId));
+      existingBySession.set(session.id, await readEntry(cp, tx, session.id, actor.memberId));
     }
 
     const skipped: BulkSoloStatusSkip[] = [];
@@ -181,7 +184,7 @@ export async function setBulkSoloStatusHandler(
       if (input.status === 'clear') {
         if (existing && existing.status !== 'cancelled') {
           const cancelled: Entry = { ...existing, status: 'cancelled', updatedAt: now };
-          tx.set(db.doc(paths.entry(existing.id)), cancelled);
+          tx.set(db.doc(cp.entry(existing.id)), cancelled);
           updated += 1;
         }
         continue;
@@ -208,7 +211,7 @@ export async function setBulkSoloStatusHandler(
         createdAt: existing?.createdAt ?? now,
         updatedAt: now,
       };
-      tx.set(db.doc(paths.entry(doc.id)), doc);
+      tx.set(db.doc(cp.entry(doc.id)), doc);
       updated += 1;
     }
 
@@ -216,7 +219,7 @@ export async function setBulkSoloStatusHandler(
   });
 
   if (actor.onBehalfBy) {
-    await audit({
+    await audit(cp, {
       actorMemberId: actor.onBehalfBy,
       action: 'set_bulk_solo_status_on_behalf',
       targetMemberId: actor.memberId,

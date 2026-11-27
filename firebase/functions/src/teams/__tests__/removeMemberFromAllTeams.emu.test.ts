@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { CreateTeamInput, InviteToTeamInput, RespondToInviteInput } from '@obc/shared';
-import { assertTeamValid, fakeCallableRequest, makeMember, makeProgramme, notificationsFor, sessionInFuture } from '../../testing/fixtures.js';
+import { assertTeamValid, fakeCallableRequest, makeMember, makeProgramme, notificationsFor, sessionInFuture, cp } from '../../testing/fixtures.js';
 import { respondToInviteHandler } from '../../entries/invites.js';
 import { removeMemberFromAllTeams } from '../lib.js';
 import { createTeamHandler, inviteToTeamHandler } from '../teams.js';
@@ -22,7 +22,7 @@ describe('removeMemberFromAllTeams (Phase 6 hook, exercised directly)', () => {
     );
     await respondToInviteHandler(fakeCallableRequest<RespondToInviteInput>({ inviteId: inviteLate.invite.id, accept: true }, { uid: late }));
 
-    await removeMemberFromAllTeams(captain);
+    await removeMemberFromAllTeams(cp, captain);
 
     const { team, entries } = await assertTeamValid(created.team.id);
     expect(team.captainMemberId).toBe(early);
@@ -35,7 +35,7 @@ describe('removeMemberFromAllTeams (Phase 6 hook, exercised directly)', () => {
     const prog = await makeProgramme({ seriesFormat: 'Teams', dates: [sessionInFuture('monday')] });
     const created = await createTeamHandler(fakeCallableRequest<CreateTeamInput>({ year: prog.year, seriesId: prog.seriesId }, { uid: captain }));
 
-    await removeMemberFromAllTeams(captain);
+    await removeMemberFromAllTeams(cp, captain);
 
     const { team } = await assertTeamValid(created.team.id);
     expect(team.status).toBe('disbanded');
@@ -51,7 +51,7 @@ describe('removeMemberFromAllTeams (Phase 6 hook, exercised directly)', () => {
     );
     await respondToInviteHandler(fakeCallableRequest<RespondToInviteInput>({ inviteId: invite.invite.id, accept: true }, { uid: member }));
 
-    await removeMemberFromAllTeams(member);
+    await removeMemberFromAllTeams(cp, member);
 
     const { team, entries } = await assertTeamValid(created.team.id);
     expect(team.captainMemberId).toBe(captain);

@@ -10,7 +10,6 @@ import {
   CancelInviteInputSchema,
   RespondToInviteInputSchema,
   SendInviteInputSchema,
-  paths,
   sessionCutoff,
   type CancelInviteInput,
   type CancelInviteResult,
@@ -23,11 +22,13 @@ import {
   type SendInviteResult,
   type Series,
   type Team,
+  type ClubPaths,
 } from '@obc/shared';
 import { db } from '../lib/admin.js';
 import { audit } from '../lib/audit.js';
 import { callableOptions } from '../lib/callable.js';
 import { requireMember, resolveActingMember, type ActingMember } from '../lib/context.js';
+import { clubOf } from '../lib/clubs.js';
 import { assertRateLimit } from '../lib/rateLimit.js';
 import { createNotification } from '../notifications/create.js';
 import { assertForceAllowed, assertSessionOpen, isFree, loadSession, memberRef, readEntry, repeatPartnerWarning, writePair, type LoadedSession } from './lib.js';
@@ -57,11 +58,11 @@ const INVITE_MAX_AGE_MS = 7 * 24 * 3600 * 1000;
  * (so no composite index is needed) instead of reading every pending invite
  * in the club inside the transaction (security review 2026-11-16, I4).
  */
-async function pendingInvitesInvolving(tx: Transaction, memberIds: string[]): Promise<Invite[]> {
+async function pendingInvitesInvolving(cp: ClubPaths, tx: Transaction, memberIds: string[]): Promise<Invite[]> {
   const ids = [...new Set(memberIds)];
   const [bySender, byRecipient] = await Promise.all([
-    tx.get(db.collection(paths.invites()).where('status', '==', 'pending').where('fromMemberId', 'in', ids)),
-    tx.get(db.collection(paths.invites()).where('status', '==', 'pending').where('toMemberId', 'in', ids)),
+    tx.get(db.collection(cp.invites()).where('status', '==', 'pending').where('fromMemberId', 'in', ids)),
+    tx.get(db.collection(cp.invites()).where('status', '==', 'pending').where('toMemberId', 'in', ids)),
   ]);
   const byId = new Map<string, Invite>();
   for (const d of [...bySender.docs, ...byRecipient.docs]) {
@@ -73,7 +74,8 @@ async function pendingInvitesInvolving(tx: Transaction, memberIds: string[]): Pr
 
 export async function sendInviteHandler(req: CallableRequest<SendInviteInput>): Promise<SendInviteResult> {
   const input = parseInput(SendInviteInputSchema, req.data);
-  const caller = await requireMember(req);
+  const cp = clubOf(input);
+  const caller = await requireMember(req, cp);
   assertForceAllowed(caller, input.force);
   const actor = await resolveActingMember(caller, input.onBehalfOfMemberId);
   const actorName = `${actor.member.firstName} ${actor.member.lastName}`;
@@ -82,7 +84,7 @@ export async function sendInviteHandler(req: CallableRequest<SendInviteInput>): 
     throw new HttpsError('invalid-argument', 'You cannot invite yourself.');
   }
 
-  const toSnap = await db.doc(paths.member(input.toMemberId)).get();
+  const toSnap = await db.doc(cp.member(input.toMemberId)).get();
   const toMember = toSnap.data() as Member | undefined;
   if (!toMember || !toMember.active) {
     throw new HttpsError('failed-precondition', 'That member is not available to invite.');
@@ -103,7 +105,7 @@ export async function sendInviteHandler(req: CallableRequest<SendInviteInput>): 
     if (input.scope === 'session') {
       targetSessionIds = [input.sessionId!];
     } else {
-      const seriesSnap = await tx.get(db.doc(paths.seriesDoc(input.year, input.seriesId!)));
+      const seriesSnap = await tx.get(db.doc(cp.seriesDoc(input.year, input.seriesId!)));
       const series = seriesSnap.data() as Series | undefined;
       if (!series) throw new HttpsError('not-found', 'Series not found.');
       seriesId = series.id;
@@ -112,7 +114,7 @@ export async function sendInviteHandler(req: CallableRequest<SendInviteInput>): 
 
     const loaded: LoadedSession[] = [];
     for (const sid of targetSessionIds) {
-      loaded.push(await loadSession(tx, input.year, sid));
+      loaded.push(await loadSession(cp, tx, input.year, sid));
     }
 
     let target = loaded;
@@ -133,8 +135,8 @@ export async function sendInviteHandler(req: CallableRequest<SendInviteInput>): 
     const conflictDates: string[] = [];
     for (const ls of target) {
       const [fromEntry, toEntry] = [
-        await readEntry(tx, ls.session.id, actor.memberId),
-        await readEntry(tx, ls.session.id, input.toMemberId),
+        await readEntry(cp, tx, ls.session.id, actor.memberId),
+        await readEntry(cp, tx, ls.session.id, input.toMemberId),
       ];
       if (!isFree(fromEntry) || !isFree(toEntry)) {
         conflictDates.push(ls.session.date);
@@ -150,7 +152,7 @@ export async function sendInviteHandler(req: CallableRequest<SendInviteInput>): 
     const targetSessionIdSet = new Set(target.map((ls) => ls.session.id));
     const pendingSnap = await tx.get(
       db
-        .collection(paths.invites())
+        .collection(cp.invites())
         .where('fromMemberId', '==', actor.memberId)
         .where('toMemberId', '==', input.toMemberId)
         .where('status', '==', 'pending'),
@@ -187,16 +189,16 @@ export async function sendInviteHandler(req: CallableRequest<SendInviteInput>): 
       createdAt: now,
       updatedAt: now,
     };
-    tx.set(db.doc(paths.invite(inviteId)), doc);
+    tx.set(db.doc(cp.invite(inviteId)), doc);
     return doc;
   });
 
   if (actor.onBehalfBy) {
-    await audit({
+    await audit(cp, {
       actorMemberId: actor.onBehalfBy,
       action: 'send_invite_on_behalf',
       targetMemberId: actor.memberId,
-      entityRef: paths.invite(invite.id),
+      entityRef: cp.invite(invite.id),
     });
     await createNotification(
       actor.memberId,
@@ -226,11 +228,12 @@ export async function respondToInviteHandler(
   req: CallableRequest<RespondToInviteInput>,
 ): Promise<RespondToInviteResult> {
   const input = parseInput(RespondToInviteInputSchema, req.data);
-  const caller = await requireMember(req);
+  const cp = clubOf(input);
+  const caller = await requireMember(req, cp);
   assertForceAllowed(caller, input.force);
   const actor = await resolveActingMember(caller, input.onBehalfOfMemberId);
   const actorName = `${actor.member.firstName} ${actor.member.lastName}`;
-  const inviteRef = db.doc(paths.invite(input.inviteId));
+  const inviteRef = db.doc(cp.invite(input.inviteId));
 
   // Team invites (join or captaincy-transfer offers, plan §9.2/§12A.3) have a
   // materially different accept/decline shape — route to that flow entirely
@@ -240,7 +243,7 @@ export async function respondToInviteHandler(
   const peekSnap = await inviteRef.get();
   const peek = peekSnap.data() as Invite | undefined;
   if (peek?.scope === 'team') {
-    return respondToTeamInviteHandler(input, actor, actorName, inviteRef);
+    return respondToTeamInviteHandler(cp, input, actor, actorName, inviteRef);
   }
 
   if (!input.accept) {
@@ -261,7 +264,7 @@ export async function respondToInviteHandler(
     });
 
     if (actor.onBehalfBy) {
-      await audit({
+      await audit(cp, {
         actorMemberId: actor.onBehalfBy,
         action: 'respond_to_invite_on_behalf',
         targetMemberId: actor.memberId,
@@ -323,13 +326,13 @@ export async function respondToInviteHandler(
     // ---- reads: sessions, members, free-check, repeat-partner, other pending invites ----
     const loaded: LoadedSession[] = [];
     for (const sid of inv.sessionIds) {
-      loaded.push(await loadSession(tx, inv.year, sid));
+      loaded.push(await loadSession(cp, tx, inv.year, sid));
     }
     for (const ls of loaded) {
       assertSessionOpen(ls.session, ls.weekday, ls.programme, { force: input.force });
     }
 
-    const fromSnap = await tx.get(db.doc(paths.member(inv.fromMemberId)));
+    const fromSnap = await tx.get(db.doc(cp.member(inv.fromMemberId)));
     const fromMember = fromSnap.data() as Member | undefined;
     if (!fromMember || !fromMember.active) {
       throw new HttpsError('failed-precondition', 'The sender is no longer an active member.');
@@ -340,14 +343,14 @@ export async function respondToInviteHandler(
     if (fromMember.cohort !== actor.member.cohort) {
       throw new HttpsError('failed-precondition', 'That member is not available.');
     }
-    const toSnap = await tx.get(db.doc(paths.member(actor.memberId)));
+    const toSnap = await tx.get(db.doc(cp.member(actor.memberId)));
     const toMember = toSnap.data() as Member;
 
     const conflictDates: string[] = [];
     for (const ls of loaded) {
       const [fromEntry, toEntry] = [
-        await readEntry(tx, ls.session.id, inv.fromMemberId),
-        await readEntry(tx, ls.session.id, actor.memberId),
+        await readEntry(cp, tx, ls.session.id, inv.fromMemberId),
+        await readEntry(cp, tx, ls.session.id, actor.memberId),
       ];
       if (!isFree(fromEntry) || !isFree(toEntry)) {
         conflictDates.push(ls.session.date);
@@ -361,17 +364,17 @@ export async function respondToInviteHandler(
     }
 
     const seriesForWarning = loaded.find((ls) => ls.series)?.series ?? null;
-    const warning = await repeatPartnerWarning(tx, seriesForWarning, fromMember, toMember);
+    const warning = await repeatPartnerWarning(cp, tx, seriesForWarning, fromMember, toMember);
 
     const sessionIdSet = new Set(inv.sessionIds);
-    const toExpire = (await pendingInvitesInvolving(tx, [inv.fromMemberId, actor.memberId])).filter(
+    const toExpire = (await pendingInvitesInvolving(cp, tx, [inv.fromMemberId, actor.memberId])).filter(
       (other) => other.id !== inv.id && other.sessionIds.some((sid) => sessionIdSet.has(sid)),
     );
 
     // ---- writes ----
     const entries: Entry[] = [];
     for (const ls of loaded) {
-      const { entryA, entryB } = await writePair(tx, {
+      const { entryA, entryB } = await writePair(cp, tx, {
         session: ls.session,
         a: fromMember,
         b: toMember,
@@ -386,14 +389,14 @@ export async function respondToInviteHandler(
     tx.set(inviteRef, acceptedInvite);
 
     for (const other of toExpire) {
-      tx.set(db.doc(paths.invite(other.id)), { ...other, status: 'expired', updatedAt: now });
+      tx.set(db.doc(cp.invite(other.id)), { ...other, status: 'expired', updatedAt: now });
     }
 
     return { invite: acceptedInvite, entries, warning, expired: toExpire };
   });
 
   if (actor.onBehalfBy) {
-    await audit({
+    await audit(cp, {
       actorMemberId: actor.onBehalfBy,
       action: 'respond_to_invite_on_behalf',
       targetMemberId: actor.memberId,
@@ -441,6 +444,7 @@ export const respondToInvite = onCall(callableOptions, respondToInviteHandler);
  * flow (above) is untouched.
  */
 async function respondToTeamInviteHandler(
+  cp: ClubPaths,
   input: RespondToInviteInput,
   actor: ActingMember,
   actorName: string,
@@ -464,7 +468,7 @@ async function respondToTeamInviteHandler(
     });
 
     if (actor.onBehalfBy) {
-      await audit({
+      await audit(cp, {
         actorMemberId: actor.onBehalfBy,
         action: 'respond_to_invite_on_behalf',
         targetMemberId: actor.memberId,
@@ -524,7 +528,7 @@ async function respondToTeamInviteHandler(
       throw new HttpsError('failed-precondition', 'This invite is no longer pending.');
     }
 
-    const team = await loadTeam(tx, inv.teamId!);
+    const team = await loadTeam(cp, tx, inv.teamId!);
     if (team.status === 'disbanded') {
       throw new HttpsError('failed-precondition', 'This team has been disbanded.');
     }
@@ -534,19 +538,19 @@ async function respondToTeamInviteHandler(
     if (team.cohort !== actor.member.cohort) {
       throw new HttpsError('failed-precondition', 'That team is not available.');
     }
-    const { series, weekday, programme } = await loadTeamSeries(tx, inv.year, inv.seriesId!);
+    const { series, weekday, programme } = await loadTeamSeries(cp, tx, inv.year, inv.seriesId!);
 
     if (inv.kind === 'captaincy') {
       const isMember = team.members.some((m) => m.ref.kind === 'member' && m.ref.memberId === actor.memberId);
       if (!isMember) {
         throw new HttpsError('failed-precondition', 'You are no longer a member of this team.');
       }
-      const baseline = await loadTeamEntries(tx, team.id);
+      const baseline = await loadTeamEntries(cp, tx, team.id);
 
       const now = new Date().toISOString();
       const updatedTeam: Team = { ...team, captainMemberId: actor.memberId, updatedAt: now };
       updatedTeam.status = refreshTeamStatus(updatedTeam, series);
-      tx.set(db.doc(paths.team(team.id)), updatedTeam);
+      tx.set(db.doc(cp.team(team.id)), updatedTeam);
       assertTeamValid(updatedTeam, series, baseline);
 
       const acceptedInvite: Invite = { ...inv, status: 'accepted', respondedAt: now, updatedAt: now };
@@ -569,7 +573,7 @@ async function respondToTeamInviteHandler(
       throw new HttpsError('failed-precondition', 'You are already on this team.');
     }
 
-    const sessions = await seriesSessions(tx, inv.year, series);
+    const sessions = await seriesSessions(cp, tx, inv.year, series);
     const byId = new Map(sessions.map((s) => [s.id, s]));
     const invitedSessions = inv.sessionIds.map((sid) => byId.get(sid)).filter((s): s is NonNullable<typeof s> => !!s);
     // Sessions that have since locked are dropped, not treated as a failure
@@ -582,7 +586,7 @@ async function respondToTeamInviteHandler(
     const existingEntries = new Map<string, Entry | null>();
     const conflicts: string[] = [];
     for (const session of activeSessions) {
-      const entry = await readEntry(tx, session.id, actor.memberId);
+      const entry = await readEntry(cp, tx, session.id, actor.memberId);
       if (!isFree(entry)) conflicts.push(session.date);
       existingEntries.set(session.id, entry);
     }
@@ -594,11 +598,11 @@ async function respondToTeamInviteHandler(
     }
 
     const activeSessionIdSet = new Set(activeSessions.map((s) => s.id));
-    const toExpire = (await pendingInvitesInvolving(tx, [actor.memberId])).filter(
+    const toExpire = (await pendingInvitesInvolving(cp, tx, [actor.memberId])).filter(
       (other) => other.id !== inv.id && other.sessionIds.some((sid) => activeSessionIdSet.has(sid)),
     );
 
-    const baseline = await loadTeamEntries(tx, team.id);
+    const baseline = await loadTeamEntries(cp, tx, team.id);
     const now = new Date().toISOString();
     const wasForming = team.status === 'forming';
     const updatedTeam: Team = {
@@ -608,7 +612,7 @@ async function respondToTeamInviteHandler(
     };
     updatedTeam.status = refreshTeamStatus(updatedTeam, series);
 
-    const entries = writeTeamEntries(
+    const entries = writeTeamEntries(cp,
       tx,
       updatedTeam,
       activeSessions,
@@ -617,12 +621,12 @@ async function respondToTeamInviteHandler(
       actor.memberId,
       actor.onBehalfBy,
     );
-    tx.set(db.doc(paths.team(team.id)), updatedTeam);
+    tx.set(db.doc(cp.team(team.id)), updatedTeam);
 
     const acceptedInvite: Invite = { ...inv, status: 'accepted', respondedAt: now, updatedAt: now };
     tx.set(inviteRef, acceptedInvite);
     for (const other of toExpire) {
-      tx.set(db.doc(paths.invite(other.id)), { ...other, status: 'expired', updatedAt: now });
+      tx.set(db.doc(cp.invite(other.id)), { ...other, status: 'expired', updatedAt: now });
     }
 
     assertTeamValid(updatedTeam, series, mergeEntries(baseline, entries));
@@ -637,7 +641,7 @@ async function respondToTeamInviteHandler(
   });
 
   if (actor.onBehalfBy) {
-    await audit({
+    await audit(cp, {
       actorMemberId: actor.onBehalfBy,
       action: 'respond_to_invite_on_behalf',
       targetMemberId: actor.memberId,
@@ -686,10 +690,11 @@ async function respondToTeamInviteHandler(
 
 export async function cancelInviteHandler(req: CallableRequest<CancelInviteInput>): Promise<CancelInviteResult> {
   const input = parseInput(CancelInviteInputSchema, req.data);
-  const caller = await requireMember(req);
+  const cp = clubOf(input);
+  const caller = await requireMember(req, cp);
   const actor = await resolveActingMember(caller, input.onBehalfOfMemberId);
   const actorName = `${actor.member.firstName} ${actor.member.lastName}`;
-  const inviteRef = db.doc(paths.invite(input.inviteId));
+  const inviteRef = db.doc(cp.invite(input.inviteId));
 
   const invite = await db.runTransaction(async (tx) => {
     const snap = await tx.get(inviteRef);
@@ -708,7 +713,7 @@ export async function cancelInviteHandler(req: CallableRequest<CancelInviteInput
   });
 
   if (actor.onBehalfBy) {
-    await audit({
+    await audit(cp, {
       actorMemberId: actor.onBehalfBy,
       action: 'cancel_invite_on_behalf',
       targetMemberId: actor.memberId,

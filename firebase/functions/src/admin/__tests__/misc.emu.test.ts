@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { paths, type BroadcastInput, type ListAuditLogInput } from '@obc/shared';
+import { type BroadcastInput, type ListAuditLogInput } from '@obc/shared';
 import { db } from '../../lib/admin.js';
-import { fakeCallableRequest, makeMember, makeProgramme, notificationsFor, sessionInFuture } from '../../testing/fixtures.js';
+import { fakeCallableRequest, makeMember, makeProgramme, notificationsFor, sessionInFuture, cp } from '../../testing/fixtures.js';
 import { sendInviteHandler, respondToInviteHandler } from '../../entries/invites.js';
 import type { RespondToInviteInput, SendInviteInput, SetMemberRoleInput } from '@obc/shared';
 import { broadcastHandler, listAuditLogHandler } from '../misc.js';
@@ -89,7 +89,7 @@ describe('broadcast', () => {
     const admin = await makeMember('bcast-audit-admin@example.org', { role: 'admin' });
     await broadcastHandler(fakeCallableRequest<BroadcastInput>({ title: 'Audited notice', body: 'x' }, { uid: admin }));
 
-    const snap = await db.collection(paths.auditLog()).where('action', '==', 'broadcast_sent').get();
+    const snap = await db.collection(cp.auditLog()).where('action', '==', 'broadcast_sent').get();
     const row = snap.docs.find((d) => d.data().actorMemberId === admin);
     expect(row?.data().detail).toMatchObject({ title: 'Audited notice' });
   });

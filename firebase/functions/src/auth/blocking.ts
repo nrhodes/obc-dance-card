@@ -15,8 +15,7 @@ import {
   HttpsError,
   type AuthBlockingEvent,
 } from 'firebase-functions/v2/identity';
-import type { Member } from '@obc/shared';
-import { db } from '../lib/admin.js';
+import { activeMembershipsOf } from '../lib/clubs.js';
 
 const REGION = 'australia-southeast1';
 
@@ -34,9 +33,8 @@ export async function beforeSignInHandler(event: AuthBlockingEvent): Promise<voi
   if (!uid) {
     throw new HttpsError('permission-denied', NOT_ACTIVE_MESSAGE);
   }
-  const snap = await db.collection('members').doc(uid).get();
-  const member = snap.data() as Member | undefined;
-  if (!member || member.active !== true) {
+  // Any active membership admits the person (plan §21 B14.3).
+  if ((await activeMembershipsOf(uid)).length === 0) {
     throw new HttpsError('permission-denied', NOT_ACTIVE_MESSAGE);
   }
 }

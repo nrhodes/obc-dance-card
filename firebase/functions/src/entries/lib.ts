@@ -9,7 +9,6 @@ import { randomUUID } from 'node:crypto';
 import { HttpsError } from 'firebase-functions/v2/https';
 import type { Transaction } from 'firebase-admin/firestore';
 import {
-  paths,
   sessionCutoff,
   validatePairingGroup,
   type Entry,
@@ -22,6 +21,7 @@ import {
   type Session,
   type Team,
   type WeekdayProgramme,
+  type ClubPaths,
 } from '@obc/shared';
 import { db } from '../lib/admin.js';
 import type { Caller } from '../lib/context.js';
@@ -66,20 +66,20 @@ export interface LoadedSession {
  * status) — all inside the caller's transaction. Every mutation that reads
  * `input.year`/`input.sessionId` starts here.
  */
-export async function loadSession(tx: Transaction, year: number, sessionId: string): Promise<LoadedSession> {
-  const sessionSnap = await tx.get(db.doc(paths.session(year, sessionId)));
+export async function loadSession(cp: ClubPaths, tx: Transaction, year: number, sessionId: string): Promise<LoadedSession> {
+  const sessionSnap = await tx.get(db.doc(cp.session(year, sessionId)));
   const session = sessionSnap.data() as Session | undefined;
   if (!session) {
     throw new HttpsError('not-found', 'Session not found.');
   }
 
-  const programmeSnap = await tx.get(db.doc(paths.programme(year)));
+  const programmeSnap = await tx.get(db.doc(cp.programme(year)));
   const programme = programmeSnap.data() as Programme | undefined;
   if (!programme) {
     throw new HttpsError('not-found', 'Programme not found.');
   }
 
-  const weekdaySnap = await tx.get(db.doc(paths.weekday(year, session.weekday)));
+  const weekdaySnap = await tx.get(db.doc(cp.weekday(year, session.weekday)));
   const weekday = weekdaySnap.data() as WeekdayProgramme | undefined;
   if (!weekday) {
     throw new HttpsError('not-found', 'Weekday programme not found.');
@@ -87,7 +87,7 @@ export async function loadSession(tx: Transaction, year: number, sessionId: stri
 
   let series: Series | null = null;
   if (session.seriesId) {
-    const seriesSnap = await tx.get(db.doc(paths.seriesDoc(year, session.seriesId)));
+    const seriesSnap = await tx.get(db.doc(cp.seriesDoc(year, session.seriesId)));
     series = (seriesSnap.data() as Series | undefined) ?? null;
     if (!series) {
       throw new HttpsError('not-found', 'Series not found.');
@@ -154,8 +154,8 @@ export function assertForceAllowed(caller: Caller, force: boolean | undefined): 
 }
 
 /** Reads a member's entry for one session, or `null` if it never existed. */
-export async function readEntry(tx: Transaction, sessionId: string, memberId: string): Promise<Entry | null> {
-  const snap = await tx.get(db.doc(paths.entry(entryId(sessionId, memberId))));
+export async function readEntry(cp: ClubPaths, tx: Transaction, sessionId: string, memberId: string): Promise<Entry | null> {
+  const snap = await tx.get(db.doc(cp.entry(entryId(sessionId, memberId))));
   return (snap.data() as Entry | undefined) ?? null;
 }
 
@@ -178,7 +178,7 @@ export interface WritePairResult {
  * `validatePairingGroup` before returning — belt and braces on top of every
  * precondition the caller already checked.
  */
-export async function writePair(tx: Transaction, input: WritePairInput): Promise<WritePairResult> {
+export async function writePair(cp: ClubPaths, tx: Transaction, input: WritePairInput): Promise<WritePairResult> {
   const { session, a, b, createdBy, onBehalfBy } = input;
   const pairingId = randomUUID();
   const now = new Date().toISOString();
@@ -208,8 +208,8 @@ export async function writePair(tx: Transaction, input: WritePairInput): Promise
     throw new HttpsError('internal', `Pairing invariant violated: ${issues.join('; ')}`);
   }
 
-  tx.set(db.doc(paths.entry(entryA.id)), entryA);
-  tx.set(db.doc(paths.entry(entryB.id)), entryB);
+  tx.set(db.doc(cp.entry(entryA.id)), entryA);
+  tx.set(db.doc(cp.entry(entryB.id)), entryB);
 
   return { entryA, entryB };
 }
@@ -222,6 +222,7 @@ export async function writePair(tx: Transaction, input: WritePairInput): Promise
  * transaction.
  */
 export async function repeatPartnerWarning(
+  cp: ClubPaths,
   tx: Transaction,
   series: Series | null,
   a: Member,
@@ -229,7 +230,7 @@ export async function repeatPartnerWarning(
 ): Promise<boolean> {
   if (!series || series.format !== 'Individual') return false;
   for (const sid of series.sessionIds) {
-    const entry = await readEntry(tx, sid, a.id);
+    const entry = await readEntry(cp, tx, sid, a.id);
     if (entry && entry.status !== 'cancelled' && entry.partner?.kind === 'member' && entry.partner.memberId === b.id) {
       return true;
     }
@@ -278,17 +279,18 @@ export interface CancelEntryTxContext {
  * cascade writes and re-validates `validatePairingGroup` before returning.
  */
 export async function cancelEntryInTx(
+  cp: ClubPaths,
   tx: Transaction,
   entry: Entry,
   ctx: CancelEntryTxContext,
 ): Promise<CancelEntryTxResult> {
   const { actorName } = ctx;
-  const entryRef = db.doc(paths.entry(entry.id));
+  const entryRef = db.doc(cp.entry(entry.id));
   const now = new Date().toISOString();
 
   // ---- team entry: cancel only this entry, notify the captain (§9.3) ----
   if (entry.teamId) {
-    const teamSnap = await tx.get(db.doc(paths.team(entry.teamId)));
+    const teamSnap = await tx.get(db.doc(cp.team(entry.teamId)));
     const team = teamSnap.data() as Team | undefined;
     const cancelled: Entry = { ...entry, status: 'cancelled', updatedAt: now };
     tx.set(entryRef, cancelled);
@@ -329,7 +331,7 @@ export async function cancelEntryInTx(
     throw new HttpsError('internal', 'A member-paired entry is missing its pairingId.');
   }
 
-  const groupSnap = await tx.get(db.collection(paths.entries()).where('pairingId', '==', entry.pairingId));
+  const groupSnap = await tx.get(db.collection(cp.entries()).where('pairingId', '==', entry.pairingId));
   const group = groupSnap.docs.map((d) => d.data() as Entry);
   const writes: Entry[] = [];
   const notify: CancelEntryNotification[] = [];
@@ -462,7 +464,7 @@ export async function cancelEntryInTx(
   }
 
   for (const w of writes) {
-    tx.set(db.doc(paths.entry(w.id)), w);
+    tx.set(db.doc(cp.entry(w.id)), w);
   }
 
   const updatedById = new Map(writes.map((w) => [w.id, w]));

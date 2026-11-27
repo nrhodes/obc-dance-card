@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-  paths,
   type RespondToInviteInput,
   type SendInviteInput,
   type Series,
@@ -11,7 +10,7 @@ import {
   type WeekdayProgramme,
 } from '@obc/shared';
 import { db } from '../../lib/admin.js';
-import { fakeCallableRequest, makeMember, makeProgramme, notificationsFor, sessionInFuture } from '../../testing/fixtures.js';
+import { fakeCallableRequest, makeMember, makeProgramme, notificationsFor, sessionInFuture, cp } from '../../testing/fixtures.js';
 import { sendInviteHandler, respondToInviteHandler } from '../../entries/invites.js';
 import { updateSeriesHandler, updateSessionHandler, updateWeekdayHandler } from '../programmeEdit.js';
 
@@ -28,7 +27,7 @@ describe('updateSeries', () => {
     );
     expect(result.series.name).toBe('Renamed Pairs');
 
-    const session = (await db.doc(paths.session(prog.year, prog.sessionIds[0]!)).get()).data() as Session;
+    const session = (await db.doc(cp.session(prog.year, prog.sessionIds[0]!)).get()).data() as Session;
     expect(session.seriesName).toBe('Renamed Pairs');
     expect(session.title).toBe('Renamed Pairs');
   });
@@ -134,12 +133,12 @@ describe('updateSession', () => {
     const newSessionId = result.session!.id;
     expect(newSessionId).not.toBe(oldSessionId);
 
-    const oldDoc = await db.doc(paths.session(prog.year, oldSessionId)).get();
+    const oldDoc = await db.doc(cp.session(prog.year, oldSessionId)).get();
     expect(oldDoc.exists).toBe(false);
-    const newDoc = await db.doc(paths.session(prog.year, newSessionId)).get();
+    const newDoc = await db.doc(cp.session(prog.year, newSessionId)).get();
     expect(newDoc.exists).toBe(true);
 
-    const series = (await db.doc(paths.seriesDoc(prog.year, prog.seriesId)).get()).data() as Series;
+    const series = (await db.doc(cp.seriesDoc(prog.year, prog.seriesId)).get()).data() as Series;
     expect(series.sessionIds).not.toContain(oldSessionId);
     expect(series.sessionIds).toContain(newSessionId);
   });
@@ -188,10 +187,10 @@ describe('updateSession', () => {
     expect(await notificationsFor(a, 'programme_changed')).toHaveLength(1);
     expect(await notificationsFor(b, 'programme_changed')).toHaveLength(1);
 
-    const sessionDoc = await db.doc(paths.session(prog.year, prog.sessionIds[0]!)).get();
+    const sessionDoc = await db.doc(cp.session(prog.year, prog.sessionIds[0]!)).get();
     expect(sessionDoc.exists).toBe(false);
 
-    const series = (await db.doc(paths.seriesDoc(prog.year, prog.seriesId)).get()).data() as Series;
+    const series = (await db.doc(cp.seriesDoc(prog.year, prog.seriesId)).get()).data() as Series;
     expect(series.sessionIds).not.toContain(prog.sessionIds[0]);
   });
 });
@@ -233,7 +232,7 @@ describe('updateWeekday', () => {
     );
     expect(cleared.weekday.partnerStewardMemberId).toBeUndefined();
 
-    const doc = (await db.doc(paths.weekday(prog.year, prog.weekday)).get()).data() as WeekdayProgramme;
+    const doc = (await db.doc(cp.weekday(prog.year, prog.weekday)).get()).data() as WeekdayProgramme;
     expect(doc.partnerStewardMemberId).toBeUndefined();
   });
 
@@ -326,9 +325,9 @@ describe('updateWeekday', () => {
       ),
     );
 
-    const snap = await db.collection(paths.auditLog()).where('action', '==', 'programme_edit').get();
+    const snap = await db.collection(cp.auditLog()).where('action', '==', 'programme_edit').get();
     const row = snap.docs.find(
-      (d) => d.data().actorMemberId === admin && d.data().entityRef === paths.weekday(prog.year, prog.weekday),
+      (d) => d.data().actorMemberId === admin && d.data().entityRef === cp.weekday(prog.year, prog.weekday),
     );
     expect(row?.data().detail).toMatchObject({ year: prog.year, weekday: prog.weekday });
   });

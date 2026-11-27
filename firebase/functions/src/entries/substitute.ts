@@ -9,7 +9,6 @@ import { onCall, HttpsError, type CallableRequest } from 'firebase-functions/v2/
 import {
   ClearSubstituteInputSchema,
   SetSubstituteInputSchema,
-  paths,
   validatePairingGroup,
   type ClearSubstituteInput,
   type ClearSubstituteResult,
@@ -19,11 +18,13 @@ import {
   type SetSubstituteInput,
   type SetSubstituteResult,
   type Visitor,
+  type ClubPaths,
 } from '@obc/shared';
 import { db } from '../lib/admin.js';
 import { audit } from '../lib/audit.js';
 import { callableOptions } from '../lib/callable.js';
 import { requireMember, resolveActingMember } from '../lib/context.js';
+import { clubOf } from '../lib/clubs.js';
 import { parseInput } from '../lib/parseInput.js';
 import { createNotification } from '../notifications/create.js';
 import { assertForceAllowed, assertSessionOpen, entryId, isFree, loadSession, memberRef, readEntry } from './lib.js';
@@ -42,12 +43,13 @@ interface ResolvedPair {
  * side (`'partner'`) — plan §9.2 design notes: "either party may record it".
  */
 async function resolvePairForSubstitute(
+  cp: ClubPaths,
   tx: FirebaseFirestore.Transaction,
   callerEntryId: string,
   actorMemberId: string,
   coverFor: 'self' | 'partner',
 ): Promise<ResolvedPair> {
-  const callerSnap = await tx.get(db.doc(paths.entry(callerEntryId)));
+  const callerSnap = await tx.get(db.doc(cp.entry(callerEntryId)));
   const callerEntry = callerSnap.data() as Entry | undefined;
   if (!callerEntry) throw new HttpsError('not-found', 'Entry not found.');
   if (callerEntry.memberId !== actorMemberId) {
@@ -66,7 +68,7 @@ async function resolvePairForSubstitute(
     throw new HttpsError('internal', 'A member-paired entry is missing its pairingId.');
   }
 
-  const partnerEntry = await readEntry(tx, callerEntry.sessionId, callerEntry.partner.memberId);
+  const partnerEntry = await readEntry(cp, tx, callerEntry.sessionId, callerEntry.partner.memberId);
   if (!partnerEntry) {
     throw new HttpsError('internal', 'Partner entry is missing.');
   }
@@ -76,20 +78,21 @@ async function resolvePairForSubstitute(
 
 export async function setSubstituteHandler(req: CallableRequest<SetSubstituteInput>): Promise<SetSubstituteResult> {
   const input = parseInput(SetSubstituteInputSchema, req.data);
-  const caller = await requireMember(req);
+  const cp = clubOf(input);
+  const caller = await requireMember(req, cp);
   assertForceAllowed(caller, input.force);
   const actor = await resolveActingMember(caller, input.onBehalfOfMemberId);
   const coverFor = input.coverFor ?? 'self';
 
   const result = await db.runTransaction(async (tx) => {
-    const { covered, remaining } = await resolvePairForSubstitute(tx, input.entryId, actor.memberId, coverFor);
+    const { covered, remaining } = await resolvePairForSubstitute(cp, tx, input.entryId, actor.memberId, coverFor);
 
     if (covered.status !== 'confirmed' || covered.substitute || remaining.partnerSubstitute) {
       throw new HttpsError('failed-precondition', 'This pairing already has a substitute arranged.');
     }
 
     const year = Number(covered.date.slice(0, 4));
-    const loaded = await loadSession(tx, year, covered.sessionId);
+    const loaded = await loadSession(cp, tx, year, covered.sessionId);
     if (!loaded.series || !loaded.series.allowSubstitute) {
       throw new HttpsError('failed-precondition', 'This series does not allow substitutes.');
     }
@@ -104,7 +107,7 @@ export async function setSubstituteHandler(req: CallableRequest<SetSubstituteInp
       if (subMemberId === covered.memberId || subMemberId === remaining.memberId) {
         throw new HttpsError('invalid-argument', 'The substitute cannot be one of the players already in this pairing.');
       }
-      const subSnap = await tx.get(db.doc(paths.member(subMemberId)));
+      const subSnap = await tx.get(db.doc(cp.member(subMemberId)));
       const subMember = subSnap.data() as Member | undefined;
       if (!subMember || !subMember.active) {
         throw new HttpsError('failed-precondition', 'That member is not available.');
@@ -114,12 +117,12 @@ export async function setSubstituteHandler(req: CallableRequest<SetSubstituteInp
       if (subMember.cohort !== covered.cohort) {
         throw new HttpsError('failed-precondition', 'That member is not available.');
       }
-      const subExisting = await readEntry(tx, covered.sessionId, subMemberId);
+      const subExisting = await readEntry(cp, tx, covered.sessionId, subMemberId);
       if (!isFree(subExisting)) {
         throw new HttpsError('failed-precondition', 'That member already has an entry for this session.');
       }
 
-      const remainingMemberSnap = await tx.get(db.doc(paths.member(remaining.memberId)));
+      const remainingMemberSnap = await tx.get(db.doc(cp.member(remaining.memberId)));
       const remainingMember = remainingMemberSnap.data() as Member;
 
       subRef = memberRef(subMember);
@@ -145,7 +148,7 @@ export async function setSubstituteHandler(req: CallableRequest<SetSubstituteInp
         updatedAt: now,
       };
     } else {
-      const visitorSnap = await tx.get(db.doc(paths.visitor(input.substitute.visitorId)));
+      const visitorSnap = await tx.get(db.doc(cp.visitor(input.substitute.visitorId)));
       const visitor = visitorSnap.data() as Visitor | undefined;
       if (!visitor) throw new HttpsError('not-found', 'Visitor not found.');
       if (visitor.createdByMemberId !== actor.memberId && visitor.createdByMemberId !== remaining.memberId) {
@@ -157,9 +160,9 @@ export async function setSubstituteHandler(req: CallableRequest<SetSubstituteInp
     const updatedCovered: Entry = { ...covered, status: 'substituted', substitute: subRef, updatedAt: now };
     const updatedRemaining: Entry = { ...remaining, partnerSubstitute: subRef, updatedAt: now };
 
-    tx.set(db.doc(paths.entry(updatedCovered.id)), updatedCovered);
-    tx.set(db.doc(paths.entry(updatedRemaining.id)), updatedRemaining);
-    if (subEntryWrite) tx.set(db.doc(paths.entry(subEntryWrite.id)), subEntryWrite);
+    tx.set(db.doc(cp.entry(updatedCovered.id)), updatedCovered);
+    tx.set(db.doc(cp.entry(updatedRemaining.id)), updatedRemaining);
+    if (subEntryWrite) tx.set(db.doc(cp.entry(subEntryWrite.id)), subEntryWrite);
 
     const group = [updatedCovered, updatedRemaining, ...(subEntryWrite ? [subEntryWrite] : [])];
     const issues = validatePairingGroup(group);
@@ -171,11 +174,11 @@ export async function setSubstituteHandler(req: CallableRequest<SetSubstituteInp
   });
 
   if (actor.onBehalfBy) {
-    await audit({
+    await audit(cp, {
       actorMemberId: actor.onBehalfBy,
       action: 'set_substitute_on_behalf',
       targetMemberId: actor.memberId,
-      entityRef: paths.entry(input.entryId),
+      entityRef: cp.entry(input.entryId),
     });
     await createNotification(
       actor.memberId,
@@ -220,11 +223,12 @@ export const setSubstitute = onCall(callableOptions, setSubstituteHandler);
 
 export async function clearSubstituteHandler(req: CallableRequest<ClearSubstituteInput>): Promise<ClearSubstituteResult> {
   const input = parseInput(ClearSubstituteInputSchema, req.data);
-  const caller = await requireMember(req);
+  const cp = clubOf(input);
+  const caller = await requireMember(req, cp);
   const actor = await resolveActingMember(caller, input.onBehalfOfMemberId);
 
   const result = await db.runTransaction(async (tx) => {
-    const entrySnap = await tx.get(db.doc(paths.entry(input.entryId)));
+    const entrySnap = await tx.get(db.doc(cp.entry(input.entryId)));
     const entry = entrySnap.data() as Entry | undefined;
     if (!entry) throw new HttpsError('not-found', 'Entry not found.');
     if (entry.memberId !== actor.memberId) {
@@ -239,7 +243,7 @@ export async function clearSubstituteHandler(req: CallableRequest<ClearSubstitut
       throw new HttpsError('failed-precondition', 'There is no substitute to clear here.');
     }
 
-    const partnerEntry = await readEntry(tx, entry.sessionId, entry.partner.memberId);
+    const partnerEntry = await readEntry(cp, tx, entry.sessionId, entry.partner.memberId);
     if (!partnerEntry) throw new HttpsError('internal', 'Partner entry is missing.');
 
     const covered = entry.status === 'substituted' ? entry : partnerEntry;
@@ -253,19 +257,19 @@ export async function clearSubstituteHandler(req: CallableRequest<ClearSubstitut
     // any writes — Firestore transactions require reads-then-writes.
     let existingSub: Entry | undefined;
     if (covered.substitute.kind === 'member') {
-      existingSub = (await readEntry(tx, covered.sessionId, covered.substitute.memberId)) ?? undefined;
+      existingSub = (await readEntry(cp, tx, covered.sessionId, covered.substitute.memberId)) ?? undefined;
     }
 
     const now = new Date().toISOString();
     const revertedCovered: Entry = { ...covered, status: 'confirmed', substitute: null, updatedAt: now };
     const revertedRemaining: Entry = { ...remaining, partnerSubstitute: null, updatedAt: now };
-    tx.set(db.doc(paths.entry(revertedCovered.id)), revertedCovered);
-    tx.set(db.doc(paths.entry(revertedRemaining.id)), revertedRemaining);
+    tx.set(db.doc(cp.entry(revertedCovered.id)), revertedCovered);
+    tx.set(db.doc(cp.entry(revertedRemaining.id)), revertedRemaining);
 
     let subEntry: Entry | undefined;
     if (existingSub) {
       subEntry = { ...existingSub, status: 'cancelled', partner: null, pairingId: null, isSubstituteFor: null, updatedAt: now };
-      tx.set(db.doc(paths.entry(subEntry.id)), subEntry);
+      tx.set(db.doc(cp.entry(subEntry.id)), subEntry);
     }
 
     const group = [revertedCovered, revertedRemaining, ...(subEntry ? [subEntry] : [])];
@@ -278,11 +282,11 @@ export async function clearSubstituteHandler(req: CallableRequest<ClearSubstitut
   });
 
   if (actor.onBehalfBy) {
-    await audit({
+    await audit(cp, {
       actorMemberId: actor.onBehalfBy,
       action: 'clear_substitute_on_behalf',
       targetMemberId: actor.memberId,
-      entityRef: paths.entry(input.entryId),
+      entityRef: cp.entry(input.entryId),
     });
     await createNotification(
       actor.memberId,

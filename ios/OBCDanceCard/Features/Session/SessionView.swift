@@ -36,7 +36,7 @@ final class SessionEntriesModel: ObservableObject {
         loaded = false
         guard let cohort else { return }
 
-        listener = FirebaseService.db.collection(Paths.entries)
+        listener = FirebaseService.db.collection(Club.current.entries)
             .whereField("sessionId", isEqualTo: sessionId)
             .whereField("cohort", isEqualTo: cohort.rawValue)
             .addSnapshotListener { [weak self] snap, err in

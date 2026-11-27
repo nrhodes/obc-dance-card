@@ -1,8 +1,7 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import type { PublishProgrammeInput } from '@obc/shared';
-import { paths } from '@obc/shared';
 import { db } from '../lib/admin.js';
-import { fakeCallableRequest, makeMember } from '../testing/fixtures.js';
+import { fakeCallableRequest, makeMember, cp } from '../testing/fixtures.js';
 import { publishProgrammeHandler } from './programme.js';
 
 // ImportProgrammeInputSchema/PublishProgrammeInputSchema cap year at 2100;
@@ -24,9 +23,9 @@ async function adminReq(input: PublishProgrammeInput) {
 }
 
 async function makeDraftProgramme(year: number, opts: { withSession: boolean }): Promise<void> {
-  await db.doc(paths.programme(year)).set({ id: String(year), year, status: 'draft', createdAt: 'now', updatedAt: 'now' });
+  await db.doc(cp.programme(year)).set({ id: String(year), year, status: 'draft', createdAt: 'now', updatedAt: 'now' });
   if (opts.withSession) {
-    await db.doc(paths.session(year, `${year}-01-04-monday`)).set({
+    await db.doc(cp.session(year, `${year}-01-04-monday`)).set({
       id: `${year}-01-04-monday`,
       date: `${year}-01-04`,
       weekday: 'monday',
@@ -52,7 +51,7 @@ describe('publishProgramme', () => {
     expect(result.year).toBe(year);
     expect(result.publishedAt).toBeTruthy();
 
-    const programmeSnap = await db.doc(paths.programme(year)).get();
+    const programmeSnap = await db.doc(cp.programme(year)).get();
     expect(programmeSnap.data()).toMatchObject({ status: 'published' });
     expect(programmeSnap.data()?.publishedAt).toBeTruthy();
 
@@ -82,7 +81,7 @@ describe('publishProgramme', () => {
       code: 'failed-precondition',
     });
 
-    const programmeSnap = await db.doc(paths.programme(year)).get();
+    const programmeSnap = await db.doc(cp.programme(year)).get();
     expect(programmeSnap.data()?.status).toBe('draft');
   });
 
@@ -105,7 +104,7 @@ describe('publishProgramme', () => {
     const resultB = await publishProgrammeHandler(await adminReq({ year: yearB }));
     expect(resultB.year).toBe(yearB);
 
-    const [snapA, snapB] = await Promise.all([db.doc(paths.programme(yearA)).get(), db.doc(paths.programme(yearB)).get()]);
+    const [snapA, snapB] = await Promise.all([db.doc(cp.programme(yearA)).get(), db.doc(cp.programme(yearB)).get()]);
     expect(snapA.data()).toMatchObject({ status: 'published' });
     expect(snapB.data()).toMatchObject({ status: 'published' });
   });

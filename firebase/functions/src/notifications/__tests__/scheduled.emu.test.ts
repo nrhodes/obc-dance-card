@@ -14,7 +14,7 @@ import {
 import { db } from '../../lib/admin.js';
 import { setSoloStatusHandler } from '../../entries/entries.js';
 import { sendInviteHandler } from '../../entries/invites.js';
-import { fakeCallableRequest, makeMember, makeProgramme, notificationsFor } from '../../testing/fixtures.js';
+import { fakeCallableRequest, makeMember, makeProgramme, notificationsFor, cp } from '../../testing/fixtures.js';
 import { createNotification } from '../create.js';
 import { runPurgeExpired, runSendDailyDigest, runSendSessionReminders } from '../scheduled.js';
 
@@ -64,8 +64,8 @@ describe('runSendSessionReminders', () => {
     const nearId = prog.sessionIds[0]!;
     const farId = prog.sessionIds[1]!;
 
-    await db.doc(paths.entry(`${nearId}_${m}`)).set(seedConfirmedEntry(nearId, m, nearDate, prog.seriesId));
-    await db.doc(paths.entry(`${farId}_${m}`)).set(seedConfirmedEntry(farId, m, farDate, prog.seriesId));
+    await db.doc(cp.entry(`${nearId}_${m}`)).set(seedConfirmedEntry(nearId, m, nearDate, prog.seriesId));
+    await db.doc(cp.entry(`${farId}_${m}`)).set(seedConfirmedEntry(farId, m, farDate, prog.seriesId));
 
     const report = await runSendSessionReminders(now);
     expect(report.sent).toBe(1);
@@ -104,7 +104,7 @@ describe('runSendSessionReminders', () => {
     const now = new Date();
     const nearDate = addDaysNZ(todayNZ(now), 2);
     const prog = await makeProgramme({ dates: [nearDate], weekday: 'monday' });
-    await db.doc(paths.entry(`${prog.sessionIds[0]}_${m}`)).set(
+    await db.doc(cp.entry(`${prog.sessionIds[0]}_${m}`)).set(
       seedConfirmedEntry(prog.sessionIds[0]!, m, nearDate, prog.seriesId),
     );
 
@@ -206,17 +206,17 @@ describe('runPurgeExpired', () => {
 
     const oldId = `purge-audit-old-${randomUUID()}`;
     const youngId = `purge-audit-young-${randomUUID()}`;
-    await db.collection(paths.auditLog()).doc(oldId).set({
+    await db.collection(cp.auditLog()).doc(oldId).set({
       id: oldId, at: old.toISOString(), actorMemberId: 'system', action: 'visitor_purged',
     });
-    await db.collection(paths.auditLog()).doc(youngId).set({
+    await db.collection(cp.auditLog()).doc(youngId).set({
       id: youngId, at: young.toISOString(), actorMemberId: 'system', action: 'visitor_purged',
     });
 
     const report = await runPurgeExpired(now);
     expect(report.auditLogDeleted).toBeGreaterThanOrEqual(1);
-    expect((await db.collection(paths.auditLog()).doc(oldId).get()).exists).toBe(false);
-    expect((await db.collection(paths.auditLog()).doc(youngId).get()).exists).toBe(true);
+    expect((await db.collection(cp.auditLog()).doc(oldId).get()).exists).toBe(false);
+    expect((await db.collection(cp.auditLog()).doc(youngId).get()).exists).toBe(true);
   });
 
   /** Security review 2026-11-16, L9: import reports follow the two-year retention. */
@@ -226,13 +226,13 @@ describe('runPurgeExpired', () => {
     const young = new Date(now); young.setUTCFullYear(young.getUTCFullYear() - 2); young.setUTCDate(young.getUTCDate() + 1);
     const oldId = `purge-import-old-${randomUUID()}`;
     const youngId = `purge-import-young-${randomUUID()}`;
-    await db.collection(paths.imports()).doc(oldId).set({ id: oldId, kind: 'members', actorMemberId: 'system', startedAt: old.toISOString(), finishedAt: old.toISOString(), report: {} });
-    await db.collection(paths.imports()).doc(youngId).set({ id: youngId, kind: 'members', actorMemberId: 'system', startedAt: young.toISOString(), finishedAt: young.toISOString(), report: {} });
+    await db.collection(cp.imports()).doc(oldId).set({ id: oldId, kind: 'members', actorMemberId: 'system', startedAt: old.toISOString(), finishedAt: old.toISOString(), report: {} });
+    await db.collection(cp.imports()).doc(youngId).set({ id: youngId, kind: 'members', actorMemberId: 'system', startedAt: young.toISOString(), finishedAt: young.toISOString(), report: {} });
 
     const report = await runPurgeExpired(now);
     expect(report.importsDeleted).toBeGreaterThanOrEqual(1);
-    expect((await db.collection(paths.imports()).doc(oldId).get()).exists).toBe(false);
-    expect((await db.collection(paths.imports()).doc(youngId).get()).exists).toBe(true);
+    expect((await db.collection(cp.imports()).doc(oldId).get()).exists).toBe(false);
+    expect((await db.collection(cp.imports()).doc(youngId).get()).exists).toBe(true);
   });
 
   it('expires a pending invite past its expiresAt and notifies the sender', async () => {
@@ -248,11 +248,11 @@ describe('runPurgeExpired', () => {
         { uid: a },
       ),
     );
-    await db.doc(paths.invite(invite.id)).set({ expiresAt: new Date(now.getTime() - 60_000).toISOString() }, { merge: true });
+    await db.doc(cp.invite(invite.id)).set({ expiresAt: new Date(now.getTime() - 60_000).toISOString() }, { merge: true });
 
     await runPurgeExpired(now);
 
-    const updated = (await db.doc(paths.invite(invite.id)).get()).data() as Invite;
+    const updated = (await db.doc(cp.invite(invite.id)).get()).data() as Invite;
     expect(updated.status).toBe('expired');
     expect(await notificationsFor(a, 'invite_expired')).toHaveLength(1);
   });
@@ -263,7 +263,7 @@ describe('runPurgeExpired', () => {
     const staleLastUsedIso = new Date(now.getTime() - 20 * 30 * 24 * 3600 * 1000).toISOString(); // ~20 months ago
 
     const staleVisitorId = randomUUID();
-    await db.doc(paths.visitor(staleVisitorId)).set({
+    await db.doc(cp.visitor(staleVisitorId)).set({
       id: staleVisitorId,
       displayName: 'Stale Visitor',
       createdByMemberId: owner,
@@ -274,7 +274,7 @@ describe('runPurgeExpired', () => {
     });
 
     const busyVisitorId = randomUUID();
-    await db.doc(paths.visitor(busyVisitorId)).set({
+    await db.doc(cp.visitor(busyVisitorId)).set({
       id: busyVisitorId,
       displayName: 'Busy Visitor',
       createdByMemberId: owner,
@@ -306,14 +306,14 @@ describe('runPurgeExpired', () => {
       createdAt: now.toISOString(),
       updatedAt: now.toISOString(),
     };
-    await db.doc(paths.entry(entryId)).set(entry);
+    await db.doc(cp.entry(entryId)).set(entry);
 
     await runPurgeExpired(now);
 
-    expect((await db.doc(paths.visitor(staleVisitorId)).get()).exists).toBe(false);
-    expect((await db.doc(paths.visitor(busyVisitorId)).get()).exists).toBe(true);
+    expect((await db.doc(cp.visitor(staleVisitorId)).get()).exists).toBe(false);
+    expect((await db.doc(cp.visitor(busyVisitorId)).get()).exists).toBe(true);
 
-    const auditSnap = await db.collection(paths.auditLog()).where('action', '==', 'visitor_purged').get();
-    expect(auditSnap.docs.some((d) => d.data().entityRef === paths.visitor(staleVisitorId))).toBe(true);
+    const auditSnap = await db.collection(cp.auditLog()).where('action', '==', 'visitor_purged').get();
+    expect(auditSnap.docs.some((d) => d.data().entityRef === cp.visitor(staleVisitorId))).toBe(true);
   });
 });

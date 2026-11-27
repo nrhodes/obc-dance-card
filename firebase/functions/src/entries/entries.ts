@@ -11,7 +11,6 @@ import {
   ClearSoloStatusInputSchema,
   SOLO_ENTRY_STATUSES,
   SetSoloStatusInputSchema,
-  paths,
   type CancelEntryInput,
   type CancelEntryResult,
   type ClaimLookingForPartnerInput,
@@ -31,6 +30,7 @@ import { callableOptions } from '../lib/callable.js';
 import { logger } from '../lib/logger.js';
 import { SMTP_SECRETS } from '../lib/secrets.js';
 import { requireMember, resolveActingMember } from '../lib/context.js';
+import { clubOf } from '../lib/clubs.js';
 import { createNotification } from '../notifications/create.js';
 import { sendMatchmakingAlerts } from '../notifications/matchmaking.js';
 import { getEmailProvider } from '../email/provider.js';
@@ -66,12 +66,13 @@ import {
 
 export async function setSoloStatusHandler(req: CallableRequest<SetSoloStatusInput>): Promise<SetSoloStatusResult> {
   const input = parseInput(SetSoloStatusInputSchema, req.data);
-  const caller = await requireMember(req);
+  const cp = clubOf(input);
+  const caller = await requireMember(req, cp);
   assertForceAllowed(caller, input.force);
   const actor = await resolveActingMember(caller, input.onBehalfOfMemberId);
 
   const { entry, sessionFormat } = await db.runTransaction(async (tx) => {
-    const loaded = await loadSession(tx, input.year, input.sessionId);
+    const loaded = await loadSession(cp, tx, input.year, input.sessionId);
     // `allowTeamsSession: true` — plan §12A.4: on a Teams session this posts
     // "Looking for a team" / "Available for a team" instead of a pairing
     // listing, so the "this is a teams event" rejection must not apply here.
@@ -82,7 +83,7 @@ export async function setSoloStatusHandler(req: CallableRequest<SetSoloStatusInp
     // *solo* entry (looking_for_partner/available/unavailable) — or none at
     // all — is freely upserted to the new solo status; plan §21 B2's bulk
     // sibling relies on this same "solo statuses upsert freely" rule.
-    const existing = await readEntry(tx, input.sessionId, actor.memberId);
+    const existing = await readEntry(cp, tx, input.sessionId, actor.memberId);
     if (isBooked(existing)) {
       throw new HttpsError('failed-precondition', 'You already have an entry for this session.');
     }
@@ -110,7 +111,7 @@ export async function setSoloStatusHandler(req: CallableRequest<SetSoloStatusInp
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
     };
-    tx.set(db.doc(paths.entry(doc.id)), doc);
+    tx.set(db.doc(cp.entry(doc.id)), doc);
     return { entry: doc, sessionFormat: loaded.session.format };
   });
 
@@ -120,7 +121,7 @@ export async function setSoloStatusHandler(req: CallableRequest<SetSoloStatusInp
   // club-wide alert would be noise. `sessionFormat` is `undefined` for a
   // non-series singles/holiday session; treated the same as Pairs.
   if (input.status === 'looking_for_partner' && sessionFormat !== 'Individual') {
-    await sendMatchmakingAlerts({
+    await sendMatchmakingAlerts(cp, {
       posterMemberId: actor.memberId,
       posterName: `${actor.member.firstName} ${actor.member.lastName}`,
       sessionId: input.sessionId,
@@ -130,11 +131,11 @@ export async function setSoloStatusHandler(req: CallableRequest<SetSoloStatusInp
   }
 
   if (actor.onBehalfBy) {
-    await audit({
+    await audit(cp, {
       actorMemberId: actor.onBehalfBy,
       action: 'set_solo_status_on_behalf',
       targetMemberId: actor.memberId,
-      entityRef: paths.entry(entry.id),
+      entityRef: cp.entry(entry.id),
     });
     await createNotification(
       actor.memberId,
@@ -156,21 +157,22 @@ export async function clearSoloStatusHandler(
   req: CallableRequest<ClearSoloStatusInput>,
 ): Promise<ClearSoloStatusResult> {
   const input = parseInput(ClearSoloStatusInputSchema, req.data);
-  const caller = await requireMember(req);
+  const cp = clubOf(input);
+  const caller = await requireMember(req, cp);
   assertForceAllowed(caller, input.force);
 
   const entry = await db.runTransaction(async (tx) => {
-    const loaded = await loadSession(tx, input.year, input.sessionId);
+    const loaded = await loadSession(cp, tx, input.year, input.sessionId);
     assertSessionOpen(loaded.session, loaded.weekday, loaded.programme, { force: input.force, allowTeamsSession: true });
 
-    const existing = await readEntry(tx, input.sessionId, caller.uid);
+    const existing = await readEntry(cp, tx, input.sessionId, caller.uid);
     if (!existing || !(SOLO_ENTRY_STATUSES as readonly string[]).includes(existing.status)) {
       throw new HttpsError('failed-precondition', 'You do not have a noticeboard listing for this session.');
     }
 
     const now = new Date().toISOString();
     const updated: Entry = { ...existing, status: 'cancelled', updatedAt: now };
-    tx.set(db.doc(paths.entry(existing.id)), updated);
+    tx.set(db.doc(cp.entry(existing.id)), updated);
     return updated;
   });
 
@@ -185,7 +187,8 @@ export async function claimLookingForPartnerHandler(
   req: CallableRequest<ClaimLookingForPartnerInput>,
 ): Promise<ClaimLookingForPartnerResult> {
   const input = parseInput(ClaimLookingForPartnerInputSchema, req.data);
-  const caller = await requireMember(req);
+  const cp = clubOf(input);
+  const caller = await requireMember(req, cp);
   assertForceAllowed(caller, input.force);
   const actor = await resolveActingMember(caller, input.onBehalfOfMemberId);
   const actorName = `${actor.member.firstName} ${actor.member.lastName}`;
@@ -195,7 +198,7 @@ export async function claimLookingForPartnerHandler(
   }
 
   const result = await db.runTransaction(async (tx) => {
-    const loaded = await loadSession(tx, input.year, input.sessionId);
+    const loaded = await loadSession(cp, tx, input.year, input.sessionId);
     assertSessionOpen(loaded.session, loaded.weekday, loaded.programme, { force: input.force, allowTeamsSession: true });
 
     // ---- Teams (plan §12A.4): only a captain with space may claim a
@@ -206,11 +209,11 @@ export async function claimLookingForPartnerHandler(
         throw new HttpsError('internal', 'A Teams session is missing its series.');
       }
       const series = loaded.series;
-      const posterEntry = await readEntry(tx, input.sessionId, input.posterMemberId);
+      const posterEntry = await readEntry(cp, tx, input.sessionId, input.posterMemberId);
       if (!posterEntry || posterEntry.status !== 'looking_for_partner') {
         throw new HttpsError('failed-precondition', 'That listing is no longer available.');
       }
-      const posterSnap = await tx.get(db.doc(paths.member(input.posterMemberId)));
+      const posterSnap = await tx.get(db.doc(cp.member(input.posterMemberId)));
       const poster = posterSnap.data() as Member | undefined;
       if (!poster || !poster.active) {
         throw new HttpsError('failed-precondition', 'That member is no longer active.');
@@ -223,7 +226,7 @@ export async function claimLookingForPartnerHandler(
 
       // Look the caller's team up by membership, not by the deterministic id:
       // after a captaincy transfer the doc keeps the original captain's id.
-      const team = await memberTeamInSeries(tx, series.id, actor.memberId);
+      const team = await memberTeamInSeries(cp, tx, series.id, actor.memberId);
       if (!team || team.status === 'disbanded' || team.captainMemberId !== actor.memberId) {
         throw new HttpsError(
           'failed-precondition',
@@ -233,11 +236,11 @@ export async function claimLookingForPartnerHandler(
       if (team.members.length >= series.teamMax) {
         throw new HttpsError('failed-precondition', 'Your team is full.');
       }
-      if (await memberTeamInSeries(tx, series.id, poster.id)) {
+      if (await memberTeamInSeries(cp, tx, series.id, poster.id)) {
         throw new HttpsError('failed-precondition', 'That member is already on a team for this series.');
       }
 
-      const sessions = await seriesSessions(tx, input.year, series);
+      const sessions = await seriesSessions(cp, tx, input.year, series);
       const openSessions = unlockedSessions(sessions, loaded.weekday, loaded.programme, { force: input.force });
       const existingEntries = new Map<string, Entry | null>();
       const conflicts: string[] = [];
@@ -246,7 +249,7 @@ export async function claimLookingForPartnerHandler(
         // claimed — it is replaced by the team entry, so it does not count
         // as a conflict (plan design notes: "treat their own solo entry as
         // free"). Every other session must be genuinely free.
-        const entry = session.id === input.sessionId ? posterEntry : await readEntry(tx, session.id, poster.id);
+        const entry = session.id === input.sessionId ? posterEntry : await readEntry(cp, tx, session.id, poster.id);
         if (session.id !== input.sessionId && !isFree(entry)) {
           conflicts.push(session.date);
         }
@@ -256,7 +259,7 @@ export async function claimLookingForPartnerHandler(
         throw new HttpsError('failed-precondition', `That member is already committed on: ${conflicts.join(', ')}.`);
       }
 
-      const baseline = await loadTeamEntries(tx, team.id);
+      const baseline = await loadTeamEntries(cp, tx, team.id);
       const now = new Date().toISOString();
       const updatedTeam: Team = {
         ...team,
@@ -265,24 +268,24 @@ export async function claimLookingForPartnerHandler(
       };
       updatedTeam.status = refreshTeamStatus(updatedTeam, series);
 
-      const written = writeTeamEntries(tx, updatedTeam, openSessions, existingEntries, poster.id, actor.memberId, actor.onBehalfBy);
-      tx.set(db.doc(paths.team(updatedTeam.id)), updatedTeam);
+      const written = writeTeamEntries(cp, tx, updatedTeam, openSessions, existingEntries, poster.id, actor.memberId, actor.onBehalfBy);
+      tx.set(db.doc(cp.team(updatedTeam.id)), updatedTeam);
       assertTeamValid(updatedTeam, series, mergeEntries(baseline, written));
 
       return { kind: 'team' as const, entries: written, team: updatedTeam, poster };
     }
 
     // ---- Pairs / Individual (unchanged) ----
-    const posterEntry = await readEntry(tx, input.sessionId, input.posterMemberId);
+    const posterEntry = await readEntry(cp, tx, input.sessionId, input.posterMemberId);
     if (!posterEntry || posterEntry.status !== 'looking_for_partner') {
       throw new HttpsError('failed-precondition', 'That listing is no longer available.');
     }
-    const claimerEntry = await readEntry(tx, input.sessionId, actor.memberId);
+    const claimerEntry = await readEntry(cp, tx, input.sessionId, actor.memberId);
     if (!isFree(claimerEntry)) {
       throw new HttpsError('failed-precondition', 'You already have an entry for this session.');
     }
 
-    const posterSnap = await tx.get(db.doc(paths.member(input.posterMemberId)));
+    const posterSnap = await tx.get(db.doc(cp.member(input.posterMemberId)));
     const poster = posterSnap.data() as Member | undefined;
     if (!poster || !poster.active) {
       throw new HttpsError('failed-precondition', 'That member is no longer active.');
@@ -291,12 +294,12 @@ export async function claimLookingForPartnerHandler(
     if (poster.cohort !== actor.member.cohort) {
       throw new HttpsError('failed-precondition', 'That member is not available.');
     }
-    const claimerSnap = await tx.get(db.doc(paths.member(actor.memberId)));
+    const claimerSnap = await tx.get(db.doc(cp.member(actor.memberId)));
     const claimer = claimerSnap.data() as Member;
 
-    const warning = await repeatPartnerWarning(tx, loaded.series, poster, claimer);
+    const warning = await repeatPartnerWarning(cp, tx, loaded.series, poster, claimer);
 
-    const { entryA, entryB } = await writePair(tx, {
+    const { entryA, entryB } = await writePair(cp, tx, {
       session: loaded.session,
       a: poster,
       b: claimer,
@@ -308,11 +311,11 @@ export async function claimLookingForPartnerHandler(
   });
 
   if (actor.onBehalfBy) {
-    await audit({
+    await audit(cp, {
       actorMemberId: actor.onBehalfBy,
       action: 'claim_looking_for_partner_on_behalf',
       targetMemberId: actor.memberId,
-      entityRef: result.kind === 'team' ? paths.team(result.team.id) : paths.entry(entryId(input.sessionId, actor.memberId)),
+      entityRef: result.kind === 'team' ? cp.team(result.team.id) : cp.entry(entryId(input.sessionId, actor.memberId)),
     });
     await createNotification(
       actor.memberId,
@@ -345,11 +348,12 @@ export const claimLookingForPartner = onCall(callableOptions, claimLookingForPar
 
 export async function cancelEntryHandler(req: CallableRequest<CancelEntryInput>): Promise<CancelEntryResult> {
   const input = parseInput(CancelEntryInputSchema, req.data);
-  const caller = await requireMember(req);
+  const cp = clubOf(input);
+  const caller = await requireMember(req, cp);
   assertForceAllowed(caller, input.force);
   const actor = await resolveActingMember(caller, input.onBehalfOfMemberId);
   const actorName = `${actor.member.firstName} ${actor.member.lastName}`;
-  const entryRef = db.doc(paths.entry(input.entryId));
+  const entryRef = db.doc(cp.entry(input.entryId));
 
   const result = await db.runTransaction<CancelEntryTxResult>(async (tx) => {
     const entrySnap = await tx.get(entryRef);
@@ -363,18 +367,18 @@ export async function cancelEntryHandler(req: CallableRequest<CancelEntryInput>)
     }
 
     const year = Number(entry.date.slice(0, 4));
-    const loaded = await loadSession(tx, year, entry.sessionId);
+    const loaded = await loadSession(cp, tx, year, entry.sessionId);
     // `allowTeamsSession: true` — cancelling one's own entry (including a
     // Teams member's single-session absence, §9.3) is not a pairing action,
     // so the "this is a teams event" rejection in `assertSessionOpen` must
     // not apply here. See that function's doc comment.
     assertSessionOpen(loaded.session, loaded.weekday, loaded.programme, { force: input.force, allowTeamsSession: true });
 
-    return cancelEntryInTx(tx, entry, { actorMemberId: actor.memberId, actorName });
+    return cancelEntryInTx(cp, tx, entry, { actorMemberId: actor.memberId, actorName });
   });
 
   if (actor.onBehalfBy) {
-    await audit({
+    await audit(cp, {
       actorMemberId: actor.onBehalfBy,
       action: 'cancel_entry_on_behalf',
       targetMemberId: actor.memberId,
@@ -394,7 +398,7 @@ export async function cancelEntryHandler(req: CallableRequest<CancelEntryInput>)
   }
 
   if (result.cancelledVisitorId) {
-    const visitorSnap = await db.doc(paths.visitor(result.cancelledVisitorId)).get();
+    const visitorSnap = await db.doc(cp.visitor(result.cancelledVisitorId)).get();
     const visitor = visitorSnap.data() as Visitor | undefined;
     if (visitor?.courtesyEmails && visitor.email) {
       const content = visitorCancelledEmail({

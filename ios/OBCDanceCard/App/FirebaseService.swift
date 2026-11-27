@@ -150,6 +150,21 @@ enum Callable {
         }
     }
 
+    /// A club-scoped callable: the payload is stamped with `club`'s id
+    /// (plan §21 B14). See `ClubPaths.stamping(_:)`.
+    static func call(_ name: String, club: ClubPaths, _ payload: [String: Any] = [:]) async throws {
+        try await call(name, club.stamping(payload))
+    }
+
+    static func call<Result: Decodable>(
+        _ name: String,
+        club: ClubPaths,
+        _ payload: [String: Any] = [:],
+        as type: Result.Type
+    ) async throws -> Result {
+        try await call(name, club.stamping(payload), as: type)
+    }
+
     private static func rawCall(_ name: String, _ payload: [String: Any]) async throws -> Any {
         do {
             let result = try await FirebaseService.functions.httpsCallable(name).call(payload)

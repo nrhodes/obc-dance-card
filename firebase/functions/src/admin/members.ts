@@ -38,12 +38,14 @@ import {
   type Team,
   type UpdateMemberInput,
   type UpdateMemberResult,
+  type ClubPaths,
 } from '@obc/shared';
 import { auth, db } from '../lib/admin.js';
 import { audit } from '../lib/audit.js';
 import { BatchWriter } from '../lib/batchWriter.js';
 import { callableOptions } from '../lib/callable.js';
 import { requireAdmin } from '../lib/context.js';
+import { clubOf } from '../lib/clubs.js';
 import { logger } from '../lib/logger.js';
 import { parseInput } from '../lib/parseInput.js';
 import { cancelEntryInTx, type CancelEntryNotification } from '../entries/lib.js';
@@ -62,6 +64,7 @@ const THIRTY_DAYS_MS = 30 * 24 * 3600 * 1000;
  * caller flushes.
  */
 async function rewriteMemberDisplayName(
+  cp: ClubPaths,
   writer: BatchWriter,
   memberId: string,
   displayName: string,
@@ -69,7 +72,7 @@ async function rewriteMemberDisplayName(
 ): Promise<void> {
   const patchByEntryId = new Map<string, Record<string, unknown>>();
   for (const field of ['partner', 'substitute', 'partnerSubstitute'] as const) {
-    const snap = await db.collection(paths.entries()).where(`${field}.memberId`, '==', memberId).get();
+    const snap = await db.collection(cp.entries()).where(`${field}.memberId`, '==', memberId).get();
     for (const doc of snap.docs) {
       const entry = doc.data() as Entry;
       const ref = entry[field];
@@ -81,10 +84,10 @@ async function rewriteMemberDisplayName(
     }
   }
   for (const [id, patch] of patchByEntryId) {
-    writer.update(db.doc(paths.entry(id)), { ...patch, updatedAt: now });
+    writer.update(db.doc(cp.entry(id)), { ...patch, updatedAt: now });
   }
 
-  const teamsSnap = await db.collection(paths.teams()).get();
+  const teamsSnap = await db.collection(cp.teams()).get();
   for (const doc of teamsSnap.docs) {
     const team = doc.data() as Team;
     let changed = false;
@@ -118,11 +121,12 @@ function authErrorCode(err: unknown): string | undefined {
  */
 export async function addMemberHandler(req: CallableRequest<AddMemberInput>): Promise<AddMemberResult> {
   const input = parseInput(AddMemberInputSchema, req.data);
-  const caller = await requireAdmin(req);
+  const cp = clubOf(input);
+  const caller = await requireAdmin(req, cp);
 
   const existing = await db.collection(paths.memberPrivates()).where('emailLower', '==', input.email).limit(1).get();
   if (!existing.empty) {
-    const existingMember = (await db.doc(paths.member(existing.docs[0]!.id)).get()).data() as Member | undefined;
+    const existingMember = (await db.doc(cp.member(existing.docs[0]!.id)).get()).data() as Member | undefined;
     throw new HttpsError(
       'failed-precondition',
       existingMember && !existingMember.active
@@ -131,7 +135,7 @@ export async function addMemberHandler(req: CallableRequest<AddMemberInput>): Pr
     );
   }
 
-  const { memberId } = await provisionMember(
+  const { memberId } = await provisionMember(cp,
     {
       firstName: input.firstName,
       lastName: input.lastName,
@@ -144,10 +148,10 @@ export async function addMemberHandler(req: CallableRequest<AddMemberInput>): Pr
   if (!memberId) throw new HttpsError('internal', 'The member could not be created.');
 
   // Plan §12.5, exactly as the import does for a brand-new member.
-  await promoteVisitorsForNewMember(memberId, input.email, caller.uid);
+  await promoteVisitorsForNewMember(cp, memberId, input.email, caller.uid);
 
-  const memberRef = db.doc(paths.member(memberId));
-  await audit({
+  const memberRef = db.doc(cp.member(memberId));
+  await audit(cp, {
     actorMemberId: caller.uid,
     action: 'member_added',
     targetMemberId: memberId,
@@ -175,9 +179,10 @@ export const addMember = onCall(callableOptions, addMemberHandler);
  */
 export async function updateMemberHandler(req: CallableRequest<UpdateMemberInput>): Promise<UpdateMemberResult> {
   const input = parseInput(UpdateMemberInputSchema, req.data);
-  const caller = await requireAdmin(req);
+  const cp = clubOf(input);
+  const caller = await requireAdmin(req, cp);
 
-  const memberRef = db.doc(paths.member(input.memberId));
+  const memberRef = db.doc(cp.member(input.memberId));
   const privateRef = db.doc(paths.memberPrivate(input.memberId));
   const [memberSnap, privateSnap] = await Promise.all([memberRef.get(), privateRef.get()]);
   const current = memberSnap.data() as Member | undefined;
@@ -263,12 +268,12 @@ export async function updateMemberHandler(req: CallableRequest<UpdateMemberInput
 
   if (memberPatch.firstName !== undefined || memberPatch.lastName !== undefined) {
     const writer = new BatchWriter();
-    await rewriteMemberDisplayName(writer, input.memberId, `${updated.firstName} ${updated.lastName}`, now);
+    await rewriteMemberDisplayName(cp, writer, input.memberId, `${updated.firstName} ${updated.lastName}`, now);
     await writer.flush();
   }
 
   // Field names only — never the values (names, phone, email are PII).
-  await audit({
+  await audit(cp, {
     actorMemberId: caller.uid,
     action: 'member_updated',
     targetMemberId: input.memberId,
@@ -295,9 +300,10 @@ export const updateMember = onCall(callableOptions, updateMemberHandler);
 
 export async function setMemberRoleHandler(req: CallableRequest<SetMemberRoleInput>): Promise<SetMemberRoleResult> {
   const input = parseInput(SetMemberRoleInputSchema, req.data);
-  const caller = await requireAdmin(req);
+  const cp = clubOf(input);
+  const caller = await requireAdmin(req, cp);
 
-  const memberRef = db.doc(paths.member(input.memberId));
+  const memberRef = db.doc(cp.member(input.memberId));
   const result = await db.runTransaction(async (tx) => {
     const snap = await tx.get(memberRef);
     const member = snap.data() as Member | undefined;
@@ -310,7 +316,7 @@ export async function setMemberRoleHandler(req: CallableRequest<SetMemberRoleInp
     // Last-admin guard (incl. self): never leave the club with zero active admins.
     if (member.role === 'admin' && input.role === 'member') {
       const adminsSnap = await tx.get(
-        db.collection(paths.members()).where('role', '==', 'admin').where('active', '==', true),
+        db.collection(cp.members()).where('role', '==', 'admin').where('active', '==', true),
       );
       const otherActiveAdmins = adminsSnap.docs.filter((d) => d.id !== input.memberId);
       if (otherActiveAdmins.length === 0) {
@@ -329,7 +335,7 @@ export async function setMemberRoleHandler(req: CallableRequest<SetMemberRoleInp
   }
 
   await auth.revokeRefreshTokens(input.memberId);
-  await audit({
+  await audit(cp, {
     actorMemberId: caller.uid,
     action: 'role_changed',
     targetMemberId: input.memberId,
@@ -358,9 +364,10 @@ export async function deactivateMemberHandler(
   req: CallableRequest<DeactivateMemberInput>,
 ): Promise<DeactivateMemberResult> {
   const input = parseInput(DeactivateMemberInputSchema, req.data);
-  const caller = await requireAdmin(req);
+  const cp = clubOf(input);
+  const caller = await requireAdmin(req, cp);
 
-  const memberRef = db.doc(paths.member(input.memberId));
+  const memberRef = db.doc(cp.member(input.memberId));
   const { member, wasActive } = await db.runTransaction(async (tx) => {
     const snap = await tx.get(memberRef);
     const m = snap.data() as Member | undefined;
@@ -371,7 +378,7 @@ export async function deactivateMemberHandler(
 
     if (m.role === 'admin') {
       const adminsSnap = await tx.get(
-        db.collection(paths.members()).where('role', '==', 'admin').where('active', '==', true),
+        db.collection(cp.members()).where('role', '==', 'admin').where('active', '==', true),
       );
       const otherActiveAdmins = adminsSnap.docs.filter((d) => d.id !== input.memberId);
       if (otherActiveAdmins.length === 0) {
@@ -403,7 +410,7 @@ export async function deactivateMemberHandler(
   // that hook already provides.
   const today = todayNZ();
   const entriesSnap = await db
-    .collection(paths.entries())
+    .collection(cp.entries())
     .where('memberId', '==', input.memberId)
     .where('date', '>=', today)
     .get();
@@ -414,10 +421,10 @@ export async function deactivateMemberHandler(
   for (const doc of entriesSnap.docs) {
     const entryRefId = doc.id;
     const cascadeResult = await db.runTransaction(async (tx) => {
-      const snap = await tx.get(db.doc(paths.entry(entryRefId)));
+      const snap = await tx.get(db.doc(cp.entry(entryRefId)));
       const entry = snap.data() as Entry | undefined;
       if (!entry || entry.status === 'cancelled' || entry.teamId) return null;
-      return cancelEntryInTx(tx, entry, { actorMemberId: input.memberId, actorName: memberName });
+      return cancelEntryInTx(cp, tx, entry, { actorMemberId: input.memberId, actorName: memberName });
     });
     if (!cascadeResult) continue;
     cancelledEntries += 1;
@@ -430,8 +437,8 @@ export async function deactivateMemberHandler(
 
   // ---- expire pending invites in both directions, notify the counterpart ----
   const [outgoingSnap, incomingSnap] = await Promise.all([
-    db.collection(paths.invites()).where('fromMemberId', '==', input.memberId).where('status', '==', 'pending').get(),
-    db.collection(paths.invites()).where('toMemberId', '==', input.memberId).where('status', '==', 'pending').get(),
+    db.collection(cp.invites()).where('fromMemberId', '==', input.memberId).where('status', '==', 'pending').get(),
+    db.collection(cp.invites()).where('toMemberId', '==', input.memberId).where('status', '==', 'pending').get(),
   ]);
 
   let expiredInvites = 0;
@@ -464,9 +471,9 @@ export async function deactivateMemberHandler(
   }
   await writer.flush();
 
-  await removeMemberFromAllTeams(input.memberId);
+  await removeMemberFromAllTeams(cp, input.memberId);
 
-  await audit({
+  await audit(cp, {
     actorMemberId: caller.uid,
     action: 'member_deactivated',
     targetMemberId: input.memberId,
@@ -488,9 +495,10 @@ export async function reactivateMemberHandler(
   req: CallableRequest<ReactivateMemberInput>,
 ): Promise<ReactivateMemberResult> {
   const input = parseInput(ReactivateMemberInputSchema, req.data);
-  const caller = await requireAdmin(req);
+  const cp = clubOf(input);
+  const caller = await requireAdmin(req, cp);
 
-  const memberRef = db.doc(paths.member(input.memberId));
+  const memberRef = db.doc(cp.member(input.memberId));
   const { member, changed } = await db.runTransaction(async (tx) => {
     const snap = await tx.get(memberRef);
     const m = snap.data() as Member | undefined;
@@ -511,7 +519,7 @@ export async function reactivateMemberHandler(
   }
 
   await auth.updateUser(input.memberId, { disabled: false });
-  await audit({
+  await audit(cp, {
     actorMemberId: caller.uid,
     action: 'member_reactivated',
     targetMemberId: input.memberId,
@@ -534,9 +542,10 @@ export const reactivateMember = onCall(callableOptions, reactivateMemberHandler)
 
 export async function eraseMemberHandler(req: CallableRequest<EraseMemberInput>): Promise<EraseMemberResult> {
   const input = parseInput(EraseMemberInputSchema, req.data);
-  const caller = await requireAdmin(req);
+  const cp = clubOf(input);
+  const caller = await requireAdmin(req, cp);
 
-  const memberRef = db.doc(paths.member(input.memberId));
+  const memberRef = db.doc(cp.member(input.memberId));
   const memberSnap = await memberRef.get();
   const member = memberSnap.data() as Member | undefined;
   if (!member) throw new HttpsError('not-found', 'Member not found.');
@@ -596,12 +605,12 @@ export async function eraseMemberHandler(req: CallableRequest<EraseMemberInput>)
   }
 
   // 3. visitors owned by this member: delete every doc.
-  const visitorsSnap = await db.collection(paths.visitors()).where('createdByMemberId', '==', input.memberId).get();
+  const visitorsSnap = await db.collection(cp.visitors()).where('createdByMemberId', '==', input.memberId).get();
   for (const doc of visitorsSnap.docs) writer.delete(doc.ref);
 
   // 4–5. entries (partner/substitute/partnerSubstitute, any date — history is
   //      kept, only the denormalised name is anonymised) and team rosters.
-  await rewriteMemberDisplayName(writer, input.memberId, 'Former member', now);
+  await rewriteMemberDisplayName(cp, writer, input.memberId, 'Former member', now);
 
   // 6. notifications addressed to this member: delete.
   const notificationsSnap = await db.collection(paths.notifications()).where('memberId', '==', input.memberId).get();
@@ -619,7 +628,7 @@ export async function eraseMemberHandler(req: CallableRequest<EraseMemberInput>)
     if (code !== 'auth/user-not-found') throw err;
   }
 
-  await audit({
+  await audit(cp, {
     actorMemberId: caller.uid,
     action: 'member_erased',
     targetMemberId: input.memberId,

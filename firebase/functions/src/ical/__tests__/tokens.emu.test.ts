@@ -10,7 +10,7 @@ import type {
 } from '@obc/shared';
 import { paths } from '@obc/shared';
 import { db } from '../../lib/admin.js';
-import { fakeCallableRequest, makeMember, notificationsFor } from '../../testing/fixtures.js';
+import { fakeCallableRequest, makeMember, notificationsFor, cp } from '../../testing/fixtures.js';
 import {
   createIcalFeedHandler,
   getIcalFeedHandler,
@@ -116,7 +116,7 @@ describe('getIcalFeed / createIcalFeed / rotateIcalFeed / removeIcalFeed (plan Â
     expect(await notificationsFor(uid, 'on_behalf_action')).toHaveLength(0);
 
     const auditSnap = await db
-      .collection(paths.auditLog())
+      .collection(cp.auditLog())
       .where('targetMemberId', '==', uid)
       .get();
     expect(auditSnap.empty).toBe(true);
@@ -137,7 +137,7 @@ describe('getIcalFeed / createIcalFeed / rotateIcalFeed / removeIcalFeed (plan Â
 
     const actions = ['create_ical_feed_on_behalf', 'get_ical_feed_on_behalf', 'rotate_ical_feed_on_behalf', 'remove_ical_feed_on_behalf'];
     for (const action of actions) {
-      const snap = await db.collection(paths.auditLog()).where('action', '==', action).get();
+      const snap = await db.collection(cp.auditLog()).where('action', '==', action).get();
       expect(snap.docs.some((d) => d.data().actorMemberId === admin && d.data().targetMemberId === member), action).toBe(
         true,
       );

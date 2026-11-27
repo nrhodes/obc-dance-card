@@ -10,7 +10,6 @@
 import { HttpsError } from 'firebase-functions/v2/https';
 import type { Transaction } from 'firebase-admin/firestore';
 import {
-  paths,
   validateTeamGroup,
   type Entry,
   type Programme,
@@ -19,6 +18,7 @@ import {
   type Team,
   type TeamStatus,
   type WeekdayProgramme,
+  type ClubPaths,
 } from '@obc/shared';
 import { db } from '../lib/admin.js';
 import { entryId, isSessionLocked } from '../entries/lib.js';
@@ -30,8 +30,8 @@ export function teamId(seriesId: string, captainMemberId: string): string {
 }
 
 /** Reads a team inside `tx`, or throws `not-found`. */
-export async function loadTeam(tx: Transaction, id: string): Promise<Team> {
-  const snap = await tx.get(db.doc(paths.team(id)));
+export async function loadTeam(cp: ClubPaths, tx: Transaction, id: string): Promise<Team> {
+  const snap = await tx.get(db.doc(cp.team(id)));
   const team = snap.data() as Team | undefined;
   if (!team) {
     throw new HttpsError('not-found', 'Team not found.');
@@ -40,8 +40,8 @@ export async function loadTeam(tx: Transaction, id: string): Promise<Team> {
 }
 
 /** Reads a team inside `tx`, or `null` if it does not exist (no throw). */
-export async function loadTeamOptional(tx: Transaction, id: string): Promise<Team | null> {
-  const snap = await tx.get(db.doc(paths.team(id)));
+export async function loadTeamOptional(cp: ClubPaths, tx: Transaction, id: string): Promise<Team | null> {
+  const snap = await tx.get(db.doc(cp.team(id)));
   return (snap.data() as Team | undefined) ?? null;
 }
 
@@ -52,20 +52,20 @@ export interface LoadedSeries {
 }
 
 /** Reads a series plus its weekday programme and year programme inside `tx`. */
-export async function loadSeries(tx: Transaction, year: number, seriesId: string): Promise<LoadedSeries> {
-  const seriesSnap = await tx.get(db.doc(paths.seriesDoc(year, seriesId)));
+export async function loadSeries(cp: ClubPaths, tx: Transaction, year: number, seriesId: string): Promise<LoadedSeries> {
+  const seriesSnap = await tx.get(db.doc(cp.seriesDoc(year, seriesId)));
   const series = seriesSnap.data() as Series | undefined;
   if (!series) {
     throw new HttpsError('not-found', 'Series not found.');
   }
 
-  const programmeSnap = await tx.get(db.doc(paths.programme(year)));
+  const programmeSnap = await tx.get(db.doc(cp.programme(year)));
   const programme = programmeSnap.data() as Programme | undefined;
   if (!programme) {
     throw new HttpsError('not-found', 'Programme not found.');
   }
 
-  const weekdaySnap = await tx.get(db.doc(paths.weekday(year, series.weekday)));
+  const weekdaySnap = await tx.get(db.doc(cp.weekday(year, series.weekday)));
   const weekday = weekdaySnap.data() as WeekdayProgramme | undefined;
   if (!weekday) {
     throw new HttpsError('not-found', 'Weekday programme not found.');
@@ -96,10 +96,10 @@ export function assertNotDisbanded(team: Team): void {
 }
 
 /** Every session doc for `series`, sorted by date. */
-export async function seriesSessions(tx: Transaction, year: number, series: Series): Promise<Session[]> {
+export async function seriesSessions(cp: ClubPaths, tx: Transaction, year: number, series: Series): Promise<Session[]> {
   const sessions: Session[] = [];
   for (const sessionId of series.sessionIds) {
-    const snap = await tx.get(db.doc(paths.session(year, sessionId)));
+    const snap = await tx.get(db.doc(cp.session(year, sessionId)));
     const session = snap.data() as Session | undefined;
     if (session) sessions.push(session);
   }
@@ -128,9 +128,9 @@ export function unlockedSessions(
  * in the series (bounded, club-scale — teams(seriesId,status) index) and
  * checks membership in code.
  */
-export async function memberTeamInSeries(tx: Transaction, seriesId: string, memberId: string): Promise<Team | null> {
+export async function memberTeamInSeries(cp: ClubPaths, tx: Transaction, seriesId: string, memberId: string): Promise<Team | null> {
   const snap = await tx.get(
-    db.collection(paths.teams()).where('seriesId', '==', seriesId).where('status', 'in', ['forming', 'active']),
+    db.collection(cp.teams()).where('seriesId', '==', seriesId).where('status', 'in', ['forming', 'active']),
   );
   for (const doc of snap.docs) {
     const team = doc.data() as Team;
@@ -142,8 +142,8 @@ export async function memberTeamInSeries(tx: Transaction, seriesId: string, memb
 }
 
 /** Every entry currently tagged with `teamId` (any session, any status) — the baseline `validateTeamGroup` input. */
-export async function loadTeamEntries(tx: Transaction, id: string): Promise<Entry[]> {
-  const snap = await tx.get(db.collection(paths.entries()).where('teamId', '==', id));
+export async function loadTeamEntries(cp: ClubPaths, tx: Transaction, id: string): Promise<Entry[]> {
+  const snap = await tx.get(db.collection(cp.entries()).where('teamId', '==', id));
   return snap.docs.map((d) => d.data() as Entry);
 }
 
@@ -179,6 +179,7 @@ export function refreshTeamStatus(team: Team, series: Series): TeamStatus {
  * finished (and before any other writes start).
  */
 export function writeTeamEntries(
+  cp: ClubPaths,
   tx: Transaction,
   team: Team,
   sessions: Session[],
@@ -219,7 +220,7 @@ export function writeTeamEntries(
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
     };
-    tx.set(db.doc(paths.entry(doc.id)), doc);
+    tx.set(db.doc(cp.entry(doc.id)), doc);
     written.push(doc);
   }
   return written;
@@ -235,6 +236,7 @@ export function writeTeamEntries(
  * Same read/write discipline as `writeTeamEntries`.
  */
 export function cancelTeamEntries(
+  cp: ClubPaths,
   tx: Transaction,
   memberId: string,
   sessions: Session[],
@@ -246,7 +248,7 @@ export function cancelTeamEntries(
     const existing = existingEntries.get(session.id);
     if (!existing || existing.status === 'cancelled' || existing.memberId !== memberId) continue;
     const updated: Entry = { ...existing, status: 'cancelled', updatedAt: now };
-    tx.set(db.doc(paths.entry(updated.id)), updated);
+    tx.set(db.doc(cp.entry(updated.id)), updated);
     cancelled.push(updated);
   }
   return cancelled;
@@ -263,28 +265,28 @@ export function cancelTeamEntries(
  * a system cascade, like the scheduled sweep). Tested directly against the
  * emulator (plan's "Deactivation hook" note).
  */
-export async function removeMemberFromAllTeams(memberId: string): Promise<void> {
-  const snap = await db.collection(paths.teams()).where('status', 'in', ['forming', 'active']).get();
+export async function removeMemberFromAllTeams(cp: ClubPaths, memberId: string): Promise<void> {
+  const snap = await db.collection(cp.teams()).where('status', 'in', ['forming', 'active']).get();
   const affected = snap.docs
     .map((d) => d.data() as Team)
     .filter((t) => t.members.some((m) => m.ref.kind === 'member' && m.ref.memberId === memberId));
 
   for (const team of affected) {
     const result = await db.runTransaction(async (tx) => {
-      const current = await loadTeamOptional(tx, team.id);
+      const current = await loadTeamOptional(cp, tx, team.id);
       if (!current || current.status === 'disbanded') return null;
       const wasCaptain = current.captainMemberId === memberId;
       const remainingMembers = current.members.filter((m) => !(m.ref.kind === 'member' && m.ref.memberId === memberId));
 
-      const { series, weekday, programme } = await loadSeries(tx, current.year, current.seriesId);
-      const sessions = await seriesSessions(tx, current.year, series);
+      const { series, weekday, programme } = await loadSeries(cp, tx, current.year, current.seriesId);
+      const sessions = await seriesSessions(cp, tx, current.year, series);
       const openSessions = unlockedSessions(sessions, weekday, programme);
       const existingEntries = new Map<string, Entry | null>();
       for (const session of openSessions) {
-        const entrySnap = await tx.get(db.doc(paths.entry(entryId(session.id, memberId))));
+        const entrySnap = await tx.get(db.doc(cp.entry(entryId(session.id, memberId))));
         existingEntries.set(session.id, (entrySnap.data() as Entry | undefined) ?? null);
       }
-      const baseline = await loadTeamEntries(tx, current.id);
+      const baseline = await loadTeamEntries(cp, tx, current.id);
 
       const now = new Date().toISOString();
       let updatedTeam: Team;
@@ -318,8 +320,8 @@ export async function removeMemberFromAllTeams(memberId: string): Promise<void> 
         updatedTeam = withoutMember;
       }
 
-      const cancelled = cancelTeamEntries(tx, memberId, openSessions, existingEntries);
-      tx.set(db.doc(paths.team(current.id)), updatedTeam);
+      const cancelled = cancelTeamEntries(cp, tx, memberId, openSessions, existingEntries);
+      tx.set(db.doc(cp.team(current.id)), updatedTeam);
       assertTeamValid(updatedTeam, series, mergeEntries(baseline, cancelled));
 
       return { team: updatedTeam, newCaptainId };

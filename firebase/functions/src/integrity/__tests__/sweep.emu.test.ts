@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { paths, type CreateTeamInput, type Entry, type InviteToTeamInput, type RespondToInviteInput, type Team } from '@obc/shared';
+import { type CreateTeamInput, type Entry, type InviteToTeamInput, type RespondToInviteInput, type Team } from '@obc/shared';
 import { db } from '../../lib/admin.js';
 import {
   assertSessionPairingValid,
@@ -9,6 +9,7 @@ import {
   makeProgramme,
   notificationsFor,
   sessionInFuture,
+  cp,
 } from '../../testing/fixtures.js';
 import { entryId } from '../../entries/lib.js';
 import { respondToInviteHandler } from '../../entries/invites.js';
@@ -54,10 +55,10 @@ describe('runPairingSweep — clean store', () => {
     const prog = await makeProgramme({ dates: [sessionInFuture('monday')] });
     const sessionId = prog.sessionIds[0]!;
     const date = sessionInFuture('monday');
-    await db.doc(paths.entry(entryId(sessionId, a))).set(confirmedEntry(sessionId, date, a, b, 'B', 'p-clean'));
-    await db.doc(paths.entry(entryId(sessionId, b))).set(confirmedEntry(sessionId, date, b, a, 'A', 'p-clean'));
+    await db.doc(cp.entry(entryId(sessionId, a))).set(confirmedEntry(sessionId, date, a, b, 'B', 'p-clean'));
+    await db.doc(cp.entry(entryId(sessionId, b))).set(confirmedEntry(sessionId, date, b, a, 'A', 'p-clean'));
 
-    const report = await runPairingSweep({ repair: false });
+    const report = await runPairingSweep(cp, { repair: false });
 
     // The shared emulator accumulates fixtures from every other emu test
     // file across the whole run (some of which deliberately seed broken
@@ -76,12 +77,12 @@ describe('runPairingSweep — one-sided pairing (mirror missing)', () => {
     const prog = await makeProgramme({ dates: [sessionInFuture('monday')] });
     const sessionId = prog.sessionIds[0]!;
     const date = sessionInFuture('monday');
-    await db.doc(paths.entry(entryId(sessionId, a))).set(confirmedEntry(sessionId, date, a, 'ghost-member', 'Ghost', 'p-onesided'));
+    await db.doc(cp.entry(entryId(sessionId, a))).set(confirmedEntry(sessionId, date, a, 'ghost-member', 'Ghost', 'p-onesided'));
 
-    const report = await runPairingSweep({ repair: false });
+    const report = await runPairingSweep(cp, { repair: false });
     expect(report.violations.some((v) => v.kind === 'pairing' && v.id === sessionId)).toBe(true);
 
-    const entry = (await db.doc(paths.entry(entryId(sessionId, a))).get()).data() as Entry;
+    const entry = (await db.doc(cp.entry(entryId(sessionId, a))).get()).data() as Entry;
     expect(entry.status).toBe('confirmed'); // untouched
     expect(await notificationsFor(a, 'partner_cancelled')).toHaveLength(0);
   });
@@ -91,9 +92,9 @@ describe('runPairingSweep — one-sided pairing (mirror missing)', () => {
     const prog = await makeProgramme({ dates: [sessionInFuture('monday')] });
     const sessionId = prog.sessionIds[0]!;
     const date = sessionInFuture('monday');
-    await db.doc(paths.entry(entryId(sessionId, a))).set(confirmedEntry(sessionId, date, a, 'ghost-member', 'Ghost', 'p-onesided-r'));
+    await db.doc(cp.entry(entryId(sessionId, a))).set(confirmedEntry(sessionId, date, a, 'ghost-member', 'Ghost', 'p-onesided-r'));
 
-    const report = await runPairingSweep({ repair: true, actorMemberId: 'system' });
+    const report = await runPairingSweep(cp, { repair: true, actorMemberId: 'system' });
     expect(report.repaired).toBeGreaterThanOrEqual(1);
 
     const entries = await assertSessionPairingValid(sessionId);
@@ -102,7 +103,7 @@ describe('runPairingSweep — one-sided pairing (mirror missing)', () => {
     expect(entry.partner).toBeNull();
     expect(await notificationsFor(a, 'partner_cancelled')).toHaveLength(1);
 
-    const auditSnap = await db.collection(paths.auditLog()).where('action', '==', 'pairing_repair').get();
+    const auditSnap = await db.collection(cp.auditLog()).where('action', '==', 'pairing_repair').get();
     expect(auditSnap.docs.length).toBeGreaterThanOrEqual(1);
   });
 });
@@ -115,13 +116,13 @@ describe('runPairingSweep — mismatched pairingId', () => {
     const sessionId = prog.sessionIds[0]!;
     const date = sessionInFuture('monday');
     // Both sides correctly reference each other, but carry *different* pairingIds.
-    await db.doc(paths.entry(entryId(sessionId, a))).set(confirmedEntry(sessionId, date, a, b, 'B', 'p-mismatch-a'));
-    await db.doc(paths.entry(entryId(sessionId, b))).set(confirmedEntry(sessionId, date, b, a, 'A', 'p-mismatch-b'));
+    await db.doc(cp.entry(entryId(sessionId, a))).set(confirmedEntry(sessionId, date, a, b, 'B', 'p-mismatch-a'));
+    await db.doc(cp.entry(entryId(sessionId, b))).set(confirmedEntry(sessionId, date, b, a, 'A', 'p-mismatch-b'));
 
-    const detectOnly = await runPairingSweep({ repair: false });
+    const detectOnly = await runPairingSweep(cp, { repair: false });
     expect(detectOnly.violations.some((v) => v.kind === 'pairing' && v.id === sessionId)).toBe(true);
 
-    const report = await runPairingSweep({ repair: true });
+    const report = await runPairingSweep(cp, { repair: true });
     expect(report.repaired).toBeGreaterThanOrEqual(2);
 
     const entries = await assertSessionPairingValid(sessionId);
@@ -139,17 +140,17 @@ describe('runPairingSweep — orphan substitution fields', () => {
     const prog = await makeProgramme({ dates: [sessionInFuture('monday')] });
     const sessionId = prog.sessionIds[0]!;
     const date = sessionInFuture('monday');
-    await db.doc(paths.entry(entryId(sessionId, a))).set(confirmedEntry(sessionId, date, a, b, 'B', 'p-orphan'));
-    await db.doc(paths.entry(entryId(sessionId, b))).set(
+    await db.doc(cp.entry(entryId(sessionId, a))).set(confirmedEntry(sessionId, date, a, b, 'B', 'p-orphan'));
+    await db.doc(cp.entry(entryId(sessionId, b))).set(
       confirmedEntry(sessionId, date, b, a, 'A', 'p-orphan', {
         substitute: { kind: 'member', memberId: 'ghost-sub', displayName: 'Ghost Sub' },
       }),
     );
 
-    const detectOnly = await runPairingSweep({ repair: false });
+    const detectOnly = await runPairingSweep(cp, { repair: false });
     expect(detectOnly.violations.some((v) => v.kind === 'pairing' && v.id === sessionId)).toBe(true);
 
-    await runPairingSweep({ repair: true });
+    await runPairingSweep(cp, { repair: true });
 
     const entries = await assertSessionPairingValid(sessionId);
     const bEntry = entries.find((e) => e.memberId === b)!;
@@ -172,12 +173,12 @@ describe('runPairingSweep — team roster/entry mismatches', () => {
     await respondToInviteHandler(fakeCallableRequest<RespondToInviteInput>({ inviteId: invite.invite.id, accept: true }, { uid: member }));
 
     // Simulate a lost entry: delete the member's entry for the (only) future session.
-    await db.doc(paths.entry(entryId(prog.sessionIds[0]!, member))).delete();
+    await db.doc(cp.entry(entryId(prog.sessionIds[0]!, member))).delete();
 
-    const detectOnly = await runPairingSweep({ repair: false });
+    const detectOnly = await runPairingSweep(cp, { repair: false });
     expect(detectOnly.violations.some((v) => v.kind === 'team' && v.id === created.team.id)).toBe(true);
 
-    const report = await runPairingSweep({ repair: true });
+    const report = await runPairingSweep(cp, { repair: true });
     expect(report.repaired).toBeGreaterThanOrEqual(1);
 
     const { entries } = await assertTeamValid(created.team.id);
@@ -196,14 +197,14 @@ describe('runPairingSweep — team roster/entry mismatches', () => {
     await respondToInviteHandler(fakeCallableRequest<RespondToInviteInput>({ inviteId: invite.invite.id, accept: true }, { uid: member }));
 
     // Simulate a desynced roster: drop `member` from team.members directly, leaving their entry behind.
-    const teamRef = db.doc(paths.team(created.team.id));
+    const teamRef = db.doc(cp.team(created.team.id));
     const team = (await teamRef.get()).data() as Team;
     await teamRef.set({ ...team, members: team.members.filter((m) => !(m.ref.kind === 'member' && m.ref.memberId === member)) });
 
-    const detectOnly = await runPairingSweep({ repair: false });
+    const detectOnly = await runPairingSweep(cp, { repair: false });
     expect(detectOnly.violations.some((v) => v.kind === 'team' && v.id === created.team.id)).toBe(true);
 
-    const report = await runPairingSweep({ repair: true });
+    const report = await runPairingSweep(cp, { repair: true });
     expect(report.repaired).toBeGreaterThanOrEqual(1);
 
     const { entries } = await assertTeamValid(created.team.id);

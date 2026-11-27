@@ -4,31 +4,52 @@
  * `requireAdmin`.
  */
 import { HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
-import type { Member } from '@obc/shared';
+import type { ClubPaths, Member } from '@obc/shared';
 import { db } from './admin.js';
-import { paths } from '@obc/shared';
+import { activeMembershipsOf } from './clubs.js';
 
 export interface Caller {
   uid: string;
+  /** The caller's membership record in `cp`'s club. */
   member: Member;
+  /** Admin of `cp`'s club (plan §21 B14.3: admin rights are per club). */
   isAdmin: boolean;
+  /** The club this request acts in. */
+  cp: ClubPaths;
 }
 
-export async function requireMember(req: CallableRequest): Promise<Caller> {
+/** The caller must be an active member of the club the request acts in. */
+export async function requireMember(req: CallableRequest, cp: ClubPaths): Promise<Caller> {
   const uid = req.auth?.uid;
   if (!uid) {
     throw new HttpsError('unauthenticated', 'Sign in to continue.');
   }
-  const snap = await db.doc(paths.member(uid)).get();
+  const snap = await db.doc(cp.member(uid)).get();
   const member = snap.data() as Member | undefined;
   if (!member || member.active !== true) {
     throw new HttpsError('permission-denied', 'Your membership is not active.');
   }
-  return { uid, member, isAdmin: member.role === 'admin' };
+  return { uid, member, isAdmin: member.role === 'admin', cp };
 }
 
-export async function requireAdmin(req: CallableRequest): Promise<Caller> {
-  const caller = await requireMember(req);
+/**
+ * For person-level callables (password, notification prefs, devices, marking
+ * notifications read): the caller must hold an active membership of SOME
+ * club, but the action is not about any one of them.
+ */
+export async function requireUser(req: CallableRequest): Promise<{ uid: string }> {
+  const uid = req.auth?.uid;
+  if (!uid) {
+    throw new HttpsError('unauthenticated', 'Sign in to continue.');
+  }
+  if ((await activeMembershipsOf(uid)).length === 0) {
+    throw new HttpsError('permission-denied', 'Your membership is not active.');
+  }
+  return { uid };
+}
+
+export async function requireAdmin(req: CallableRequest, cp: ClubPaths): Promise<Caller> {
+  const caller = await requireMember(req, cp);
   if (!caller.isAdmin) {
     throw new HttpsError('permission-denied', 'Admins only.');
   }
@@ -53,7 +74,7 @@ export async function resolveActingMember(caller: Caller, onBehalfOfMemberId?: s
   if (!caller.isAdmin) {
     throw new HttpsError('permission-denied', 'Only admins can act on behalf of members.');
   }
-  const target = await db.doc(paths.member(onBehalfOfMemberId)).get();
+  const target = await db.doc(caller.cp.member(onBehalfOfMemberId)).get();
   const member = target.data() as Member | undefined;
   if (!member) {
     throw new HttpsError('not-found', 'Target member not found.');

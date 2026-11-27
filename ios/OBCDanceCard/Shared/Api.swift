@@ -14,6 +14,12 @@
 //
 //  Optional fields are omitted rather than sent as null — see `payload(_:)`.
 //
+//  **Clubs (plan §21 B14).** A callable that acts on a club's data is called
+//  with `club: Club.current`, which adds that club's `clubId` to the payload.
+//  The person-level ones — sign-in, password, notification prefs, device
+//  registration — are not about any club and send none; their server schemas
+//  would reject it.
+//
 
 import Foundation
 
@@ -98,7 +104,7 @@ enum Api {
     // ------------------------------------------------------------- profile
 
     static func updateMyContact(phone: String) async throws {
-        try await Callable.call("updateMyContact", ["phone": phone])
+        try await Callable.call("updateMyContact", club: Club.current, ["phone": phone])
     }
 
     static func updateMyPrefs(_ prefs: NotificationPrefs) async throws {
@@ -136,7 +142,7 @@ enum Api {
         toMemberId: String,
         message: String?
     ) async throws {
-        try await Callable.call("sendInvite", payload([
+        try await Callable.call("sendInvite", club: Club.current, payload([
             "scope": scope.rawValue,
             "year": year,
             "toMemberId": toMemberId,
@@ -149,18 +155,18 @@ enum Api {
 
     @discardableResult
     static func respondToInvite(inviteId: String, accept: Bool) async throws -> RespondToInviteResult {
-        try await Callable.call("respondToInvite", ["inviteId": inviteId, "accept": accept],
+        try await Callable.call("respondToInvite", club: Club.current, ["inviteId": inviteId, "accept": accept],
                                 as: RespondToInviteResult.self)
     }
 
     static func cancelInvite(inviteId: String) async throws {
-        try await Callable.call("cancelInvite", ["inviteId": inviteId])
+        try await Callable.call("cancelInvite", club: Club.current, ["inviteId": inviteId])
     }
 
     // ------------------------------------------------------------- entries
 
     static func setSoloStatus(year: Int, sessionId: String, status: SoloStatus, note: String?) async throws {
-        try await Callable.call("setSoloStatus", payload([
+        try await Callable.call("setSoloStatus", club: Club.current, payload([
             "year": year,
             "sessionId": sessionId,
             "status": status.rawValue,
@@ -171,7 +177,7 @@ enum Api {
     /// Withdraws a `looking_for_partner` / `available` listing. Deliberately
     /// has no on-behalf form server-side (plan §9.2 schema note).
     static func clearSoloStatus(year: Int, sessionId: String) async throws {
-        try await Callable.call("clearSoloStatus", ["year": year, "sessionId": sessionId])
+        try await Callable.call("clearSoloStatus", club: Club.current, ["year": year, "sessionId": sessionId])
     }
 
     /// Marks every matching session `available`/`unavailable`, or clears
@@ -184,7 +190,7 @@ enum Api {
         fromDate: String?,
         toDate: String?
     ) async throws -> SetBulkSoloStatusResult {
-        try await Callable.call("setBulkSoloStatus", [
+        try await Callable.call("setBulkSoloStatus", club: Club.current, [
             "status": status.rawValue,
             "filter": payload([
                 "weekdays": weekdays.map(\.rawValue),
@@ -197,25 +203,25 @@ enum Api {
     // ------------------------------------------------------ iCal feed (B1)
 
     static func getIcalFeed() async throws -> IcalFeedResult {
-        try await Callable.call("getIcalFeed", [:], as: IcalFeedResult.self)
+        try await Callable.call("getIcalFeed", club: Club.current, [:], as: IcalFeedResult.self)
     }
 
     static func createIcalFeed() async throws -> IcalFeedResult {
-        try await Callable.call("createIcalFeed", [:], as: IcalFeedResult.self)
+        try await Callable.call("createIcalFeed", club: Club.current, [:], as: IcalFeedResult.self)
     }
 
     /// Rotates the token: the old URL stops working immediately.
     static func rotateIcalFeed() async throws -> IcalFeedResult {
-        try await Callable.call("rotateIcalFeed", [:], as: IcalFeedResult.self)
+        try await Callable.call("rotateIcalFeed", club: Club.current, [:], as: IcalFeedResult.self)
     }
 
     static func removeIcalFeed() async throws {
-        try await Callable.call("removeIcalFeed", [:])
+        try await Callable.call("removeIcalFeed", club: Club.current, [:])
     }
 
     @discardableResult
     static func claimLookingForPartner(year: Int, sessionId: String, posterMemberId: String) async throws -> ClaimResult {
-        try await Callable.call("claimLookingForPartner", [
+        try await Callable.call("claimLookingForPartner", club: Club.current, [
             "year": year,
             "sessionId": sessionId,
             "posterMemberId": posterMemberId,
@@ -223,7 +229,7 @@ enum Api {
     }
 
     static func cancelEntry(entryId: String) async throws {
-        try await Callable.call("cancelEntry", ["entryId": entryId])
+        try await Callable.call("cancelEntry", club: Club.current, ["entryId": entryId])
     }
 
     /// Marks the member's own notifications read with a direct Firestore
@@ -257,7 +263,7 @@ enum Api {
         notes: String?,
         courtesyEmails: Bool
     ) async throws -> CreateVisitorResult {
-        try await Callable.call("createVisitor", payload([
+        try await Callable.call("createVisitor", club: Club.current, payload([
             "displayName": displayName,
             "email": email,
             "phone": phone,
@@ -274,7 +280,7 @@ enum Api {
         notes: String?,
         courtesyEmails: Bool?
     ) async throws {
-        try await Callable.call("updateVisitor", payload([
+        try await Callable.call("updateVisitor", club: Club.current, payload([
             "visitorId": visitorId,
             "displayName": displayName,
             "email": email,
@@ -285,7 +291,7 @@ enum Api {
     }
 
     static func deleteVisitor(visitorId: String) async throws {
-        try await Callable.call("deleteVisitor", ["visitorId": visitorId])
+        try await Callable.call("deleteVisitor", club: Club.current, ["visitorId": visitorId])
     }
 
     static func signUpWithVisitor(
@@ -295,7 +301,7 @@ enum Api {
         seriesId: String?,
         visitorId: String
     ) async throws {
-        try await Callable.call("signUpWithVisitor", payload([
+        try await Callable.call("signUpWithVisitor", club: Club.current, payload([
             "scope": scope.rawValue,
             "year": year,
             "visitorId": visitorId,
@@ -307,7 +313,7 @@ enum Api {
     // --------------------------------------------------------- substitutes
 
     static func setSubstitute(entryId: String, substitute: PartnerRefInput, coverFor: CoverFor) async throws {
-        try await Callable.call("setSubstitute", [
+        try await Callable.call("setSubstitute", club: Club.current, [
             "entryId": entryId,
             "substitute": substitute.payload,
             "coverFor": coverFor.rawValue,
@@ -315,13 +321,13 @@ enum Api {
     }
 
     static func clearSubstitute(entryId: String) async throws {
-        try await Callable.call("clearSubstitute", ["entryId": entryId])
+        try await Callable.call("clearSubstitute", club: Club.current, ["entryId": entryId])
     }
 
     // --------------------------------------------------------------- teams
 
     static func createTeam(year: Int, seriesId: String, name: String?) async throws {
-        try await Callable.call("createTeam", payload([
+        try await Callable.call("createTeam", club: Club.current, payload([
             "year": year,
             "seriesId": seriesId,
             "name": name,
@@ -329,7 +335,7 @@ enum Api {
     }
 
     static func inviteToTeam(teamId: String, toMemberId: String, message: String?) async throws {
-        try await Callable.call("inviteToTeam", payload([
+        try await Callable.call("inviteToTeam", club: Club.current, payload([
             "teamId": teamId,
             "toMemberId": toMemberId,
             "message": message,
@@ -337,33 +343,33 @@ enum Api {
     }
 
     static func addVisitorToTeam(teamId: String, visitorId: String) async throws {
-        try await Callable.call("addVisitorToTeam", ["teamId": teamId, "visitorId": visitorId])
+        try await Callable.call("addVisitorToTeam", club: Club.current, ["teamId": teamId, "visitorId": visitorId])
     }
 
     static func removeVisitorFromTeam(teamId: String, visitorId: String) async throws {
-        try await Callable.call("removeVisitorFromTeam", ["teamId": teamId, "visitorId": visitorId])
+        try await Callable.call("removeVisitorFromTeam", club: Club.current, ["teamId": teamId, "visitorId": visitorId])
     }
 
     static func leaveTeam(teamId: String) async throws {
-        try await Callable.call("leaveTeam", ["teamId": teamId])
+        try await Callable.call("leaveTeam", club: Club.current, ["teamId": teamId])
     }
 
     static func removeFromTeam(teamId: String, ref: PartnerRefInput) async throws {
-        try await Callable.call("removeFromTeam", ["teamId": teamId, "ref": ref.payload])
+        try await Callable.call("removeFromTeam", club: Club.current, ["teamId": teamId, "ref": ref.payload])
     }
 
     /// Sends a `kind: 'captaincy'` invite — the captaincy only changes once
     /// the other member accepts (plan §9.2).
     static func transferCaptaincy(teamId: String, toMemberId: String) async throws {
-        try await Callable.call("transferCaptaincy", ["teamId": teamId, "toMemberId": toMemberId])
+        try await Callable.call("transferCaptaincy", club: Club.current, ["teamId": teamId, "toMemberId": toMemberId])
     }
 
     static func disbandTeam(teamId: String) async throws {
-        try await Callable.call("disbandTeam", ["teamId": teamId])
+        try await Callable.call("disbandTeam", club: Club.current, ["teamId": teamId])
     }
 
     static func addTeamSessionSubstitute(teamId: String, sessionId: String, ref: PartnerRefInput) async throws {
-        try await Callable.call("addTeamSessionSubstitute", [
+        try await Callable.call("addTeamSessionSubstitute", club: Club.current, [
             "teamId": teamId,
             "sessionId": sessionId,
             "ref": ref.payload,
@@ -371,7 +377,7 @@ enum Api {
     }
 
     static func clearTeamSessionSubstitute(teamId: String, sessionId: String, ref: PartnerRefInput) async throws {
-        try await Callable.call("clearTeamSessionSubstitute", [
+        try await Callable.call("clearTeamSessionSubstitute", club: Club.current, [
             "teamId": teamId,
             "sessionId": sessionId,
             "ref": ref.payload,

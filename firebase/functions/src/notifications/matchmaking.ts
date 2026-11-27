@@ -14,7 +14,7 @@
  * module only handles "who gets told".
  */
 import { randomUUID } from 'node:crypto';
-import { paths, type Entry, type MemberCohort, type MemberPrivate, type Notification } from '@obc/shared';
+import { paths, type Entry, type MemberCohort, type MemberPrivate, type Notification, type ClubPaths } from '@obc/shared';
 import { db } from '../lib/admin.js';
 import { BatchWriter } from '../lib/batchWriter.js';
 
@@ -41,8 +41,8 @@ export interface SendMatchmakingAlertsInput {
  * non-cancelled entry for it — including the poster themselves, who is
  * excluded separately below regardless.
  */
-async function busyMemberIds(sessionId: string): Promise<Set<string>> {
-  const snap = await db.collection(paths.entries()).where('sessionId', '==', sessionId).get();
+async function busyMemberIds(cp: ClubPaths, sessionId: string): Promise<Set<string>> {
+  const snap = await db.collection(cp.entries()).where('sessionId', '==', sessionId).get();
   const busy = new Set<string>();
   for (const doc of snap.docs) {
     const entry = doc.data() as Entry;
@@ -62,12 +62,12 @@ async function alreadyAlerted(memberId: string, sessionId: string, cutoffIso: st
   return snap.docs.some((d) => (d.data() as Notification).data.sessionId === sessionId);
 }
 
-export async function sendMatchmakingAlerts(input: SendMatchmakingAlertsInput): Promise<void> {
+export async function sendMatchmakingAlerts(cp: ClubPaths, input: SendMatchmakingAlertsInput): Promise<void> {
   const { posterMemberId, posterName, sessionId, date, posterCohort } = input;
 
   const [membersSnap, busy] = await Promise.all([
-    db.collection(paths.members()).where('active', '==', true).where('cohort', '==', posterCohort).get(),
-    busyMemberIds(sessionId),
+    db.collection(cp.members()).where('active', '==', true).where('cohort', '==', posterCohort).get(),
+    busyMemberIds(cp, sessionId),
   ]);
 
   const candidateIds = membersSnap.docs.map((d) => d.id).filter((id) => id !== posterMemberId && !busy.has(id));

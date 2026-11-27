@@ -16,7 +16,7 @@
  * sessions seeded by other test files.
  */
 import { describe, expect, it } from 'vitest';
-import { paths, todayNZ, type SetBulkSoloStatusInput, type SetSoloStatusInput } from '@obc/shared';
+import { todayNZ, type SetBulkSoloStatusInput, type SetSoloStatusInput } from '@obc/shared';
 import { db } from '../../lib/admin.js';
 import {
   assertSessionPairingValid,
@@ -24,13 +24,14 @@ import {
   makeMember,
   makeProgramme,
   notificationsFor,
+  cp,
 } from '../../testing/fixtures.js';
 import { setSoloStatusHandler } from '../entries.js';
 import { respondToInviteHandler, sendInviteHandler } from '../invites.js';
 import { setBulkSoloStatusHandler } from '../bulkSoloStatus.js';
 
 async function entryFor(sessionId: string, memberId: string) {
-  const snap = await db.doc(paths.entry(`${sessionId}_${memberId}`)).get();
+  const snap = await db.doc(cp.entry(`${sessionId}_${memberId}`)).get();
   return snap.data();
 }
 
@@ -152,7 +153,7 @@ describe('setBulkSoloStatus', () => {
 
     const now = new Date().toISOString();
     const noBridgeId = `${prog.year}-bulk-nobridge-test`;
-    await db.doc(paths.session(prog.year, noBridgeId)).set({
+    await db.doc(cp.session(prog.year, noBridgeId)).set({
       id: noBridgeId,
       date: '2095-08-10',
       weekday: 'monday',
@@ -164,7 +165,7 @@ describe('setBulkSoloStatus', () => {
       updatedAt: now,
     });
     const outOfRangeId = `${prog.year}-bulk-outofrange-test`;
-    await db.doc(paths.session(prog.year, outOfRangeId)).set({
+    await db.doc(cp.session(prog.year, outOfRangeId)).set({
       id: outOfRangeId,
       date: '2095-09-01',
       weekday: 'monday',
@@ -230,7 +231,7 @@ describe('setBulkSoloStatus', () => {
     expect(result.updated).toBe(1);
     expect((await entryFor(sessionId, m))?.status).toBe('unavailable');
 
-    const auditSnap = await db.collection(paths.auditLog()).where('action', '==', 'set_bulk_solo_status_on_behalf').get();
+    const auditSnap = await db.collection(cp.auditLog()).where('action', '==', 'set_bulk_solo_status_on_behalf').get();
     expect(auditSnap.docs.some((d) => d.data().actorMemberId === admin && d.data().targetMemberId === m)).toBe(true);
     expect(await notificationsFor(m, 'on_behalf_action')).toHaveLength(1);
   });

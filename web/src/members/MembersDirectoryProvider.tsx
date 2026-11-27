@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
-import { paths, type Member } from '@obc/shared';
+import { type Member } from '@obc/shared';
 import { db } from '../firebase';
 import { useAuth } from '../auth/useAuth';
 import { MembersDirectoryContext, type MembersDirectoryContextValue } from './MembersDirectoryContext';
+import { useClub } from '../club/useClub';
 
 export function MembersDirectoryProvider({ children }: { children: ReactNode }) {
+  const cp = useClub();
   // App-Store-review cohort partition (plan §8.1, decided 2026-09-05): the
   // `members` rule requires `resource.data.cohort == callerCohort()` for a
   // non-admin, non-self read, so this query must filter on cohort — and it
@@ -26,7 +28,7 @@ export function MembersDirectoryProvider({ children }: { children: ReactNode }) 
       return;
     }
     const q = query(
-      collection(db, paths.members()),
+      collection(db, cp.members()),
       where('active', '==', true),
       where('cohort', '==', ownCohort),
     );
@@ -45,7 +47,7 @@ export function MembersDirectoryProvider({ children }: { children: ReactNode }) 
       },
     );
     return unsub;
-  }, [ownCohort]);
+  }, [ownCohort, cp]);
 
   const byId = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
 

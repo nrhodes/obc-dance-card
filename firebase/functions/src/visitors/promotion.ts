@@ -18,7 +18,7 @@
  * otherwise it is kept (with `promotedToMemberId` set) purely so existing
  * entries keep rendering a name.
  */
-import { paths, todayNZ, type Entry, type Visitor } from '@obc/shared';
+import { todayNZ, type Entry, type Visitor, type ClubPaths } from '@obc/shared';
 import { db } from '../lib/admin.js';
 import { audit } from '../lib/audit.js';
 import { createNotification } from '../notifications/create.js';
@@ -33,15 +33,16 @@ function refIsVisitor(ref: Entry['partner'], visitorId: string): boolean {
  * member did nothing here; they were simply imported.
  */
 export async function promoteVisitorsForNewMember(
+  cp: ClubPaths,
   newMemberId: string,
   emailLower: string,
   actorMemberId: string,
 ): Promise<void> {
-  const visitorsSnap = await db.collection(paths.visitors()).where('email', '==', emailLower).get();
+  const visitorsSnap = await db.collection(cp.visitors()).where('email', '==', emailLower).get();
   if (visitorsSnap.empty) return;
 
   const today = todayNZ();
-  const futureEntriesSnap = await db.collection(paths.entries()).where('date', '>=', today).get();
+  const futureEntriesSnap = await db.collection(cp.entries()).where('date', '>=', today).get();
   const futureEntries = futureEntriesSnap.docs.map((d) => d.data() as Entry);
 
   for (const visitorDoc of visitorsSnap.docs) {
@@ -61,16 +62,16 @@ export async function promoteVisitorsForNewMember(
     );
 
     if (hasFutureEntry) {
-      await db.doc(paths.visitor(visitor.id)).set({ promotedToMemberId: newMemberId }, { merge: true });
+      await db.doc(cp.visitor(visitor.id)).set({ promotedToMemberId: newMemberId }, { merge: true });
     } else {
-      await db.doc(paths.visitor(visitor.id)).delete();
+      await db.doc(cp.visitor(visitor.id)).delete();
     }
 
-    await audit({
+    await audit(cp, {
       actorMemberId,
       action: 'visitor_promoted',
       targetMemberId: visitor.createdByMemberId,
-      entityRef: paths.visitor(visitor.id),
+      entityRef: cp.visitor(visitor.id),
       detail: { promotedMemberId: newMemberId, visitorKept: hasFutureEntry },
     });
   }

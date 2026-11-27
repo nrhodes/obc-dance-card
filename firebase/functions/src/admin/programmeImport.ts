@@ -26,7 +26,6 @@ import {
   parseOptionalInt,
   parseScoring,
   parseWeekday,
-  paths,
   weekdayOfNZ,
   type CsvRowError,
   type Entry,
@@ -41,6 +40,8 @@ import {
   type SessionKind,
   type Weekday,
   type WeekdayProgramme,
+  type ClubPaths,
+  paths,
 } from '@obc/shared';
 import { db } from '../lib/admin.js';
 import { audit } from '../lib/audit.js';
@@ -210,6 +211,7 @@ function validateWeekdayRows(rows: RawRow[], errors: CsvRowError[]): ValidWeekda
 
 /** Resolves each row's `stewardEmailLower` to an active member uid; invalidates rows whose steward doesn't resolve. */
 async function resolveStewards(
+  cp: ClubPaths,
   rows: ValidWeekdayRow[],
   errors: CsvRowError[],
 ): Promise<Map<number, string | undefined>> {
@@ -217,7 +219,7 @@ async function resolveStewards(
   const uidByEmail = new Map<string, string>();
   for (let i = 0; i < emails.length; i += 30) {
     const chunk = emails.slice(i, i + 30);
-    const snap = await db.collection('memberPrivate').where('emailLower', 'in', chunk).get();
+    const snap = await db.collection(paths.memberPrivates()).where('emailLower', 'in', chunk).get();
     for (const doc of snap.docs) {
       uidByEmail.set((doc.data() as MemberPrivate).emailLower, doc.id);
     }
@@ -225,7 +227,7 @@ async function resolveStewards(
   const uids = [...new Set(uidByEmail.values())];
   const activeUids = new Set<string>();
   if (uids.length) {
-    const memberDocs = await db.getAll(...uids.map((u) => db.doc(paths.member(u))));
+    const memberDocs = await db.getAll(...uids.map((u) => db.doc(cp.member(u))));
     for (const snap of memberDocs) {
       const m = snap.data() as Member | undefined;
       if (m?.active) activeUids.add(snap.id);
@@ -421,6 +423,7 @@ function chunk<T>(arr: T[], size: number): T[][] {
 }
 
 export async function runProgrammeImport(
+  cp: ClubPaths,
   input: ImportProgrammeInput,
   actorMemberId: string,
 ): Promise<ProgrammeImportReport> {
@@ -429,7 +432,7 @@ export async function runProgrammeImport(
   const warnings: string[] = [];
   const errors: CsvRowError[] = [];
 
-  const existingProgrammeSnap = await db.doc(paths.programme(year)).get();
+  const existingProgrammeSnap = await db.doc(cp.programme(year)).get();
   const existingProgramme = existingProgrammeSnap.data() as { status?: 'draft' | 'published' } | undefined;
 
   if (existingProgramme?.status === 'published' && !input.replace) {
@@ -442,7 +445,7 @@ export async function runProgrammeImport(
   // ---- parse + per-row validation ----
   const weekdayRawRows = parseCsvRows(input.weekdaysCsv, 'weekdays', [WEEKDAYS_HEADERS], errors);
   const validWeekdayRows = validateWeekdayRows(weekdayRawRows, errors);
-  const stewardUidByRowNum = await resolveStewards(validWeekdayRows, errors);
+  const stewardUidByRowNum = await resolveStewards(cp, validWeekdayRows, errors);
   const finalWeekdayRows = validWeekdayRows.filter((r) => {
     // A row is only dropped here if resolveStewards pushed an error for it
     // (i.e. it has a non-blank steward email that failed to resolve).
@@ -564,7 +567,7 @@ export async function runProgrammeImport(
   // ---- replace-safety check (existing published programme only) ----
   let wouldRemoveSessions = 0;
   if (existingProgramme) {
-    const existingSessionsSnap = await db.collection(paths.sessions(year)).get();
+    const existingSessionsSnap = await db.collection(cp.sessions(year)).get();
     const existingIds = existingSessionsSnap.docs.map((d) => d.id);
     const newIds = new Set(candidateSessions.map((c) => c.id));
     const removedIds = existingIds.filter((id) => !newIds.has(id));
@@ -573,7 +576,7 @@ export async function runProgrammeImport(
     if (existingProgramme.status === 'published' && removedIds.length > 0 && errors.length === 0) {
       const nonCancelledDates: string[] = [];
       for (const idBatch of chunk(removedIds, 30)) {
-        const snap = await db.collection('entries').where('sessionId', 'in', idBatch).get();
+        const snap = await db.collection(cp.entries()).where('sessionId', 'in', idBatch).get();
         for (const doc of snap.docs) {
           const entry = doc.data() as Entry;
           if (entry.status !== 'cancelled') {
@@ -621,9 +624,9 @@ export async function runProgrammeImport(
 
   if (existingProgramme) {
     const [existingWeekdays, existingSeries, existingSessions] = await Promise.all([
-      db.collection(paths.weekdays(year)).get(),
-      db.collection(paths.series(year)).get(),
-      db.collection(paths.sessions(year)).get(),
+      db.collection(cp.weekdays(year)).get(),
+      db.collection(cp.series(year)).get(),
+      db.collection(cp.sessions(year)).get(),
     ]);
     for (const d of existingWeekdays.docs) writer.delete(d.ref);
     for (const d of existingSeries.docs) writer.delete(d.ref);
@@ -632,7 +635,7 @@ export async function runProgrammeImport(
 
   const programmeStatus = existingProgramme?.status ?? 'draft';
   writer.set(
-    db.doc(paths.programme(year)),
+    db.doc(cp.programme(year)),
     {
       id: String(year),
       year,
@@ -656,11 +659,11 @@ export async function runProgrammeImport(
       createdAt: now,
       updatedAt: now,
     };
-    writer.set(db.doc(paths.weekday(year, row.weekday)), doc);
+    writer.set(db.doc(cp.weekday(year, row.weekday)), doc);
   }
 
   for (const s of seriesDocs) {
-    writer.set(db.doc(paths.seriesDoc(year, s.id)), s);
+    writer.set(db.doc(cp.seriesDoc(year, s.id)), s);
   }
 
   for (const c of candidateSessions) {
@@ -678,12 +681,12 @@ export async function runProgrammeImport(
       createdAt: now,
       updatedAt: now,
     };
-    writer.set(db.doc(paths.session(year, c.id)), doc);
+    writer.set(db.doc(cp.session(year, c.id)), doc);
   }
 
   await writer.flush();
 
-  await db.doc(paths.import(importId)).set({
+  await db.doc(cp.import(importId)).set({
     id: importId,
     kind: 'programme',
     actorMemberId,
@@ -692,10 +695,10 @@ export async function runProgrammeImport(
     report: redactImportReport(report),
   });
 
-  await audit({
+  await audit(cp, {
     actorMemberId,
     action: 'programme_import',
-    entityRef: paths.programme(year),
+    entityRef: cp.programme(year),
     detail: {
       year,
       weekdays: weekdaysCount,

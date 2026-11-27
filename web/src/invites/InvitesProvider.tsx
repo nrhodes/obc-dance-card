@@ -1,14 +1,16 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { collection, limit, onSnapshot, orderBy, query, where } from 'firebase/firestore';
-import { paths, type Invite } from '@obc/shared';
+import { type Invite } from '@obc/shared';
 import { db } from '../firebase';
 import { useEffectiveMember } from '../admin/useEffectiveMember';
 import { InvitesContext, type InvitesContextValue } from './InvitesContext';
+import { useClub } from '../club/useClub';
 
 const RESOLVED_STATUSES = ['accepted', 'declined', 'expired', 'cancelled'] as const;
 const RESOLVED_LIMIT = 10;
 
 export function InvitesProvider({ children }: { children: ReactNode }) {
+  const cp = useClub();
   // Plan Phase 6b task deliverable 2: while an admin is acting on behalf of a
   // member, this screen's "my invites" reads that member's invites instead
   // of the admin's own.
@@ -33,7 +35,7 @@ export function InvitesProvider({ children }: { children: ReactNode }) {
     }
     setError(null);
 
-    const invites = collection(db, paths.invites());
+    const invites = collection(db, cp.invites());
     const onError = (name: string, key: keyof typeof loaded) => (err: { code: string }) => {
       console.error('subscription_failed', name, err.code);
       setError({ code: err.code });
@@ -94,7 +96,7 @@ export function InvitesProvider({ children }: { children: ReactNode }) {
       unsubResolvedToMe();
       unsubResolvedFromMe();
     };
-  }, [uid]);
+  }, [uid, cp]);
 
   const resolved = useMemo(
     () =>

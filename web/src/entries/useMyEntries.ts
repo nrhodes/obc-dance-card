@@ -11,9 +11,10 @@
  */
 import { useEffect, useState } from 'react';
 import { collection, onSnapshot, orderBy, query, where } from 'firebase/firestore';
-import { paths, type Entry } from '@obc/shared';
+import { type Entry } from '@obc/shared';
 import { db } from '../firebase';
 import { useEffectiveMember } from '../admin/useEffectiveMember';
+import { useClub } from '../club/useClub';
 
 export interface MyEntriesResult {
   entries: Entry[];
@@ -24,6 +25,7 @@ export interface MyEntriesResult {
 }
 
 export function useMyEntries(): MyEntriesResult {
+  const cp = useClub();
   const { effectiveMemberId } = useEffectiveMember();
   const [entries, setEntries] = useState<Entry[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -36,7 +38,7 @@ export function useMyEntries(): MyEntriesResult {
       return;
     }
     setLoaded(false);
-    const q = query(collection(db, paths.entries()), where('memberId', '==', effectiveMemberId), orderBy('date', 'asc'));
+    const q = query(collection(db, cp.entries()), where('memberId', '==', effectiveMemberId), orderBy('date', 'asc'));
     return onSnapshot(
       q,
       (snap) => {
@@ -51,7 +53,7 @@ export function useMyEntries(): MyEntriesResult {
         setLoaded(true);
       },
     );
-  }, [effectiveMemberId]);
+  }, [effectiveMemberId, cp]);
 
   return { entries, loading: !loaded, error };
 }

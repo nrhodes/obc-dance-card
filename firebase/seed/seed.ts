@@ -21,7 +21,10 @@
 import { checkEmulatorSafe } from '../functions/src/lib/seedGuard.js';
 // Pure date helpers only (no Admin SDK, no I/O) — safe to import statically
 // alongside `seedGuard.ts` above, ahead of the guard running.
-import { addDaysNZ, todayNZ, weekdayOfNZ } from '@obc/shared';
+import { DEFAULT_CLUB_ID, addDaysNZ, clubPaths, todayNZ, weekdayOfNZ } from '@obc/shared';
+
+/** The seed populates the one club that exists (plan §21 B14, stage 1a). */
+const cp = clubPaths(DEFAULT_CLUB_ID);
 
 function assertEmulatorSafe(): string {
   try {
@@ -336,6 +339,7 @@ async function main(): Promise<void> {
 
   for (const spec of members) {
     const result = await provisionMember(
+      cp,
       {
         firstName: spec.firstName,
         lastName: spec.lastName,
@@ -367,6 +371,7 @@ async function main(): Promise<void> {
   }
 
   const importReport = await runProgrammeImport(
+    cp,
     {
       year: PROGRAMME_YEAR,
       weekdaysCsv: weekdaysCsv(),
@@ -386,7 +391,7 @@ async function main(): Promise<void> {
     `Imported ${PROGRAMME_YEAR} programme: ${importReport.weekdays} weekday(s), ${importReport.series} series, ${importReport.sessions} session(s).`,
   );
 
-  const publishResult = await runPublishProgramme({ year: PROGRAMME_YEAR }, adminUid);
+  const publishResult = await runPublishProgramme(cp, { year: PROGRAMME_YEAR }, adminUid);
   console.log(`Published ${PROGRAMME_YEAR} programme at ${publishResult.publishedAt}.`);
 
   // ---- second, current-dated programme (plan §21 B3 "two-year horizon") ----
@@ -413,6 +418,7 @@ async function main(): Promise<void> {
   }
 
   const currentYearImportReport = await runProgrammeImport(
+    cp,
     {
       year: currentYear,
       weekdaysCsv: currentYearWeekdaysCsv(),
@@ -432,7 +438,7 @@ async function main(): Promise<void> {
     `Imported ${currentYear} programme: ${currentYearImportReport.weekdays} weekday(s), ${currentYearImportReport.series} series, ${currentYearImportReport.sessions} session(s) (past Mondays: ${pastMondays.join(', ') || 'none'}; future Mondays: ${futureMondays.join(', ') || 'none'}).`,
   );
 
-  const currentYearPublishResult = await runPublishProgramme({ year: currentYear }, adminUid);
+  const currentYearPublishResult = await runPublishProgramme(cp, { year: currentYear }, adminUid);
   console.log(`Published ${currentYear} programme at ${currentYearPublishResult.publishedAt}.`);
 }
 
