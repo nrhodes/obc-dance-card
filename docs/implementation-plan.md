@@ -1900,7 +1900,7 @@ the right club, and are not recommended.
   sign-in to one personal account: if it is locked or its app password revoked,
   nobody at any club receives a login code.
 - **Recommended: move to a transactional provider when the second club is
-  onboarded** (phase 2 of B14.8), rather than waiting for a club to ask for its own
+  onboarded** (stage 3 of B14.8), rather than waiting for a club to ask for its own
   domain. Implement one of the stubbed providers in `email/provider.ts` (Postmark
   preferred: transactional-only and fast, which suits time-sensitive login codes;
   Amazon SES is the cheapest alternative). One platform API key (`EMAIL_PROVIDER_KEY`,
@@ -1931,29 +1931,69 @@ the right club, and are not recommended.
   against the new provider's API. The provider becomes another processor of member
   email addresses and must be named in the privacy policy (§8.1 "Privacy law").
 
-#### B14.8 Migration and phasing
+#### B14.8 Staging
 
-1. **Re-home Orewa** as `clubs/orewa`: copy every club-owned collection under it,
-   split `members` into membership + `users`, rename `memberPrivate` → `userPrivate`,
-   ship the new rules and `clubId`-taking callables and clients. No visible change.
-   Scripted, emulator-rehearsed against a production export, run in a maintenance
-   window; old collections kept read-only until verified, then deleted.
-2. **Platform admin + club management**: `platformAdmins`, `createClub`,
-   `setClubAdmin`, the Platform area, the transactional email provider and per-club
-   sender identity (B14.7).
-3. **Multi-club UI**: switcher, badges, merged Home/Calendar, clash marker, merged
-   iCal feed, routes under `/c/{clubId}`.
-4. **Onboard a second club**; convert the review cohort into a demo club.
+Each stage ships on its own. The order puts the data model first with no visible
+change, gets a second club live before any multi-club UI exists, and leaves the
+largest UI work until someone actually belongs to two clubs (staging agreed with
+Neil 2026-11-27).
+
+**Stage 1 — new data model, identical UI.** The web code changes; nothing a member
+sees does. The client resolves "the current club" as the member's only club
+(`users/{uid}.clubIds[0]`) and passes it everywhere.
+
+- **1a. Thread the club through the code; data untouched.** Every `paths` builder,
+  callable schema and client hook takes a `clubId`, but the builders still return
+  today's paths and callables default a missing `clubId` to `orewa`. A pure
+  refactor: deployed like any other change, no data risk, full test suite green.
+- **1b. Move the data and flip.** A script copies every club-owned collection under
+  `clubs/orewa`, splits `members` into `users` + membership, renames
+  `memberPrivate` → `userPrivate`, and the `paths` builders and `firestore.rules`
+  switch to the new layout in the same deploy. Rehearsed on the emulator against a
+  production export; run in a short maintenance window at a quiet time. Old
+  collections are left in place, unwritten.
+  - *Stale tabs:* a browser tab still running the pre-flip bundle gets
+    permission-denied until it reloads (`PwaUpdater` handles this); expect a brief
+    blip, hence the quiet time.
+  - *Rollback* is clean only until members write to the new layout, so the
+    verify-and-decide window is minutes: a scripted check (document counts per
+    collection, `runPairingSweep` clean, sign-in + one booking by hand) immediately
+    after the flip, then either proceed or flip back.
+- **1c. Clean up.** Delete the old collections, make `clubId` required in every
+  schema, remove the `orewa` default.
+
+**Stage 2 — platform admin and club management.** `platformAdmins`,
+`platformAuditLog`, `createClub`, `updateClub`, `setClubAdmin`, and the Platform
+admin area. The first visible change, and visible only to a platform admin.
+
+**Stage 3 — a second club goes live, still no multi-club UI.** Possible as long as
+nobody belongs to both clubs yet: the new club's members see exactly what Orewa's
+see, under their own club's name. Needs:
+
+- every hard-coded "Orewa"/"OBC" string (web screens, email templates, the iCal
+  feed, the iOS app) replaced by the club's name or the platform's name;
+- the transactional email provider and per-club sender identity (B14.7);
+- a decision on what a person who is in both clubs sees before stage 4. Provisioning
+  must not silently create that state: either `addMember`/`importMembers` refuse (or
+  warn on) an email that already has a membership elsewhere until stage 4 ships, or
+  the stopgap below is built first.
+
+**Stage 4 — multi-club UI** (B14.6): header switcher, club badges, merged Home and
+Calendar, clash marker, merged iCal feed, routes under `/c/{clubId}`. Needed only
+once the first person belongs to two clubs. Stopgap if one appears earlier: the
+header switcher alone, with every screen scoped to the chosen club.
+
+**Stage 5 — tidy-up.** Convert the review cohort into a demo club and delete
+`cohort`, its rules disjuncts and its per-callable checks (B14.2).
 
 - **No backward compatibility is needed for installed clients** (Neil, 2026-11-27):
-  the iOS app is not yet released, and the web app updates itself on deploy. Step 1
+  the iOS app is not yet released, and the web app updates itself on deploy. Stage 1
   can therefore change paths and callable inputs outright, with no compatibility
   window and no forced-update gate. Revisit only if an iOS or Android build ships
-  to members before step 1 runs.
-- Hard-coded "Orewa"/"OBC" strings exist across web screens, email templates, the
-  iCal feed and the iOS app; they become the club's name or the platform's name.
+  to members before stage 1b runs.
 - B13 (Android) should be built against the multi-club shape if B14 is scheduled
-  first, rather than ported twice.
+  first, rather than ported twice. The same goes for the iOS app: once stage 1b has
+  run, it must use the new paths before it is released.
 
 #### B14.9 Decisions to confirm (Neil)
 
