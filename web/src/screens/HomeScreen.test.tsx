@@ -43,7 +43,7 @@ vi.mock('firebase/firestore', () => ({
   orderBy: () => ({}),
   documentId: () => ({}),
   onSnapshot: (q: FakeQuery, onNext: (snap: { docs: Array<{ data: () => unknown }> }) => void) => {
-    const docs = q.collectionPath === 'entries' ? entriesFixture : q.collectionPath === 'teams' ? teamsFixture : [];
+    const docs = q.collectionPath.endsWith('/entries') ? entriesFixture : q.collectionPath.endsWith('/teams') ? teamsFixture : [];
     onNext({ docs: docs.map((d) => ({ data: () => d })) });
     return () => {};
   },

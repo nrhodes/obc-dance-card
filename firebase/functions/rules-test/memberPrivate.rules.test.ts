@@ -43,33 +43,33 @@ beforeEach(async () => {
   await seedMember(env, 'bob', { active: true, role: 'member' });
   await seedMember(env, 'inactive1', { active: false, role: 'member' });
   await seedMember(env, 'admin1', { active: true, role: 'admin' });
-  await seedDoc(env, 'memberPrivate/alice', privateDoc('alice'));
+  await seedDoc(env, 'userPrivate/alice', privateDoc('alice'));
 });
 
 describe('memberPrivate collection rules', () => {
   it('unauthenticated: cannot read', async () => {
-    await assertFails(getDoc(doc(clientAnon(env), 'memberPrivate/alice')));
+    await assertFails(getDoc(doc(clientAnon(env), 'userPrivate/alice')));
   });
 
   it('inactive member: cannot read even their own doc', async () => {
-    await seedDoc(env, 'memberPrivate/inactive1', privateDoc('inactive1'));
-    await assertFails(getDoc(doc(clientAs(env, 'inactive1'), 'memberPrivate/inactive1')));
+    await seedDoc(env, 'userPrivate/inactive1', privateDoc('inactive1'));
+    await assertFails(getDoc(doc(clientAs(env, 'inactive1'), 'userPrivate/inactive1')));
   });
 
   it('active member (self): can read their own private doc', async () => {
-    await assertSucceeds(getDoc(doc(clientAs(env, 'alice'), 'memberPrivate/alice')));
+    await assertSucceeds(getDoc(doc(clientAs(env, 'alice'), 'userPrivate/alice')));
   });
 
   it('active member (other): cannot read someone else\'s private doc', async () => {
-    await assertFails(getDoc(doc(clientAs(env, 'bob'), 'memberPrivate/alice')));
+    await assertFails(getDoc(doc(clientAs(env, 'bob'), 'userPrivate/alice')));
   });
 
   it('admin: cannot read another member\'s private doc from the client — callables only (security review L3)', async () => {
-    await assertFails(getDoc(doc(clientAs(env, 'admin1'), 'memberPrivate/alice')));
+    await assertFails(getDoc(doc(clientAs(env, 'admin1'), 'userPrivate/alice')));
   });
 
   it('nobody may write memberPrivate from the client, even their own', async () => {
-    await assertFails(updateDoc(doc(clientAs(env, 'alice'), 'memberPrivate/alice'), { hasPassword: true }));
-    await assertFails(setDoc(doc(clientAs(env, 'admin1'), 'memberPrivate/bob'), privateDoc('bob')));
+    await assertFails(updateDoc(doc(clientAs(env, 'alice'), 'userPrivate/alice'), { hasPassword: true }));
+    await assertFails(setDoc(doc(clientAs(env, 'admin1'), 'userPrivate/bob'), privateDoc('bob')));
   });
 });

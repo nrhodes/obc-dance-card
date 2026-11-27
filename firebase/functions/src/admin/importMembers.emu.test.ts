@@ -47,7 +47,7 @@ describe('importMembers', () => {
     const authUser = await auth.getUserByEmail(email).catch(() => null);
     expect(authUser).toBeNull();
 
-    const privateDocs = await db.collection('memberPrivate').where('emailLower', '==', email).get();
+    const privateDocs = await db.collection(paths.userPrivates()).where('emailLower', '==', email).get();
     expect(privateDocs.empty).toBe(true);
   });
 
@@ -74,7 +74,7 @@ describe('importMembers', () => {
       active: true,
     });
 
-    const privateSnap = await db.doc(paths.memberPrivate(authUser.uid)).get();
+    const privateSnap = await db.doc(paths.userPrivate(authUser.uid)).get();
     expect(privateSnap.data()).toMatchObject({ emailLower: email, hasPassword: false, devices: [] });
   });
 
@@ -220,7 +220,7 @@ describe('importMembers', () => {
     // active members. Count the current baseline and create comfortably more
     // than enough on top of it, rather than a fixed 6, so this assertion
     // holds regardless of what else has run.
-    const baselineSnap = await db.collection('members').where('active', '==', true).get();
+    const baselineSnap = await db.collection(cp.members()).where('active', '==', true).get();
     const activeBefore = baselineSnap.size;
     const toCreate = Math.ceil(activeBefore * 0.25) + 10; // always exceeds max(5, 20% of the new total)
 

@@ -28,8 +28,18 @@
 import { readFileSync } from 'node:fs';
 import { cert, getApps, initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
-import { getFirestore } from 'firebase-admin/firestore';
-import { DEFAULT_NOTIFICATION_PREFS, type Member, type MemberPrivate } from '@obc/shared';
+import { FieldValue, getFirestore } from 'firebase-admin/firestore';
+import {
+  DEFAULT_CLUB_ID,
+  DEFAULT_NOTIFICATION_PREFS,
+  clubPaths,
+  paths,
+  type Member,
+  type MemberPrivate,
+} from '@obc/shared';
+
+/** The club this script administers (plan §21 B14): the one that exists. */
+const cp = clubPaths(DEFAULT_CLUB_ID);
 import { checkRealProject } from '../functions/src/lib/scriptGuard.js';
 
 interface Args {
@@ -106,7 +116,7 @@ async function main(): Promise<void> {
   db.settings({ ignoreUndefinedProperties: true });
 
   const emailLower = args.email.trim().toLowerCase();
-  const privateSnap = await db.collection('memberPrivate').where('emailLower', '==', emailLower).limit(1).get();
+  const privateSnap = await db.collection(paths.userPrivates()).where('emailLower', '==', emailLower).limit(1).get();
   let uid: string;
   if (privateSnap.empty) {
     if (!args.create) {
@@ -152,16 +162,20 @@ async function main(): Promise<void> {
       createdAt,
       updatedAt: createdAt,
     };
-    await db.collection('members').doc(createdUid).set(newMember);
-    await db.collection('memberPrivate').doc(createdUid).set(newPrivate);
-    const createAudit = db.collection('auditLog').doc();
+    await db.doc(cp.member(createdUid)).set(newMember);
+    await db.doc(paths.userPrivate(createdUid)).set(newPrivate);
+    // The person-level index the rules read (see `userClubsWrite`).
+    await db
+      .doc(paths.user(createdUid))
+      .set({ id: createdUid, clubIds: FieldValue.arrayUnion(cp.clubId), updatedAt: createdAt }, { merge: true });
+    const createAudit = db.collection(cp.auditLog()).doc();
     await createAudit.set({
       id: createAudit.id,
       at: createdAt,
       actorMemberId: 'bootstrap-script',
       action: 'member_import',
       targetMemberId: createdUid,
-      entityRef: `members/${createdUid}`,
+      entityRef: cp.member(createdUid),
       detail: { source: 'make-admin --create', added: 1 },
     });
     console.log(`Created member ${createdUid} (${args.firstName} ${args.lastName}).`);
@@ -170,11 +184,11 @@ async function main(): Promise<void> {
     uid = privateSnap.docs[0]!.id;
   }
 
-  const memberRef = db.collection('members').doc(uid);
+  const memberRef = db.doc(cp.member(uid));
   const memberSnap = await memberRef.get();
   const member = memberSnap.data() as MinimalMember | undefined;
   if (!member) {
-    throw new Error(`memberPrivate/${uid} exists but members/${uid} does not — data is inconsistent.`);
+    throw new Error(`${paths.userPrivate(uid)} exists but ${cp.member(uid)} does not — data is inconsistent.`);
   }
 
   if (member.role === 'admin') {
@@ -190,7 +204,7 @@ async function main(): Promise<void> {
   // any already-issued ID token (plan §8.2 "Deactivation / role change").
   await auth.revokeRefreshTokens(uid);
 
-  const auditRef = db.collection('auditLog').doc();
+  const auditRef = db.collection(cp.auditLog()).doc();
   await auditRef.set({
     id: auditRef.id,
     at: now,

@@ -64,7 +64,7 @@ export async function getIcalFeedHandler(req: CallableRequest<GetIcalFeedInput>)
   const caller = await requireMember(req, cp);
   const actor = await resolveActingMember(caller, input.onBehalfOfMemberId);
 
-  const snap = await db.doc(paths.memberPrivate(actor.memberId)).get();
+  const snap = await db.doc(paths.userPrivate(actor.memberId)).get();
   const data = snap.data() as MemberPrivate | undefined;
   if (!data?.icalToken) {
     return { url: null };
@@ -75,7 +75,7 @@ export async function getIcalFeedHandler(req: CallableRequest<GetIcalFeedInput>)
       actorMemberId: actor.onBehalfBy,
       action: 'get_ical_feed_on_behalf',
       targetMemberId: actor.memberId,
-      entityRef: paths.memberPrivate(actor.memberId),
+      entityRef: paths.userPrivate(actor.memberId),
     });
     await createNotification(
       actor.memberId,
@@ -105,7 +105,7 @@ export async function createIcalFeedHandler(
   const token = generateToken();
   const hash = sha256Hex(token);
   const now = new Date().toISOString();
-  const memberPrivateRef = db.doc(paths.memberPrivate(actor.memberId));
+  const memberPrivateRef = db.doc(paths.userPrivate(actor.memberId));
 
   await db.runTransaction(async (tx) => {
     const snap = await tx.get(memberPrivateRef);
@@ -126,7 +126,7 @@ export async function createIcalFeedHandler(
       actorMemberId: actor.onBehalfBy,
       action: 'create_ical_feed_on_behalf',
       targetMemberId: actor.memberId,
-      entityRef: paths.memberPrivate(actor.memberId),
+      entityRef: paths.userPrivate(actor.memberId),
     });
     await createNotification(
       actor.memberId,
@@ -162,7 +162,7 @@ export async function rotateIcalFeedHandler(
   const newToken = generateToken();
   const newHash = sha256Hex(newToken);
   const now = new Date().toISOString();
-  const memberPrivateRef = db.doc(paths.memberPrivate(actor.memberId));
+  const memberPrivateRef = db.doc(paths.userPrivate(actor.memberId));
 
   await db.runTransaction(async (tx) => {
     const snap = await tx.get(memberPrivateRef);
@@ -182,7 +182,7 @@ export async function rotateIcalFeedHandler(
       actorMemberId: actor.onBehalfBy,
       action: 'rotate_ical_feed_on_behalf',
       targetMemberId: actor.memberId,
-      entityRef: paths.memberPrivate(actor.memberId),
+      entityRef: paths.userPrivate(actor.memberId),
     });
     await createNotification(
       actor.memberId,
@@ -215,7 +215,7 @@ export async function removeIcalFeedHandler(
   const caller = await requireMember(req, cp);
   const actor = await resolveActingMember(caller, input.onBehalfOfMemberId);
 
-  const memberPrivateRef = db.doc(paths.memberPrivate(actor.memberId));
+  const memberPrivateRef = db.doc(paths.userPrivate(actor.memberId));
   const now = new Date().toISOString();
 
   const removed = await db.runTransaction(async (tx) => {
@@ -243,7 +243,7 @@ export async function removeIcalFeedHandler(
       actorMemberId: actor.onBehalfBy,
       action: 'remove_ical_feed_on_behalf',
       targetMemberId: actor.memberId,
-      entityRef: paths.memberPrivate(actor.memberId),
+      entityRef: paths.userPrivate(actor.memberId),
     });
     await createNotification(
       actor.memberId,

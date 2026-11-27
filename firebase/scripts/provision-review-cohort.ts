@@ -39,13 +39,31 @@
 import { readFileSync } from 'node:fs';
 import { cert, getApps, initializeApp, type App } from 'firebase-admin/app';
 import { getAuth, type Auth } from 'firebase-admin/auth';
-import { getFirestore, type Firestore } from 'firebase-admin/firestore';
+import { FieldValue, getFirestore, type Firestore } from 'firebase-admin/firestore';
 import {
+  DEFAULT_CLUB_ID,
   DEFAULT_NOTIFICATION_PREFS,
+  clubPaths,
   passwordStrengthError,
+  paths,
   type Member,
   type MemberPrivate,
 } from '@obc/shared';
+
+/** The club the review accounts live in (plan §21 B14): the one that exists. */
+const cp = clubPaths(DEFAULT_CLUB_ID);
+
+/** Keeps `users/{uid}.clubIds` in step with the membership's `active` flag (see `userClubsWrite`). */
+async function setUserClub(db: Firestore, uid: string, active: boolean): Promise<void> {
+  await db.doc(paths.user(uid)).set(
+    {
+      id: uid,
+      clubIds: active ? FieldValue.arrayUnion(cp.clubId) : FieldValue.arrayRemove(cp.clubId),
+      updatedAt: new Date().toISOString(),
+    },
+    { merge: true },
+  );
+}
 
 /**
  * Clearly-fake names (plan §8.1, format decided by Neil 2026-09-06): common
@@ -168,18 +186,18 @@ export async function provisionReviewMembers(
     const { firstName, lastName } = reviewName(i);
     const emailLower = `test${reviewNN(i)}@${domain}`.toLowerCase();
 
-    const existingPrivate = await db.collection('memberPrivate').where('emailLower', '==', emailLower).limit(1).get();
+    const existingPrivate = await db.collection(paths.userPrivates()).where('emailLower', '==', emailLower).limit(1).get();
     const now = new Date().toISOString();
 
     let uid: string;
     if (!existingPrivate.empty) {
       uid = existingPrivate.docs[0]!.id;
       await auth.updateUser(uid, { password, disabled: false });
-      await db.doc(`members/${uid}`).set(
+      await db.doc(cp.member(uid)).set(
         { firstName, lastName, cohort: 'review', role: 'member', active: true, updatedAt: now },
         { merge: true },
       );
-      await db.doc(`memberPrivate/${uid}`).set({ hasPassword: true, updatedAt: now }, { merge: true });
+      await db.doc(paths.userPrivate(uid)).set({ hasPassword: true, updatedAt: now }, { merge: true });
     } else {
       let existingAuthUser: string | undefined;
       try {
@@ -214,10 +232,11 @@ export async function provisionReviewMembers(
         createdAt: now,
         updatedAt: now,
       };
-      await db.doc(`members/${uid}`).set(member);
-      await db.doc(`memberPrivate/${uid}`).set(memberPrivate);
+      await db.doc(cp.member(uid)).set(member);
+      await db.doc(paths.userPrivate(uid)).set(memberPrivate);
     }
 
+    await setUserClub(db, uid, true);
     results.push({ memberId: uid, email: emailLower, firstName, lastName });
   }
   return results;
@@ -231,10 +250,11 @@ export async function provisionReviewMembers(
  * them for the next window).
  */
 async function deactivateReviewCohort(db: Firestore, auth: Auth): Promise<number> {
-  const snap = await db.collection('members').where('cohort', '==', 'review').where('active', '==', true).get();
+  const snap = await db.collection(cp.members()).where('cohort', '==', 'review').where('active', '==', true).get();
   const now = new Date().toISOString();
   for (const doc of snap.docs) {
     await doc.ref.set({ active: false, updatedAt: now }, { merge: true });
+    await setUserClub(db, doc.id, false);
     await auth.updateUser(doc.id, { disabled: true }).catch(() => undefined);
     await auth.revokeRefreshTokens(doc.id).catch(() => undefined);
   }

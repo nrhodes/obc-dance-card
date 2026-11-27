@@ -8,7 +8,7 @@
 import type { Weekday } from './enums.js';
 import type { IsoDate, TimeOfDay } from './primitives.js';
 
-const NZ_TIME_ZONE = 'Pacific/Auckland';
+export const NZ_TIME_ZONE = 'Pacific/Auckland';
 
 // en-CA formats as YYYY-MM-DD, which is exactly the `IsoDate` shape we store.
 const nzDateFormatter = new Intl.DateTimeFormat('en-CA', {

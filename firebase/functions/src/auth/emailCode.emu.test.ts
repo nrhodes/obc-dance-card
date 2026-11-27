@@ -167,7 +167,7 @@ describe('requestLoginCode / verifyLoginCode', () => {
     );
     expect(typeof result.token).toBe('string');
 
-    const privateSnap = await db.doc(paths.memberPrivate(uid)).get();
+    const privateSnap = await db.doc(paths.userPrivate(uid)).get();
     expect(privateSnap.data()?.lastLoginAt).toBeTruthy();
 
     // The token must actually be accepted by the Auth emulator.

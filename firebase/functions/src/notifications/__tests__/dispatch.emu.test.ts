@@ -6,15 +6,15 @@ import { createNotification } from '../create.js';
 import { dispatchNotification, type PushProvider, type PushSendResult } from '../dispatch.js';
 
 async function setPrefs(memberId: string, patch: Partial<NotificationPrefs>): Promise<void> {
-  const snap = await db.doc(paths.memberPrivate(memberId)).get();
+  const snap = await db.doc(paths.userPrivate(memberId)).get();
   const mp = snap.data() as MemberPrivate;
   await db
-    .doc(paths.memberPrivate(memberId))
+    .doc(paths.userPrivate(memberId))
     .set({ notificationPrefs: { ...mp.notificationPrefs, ...patch } }, { merge: true });
 }
 
 async function setDevices(memberId: string, devices: RegisteredDevice[]): Promise<void> {
-  await db.doc(paths.memberPrivate(memberId)).set({ devices }, { merge: true });
+  await db.doc(paths.userPrivate(memberId)).set({ devices }, { merge: true });
 }
 
 async function outboxFor(to: string, kind: 'push' | 'email'): Promise<FirebaseFirestore.QueryDocumentSnapshot[]> {
@@ -129,7 +129,7 @@ describe('dispatchNotification', () => {
     const updated = await readNotification(notification.id);
     expect(updated.channelsSent).toEqual(['inapp', 'push']);
 
-    const mpSnap = await db.doc(paths.memberPrivate(m)).get();
+    const mpSnap = await db.doc(paths.userPrivate(m)).get();
     const mp = mpSnap.data() as MemberPrivate;
     expect(mp.devices.map((d) => d.token)).toEqual(['keep-me']);
   });

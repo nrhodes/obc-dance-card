@@ -28,10 +28,14 @@ export interface SeedMemberOptions {
   grade?: string;
   /** App-Store-review cohort partition (decided 2026-09-05). Defaults to `'club'`. */
   cohort?: 'club' | 'review';
+  /** Which club the membership is in. Defaults to the club every existing test uses. */
+  clubId?: string;
 }
 
+export const DEFAULT_TEST_CLUB = 'orewa';
+
 /**
- * Seed a `members/{uid}` doc, bypassing rules. The rules now `get()` this doc
+ * Seed a `clubs/orewa/members/{uid}` doc, bypassing rules. The rules now `get()` this doc
  * for every request (no custom claims are consulted), so **every** acting uid
  * used in a rules test — including admins — must have one, with the `active`
  * / `role` fields the test wants to exercise.
@@ -42,7 +46,8 @@ export async function seedMember(
   opts: SeedMemberOptions = {},
 ): Promise<void> {
   await env.withSecurityRulesDisabled(async (ctx) => {
-    await setDoc(doc(ctx.firestore(), `members/${uid}`), {
+    const clubId = opts.clubId ?? DEFAULT_TEST_CLUB;
+    await setDoc(doc(ctx.firestore(), `clubs/${clubId}/members/${uid}`), {
       id: uid,
       firstName: opts.firstName ?? 'Test',
       lastName: opts.lastName ?? uid,
@@ -54,6 +59,15 @@ export async function seedMember(
       createdAt: 'now',
       updatedAt: 'now',
     });
+    if (clubId === DEFAULT_TEST_CLUB) {
+      // The person-level index the rules read for `notifications` and
+      // `userPrivate` — kept by the server in production.
+      await setDoc(doc(ctx.firestore(), `users/${uid}`), {
+        id: uid,
+        clubIds: (opts.active ?? true) ? [clubId] : [],
+        updatedAt: 'now',
+      });
+    }
   });
 }
 
@@ -70,7 +84,7 @@ export async function seedDoc(
 
 /**
  * A signed-in client `Firestore` handle for `uid`. No custom claims are
- * needed — the rules only ever look at the seeded `members/{uid}` doc — so
+ * needed — the rules only ever look at the seeded `clubs/orewa/members/{uid}` doc — so
  * this is just a plain authenticated context.
  */
 export function clientAs(env: RulesTestEnvironment, uid: string): Firestore {

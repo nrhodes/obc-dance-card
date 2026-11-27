@@ -7,145 +7,190 @@ rules_version = '2';
 //    flip `read`/`readAt` on their own `notifications` doc. Every other
 //    mutation is a Cloud Function callable using the Admin SDK, which bypasses
 //    these rules and carries its own authorisation logic (plan §9).
-//  * "Active member" / "admin" are determined by reading the caller's own
-//    `members/{uid}` document with `get()` — never from custom claims/token
-//    data, so a deactivation or role change takes effect on the caller's very
-//    next request instead of waiting for a token refresh.
+//  * Everything a club owns lives under `clubs/{clubId}/…` (plan §21 B14).
+//    "Active member of this club" / "admin of this club" are determined by
+//    reading the caller's own membership, `clubs/{clubId}/members/{uid}`, with
+//    `get()` — never from custom claims/token data, so a deactivation or role
+//    change takes effect on the caller's very next request instead of waiting
+//    for a token refresh. Membership of one club grants nothing in another.
+//  * Person-level collections (`users`, `userPrivate`, `notifications`) are
+//    gated on the caller being signed in with at least one active membership
+//    somewhere, read off the server-maintained `users/{uid}.clubIds`.
+//  * The pre-migration top-level collections (`members`, `entries`, …) are not
+//    matched anywhere below, so the catch-all denies them.
 
 service cloud.firestore {
   match /databases/{database}/documents {
 
     /* --------------------------- helpers --------------------------- */
 
-    function callerDoc() {
-      return get(/databases/$(database)/documents/members/$(request.auth.uid)).data;
-    }
-
-    function isActiveMember() {
-      return request.auth != null && callerDoc().active == true;
-    }
-
-    function isAdmin() {
-      return isActiveMember() && callerDoc().role == 'admin';
-    }
-
     function isSelf(id) {
       return request.auth != null && request.auth.uid == id;
     }
 
+    // The caller's membership record in `clubId`. Only call when signed in.
+    function membership(clubId) {
+      return get(/databases/$(database)/documents/clubs/$(clubId)/members/$(request.auth.uid)).data;
+    }
+
+    function isMemberOf(clubId) {
+      return request.auth != null && membership(clubId).active == true;
+    }
+
+    function isClubAdmin(clubId) {
+      return isMemberOf(clubId) && membership(clubId).role == 'admin';
+    }
+
     // App-Store-review cohort partition (plan §8.1, decided 2026-09-05): the
-    // caller's own cohort ('club' or 'review'), read off their own member
-    // doc exactly like isActiveMember()/isAdmin() do — never from a token
-    // claim, so a cohort change (there shouldn't be one, in practice) takes
-    // effect immediately.
-    function callerCohort() {
-      return callerDoc().cohort;
+    // caller's own cohort ('club' or 'review') within this club, read off
+    // their membership exactly like isMemberOf()/isClubAdmin() do.
+    function callerCohort(clubId) {
+      return membership(clubId).cohort;
     }
 
-    function programmePublished(year) {
-      return get(/databases/$(database)/documents/programmes/$(year)).data.status == 'published';
+    function programmePublished(clubId, year) {
+      return get(/databases/$(database)/documents/clubs/$(clubId)/programmes/$(year)).data.status == 'published';
     }
 
-    /* --------------------------- members --------------------------- */
-
-    match /members/{id} {
-      // The printed booklet lists every member's name and phone; mirror that —
-      // any active member may read any other *active* member, and always
-      // their own doc (even if it has just been deactivated). App-Store-review
-      // cohort partition (plan §8.1, decided 2026-09-05): every non-admin read
-      // additionally requires the target doc's cohort to match the caller's
-      // own — a no-op for isSelf(id) (a member's own doc is always their own
-      // cohort), kept in the AND for shape-parity with the entries/teams rules.
-      allow read: if isAdmin()
-        || (isActiveMember()
-            && resource.data.cohort == callerCohort()
-            && (resource.data.active == true || isSelf(id)));
-      allow write: if false; // provisioning, imports, role/active changes: functions only.
+    // Signed in, with an active membership of at least one club. `clubIds` is
+    // written only by the server, whenever a membership is created,
+    // deactivated or reactivated.
+    function isActiveUser() {
+      return request.auth != null
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.clubIds.size() > 0;
     }
 
-    /* ------------------------ memberPrivate -------------------------- */
+    /* ============================ clubs ============================ */
 
-    match /memberPrivate/{id} {
+    match /clubs/{clubId} {
+      // The club record itself (name, colour, status): its own members only.
+      allow read: if isMemberOf(clubId);
+      allow write: if false;
+
+      /* --------------------------- members --------------------------- */
+
+      match /members/{id} {
+        // The printed booklet lists every member's name and phone; mirror that —
+        // any active member may read any other *active* member, and always
+        // their own doc (even if it has just been deactivated). App-Store-review
+        // cohort partition (plan §8.1, decided 2026-09-05): every non-admin read
+        // additionally requires the target doc's cohort to match the caller's
+        // own — a no-op for isSelf(id) (a member's own doc is always their own
+        // cohort), kept in the AND for shape-parity with the entries/teams rules.
+        allow read: if isClubAdmin(clubId)
+          || (isMemberOf(clubId)
+              && resource.data.cohort == callerCohort(clubId)
+              && (resource.data.active == true || isSelf(id)));
+        allow write: if false; // provisioning, imports, role/active changes: functions only.
+      }
+
+      /* --------------------------- visitors ----------------------------- */
+
+      match /visitors/{id} {
+        allow read: if isClubAdmin(clubId) || (isMemberOf(clubId) && resource.data.createdByMemberId == request.auth.uid);
+        allow write: if false;
+      }
+
+      /* ------------------------- programmes -------------------------- */
+
+      match /programmes/{year} {
+        allow read: if isClubAdmin(clubId) || (isMemberOf(clubId) && resource.data.status == 'published');
+        allow write: if false;
+
+        // weekdays/{id}, series/{id}, sessions/{id} — gated on the parent
+        // programme's publish status for non-admins.
+        match /{sub}/{id} {
+          allow read: if isClubAdmin(clubId) || (isMemberOf(clubId) && programmePublished(clubId, year));
+          allow write: if false;
+        }
+      }
+
+      /* --------------------------- entries -------------------------- */
+
+      match /entries/{id} {
+        // Roster visibility: any active member can see who is playing / looking
+        // — but only within their own cohort (plan §8.1, decided 2026-09-05),
+        // EXCEPT for a member's own entries, which they must always be able to
+        // read regardless (the ownership disjunct below) — that's also what
+        // keeps a plain `where('memberId', '==', uid)` "my entries" query
+        // provable without a cohort filter (web `useMyEntries`). The isClubAdmin(clubId)
+        // branch is caller-only (never touches resource.data), so it alone
+        // keeps every admin query provable too. Every write — solo status,
+        // pairing, substitute, cancel, team roster — goes through a callable so
+        // pairing/team invariants can be enforced transactionally (plan §7).
+        allow read: if isClubAdmin(clubId)
+          || (isMemberOf(clubId)
+              && (resource.data.memberId == request.auth.uid || resource.data.cohort == callerCohort(clubId)));
+        allow write: if false;
+      }
+
+      /* ---------------------------- teams ------------------------------ */
+
+      match /teams/{id} {
+        // Roster parity: the booklet would list team members — within the
+        // caller's own cohort (plan §8.1, decided 2026-09-05).
+        allow read: if isClubAdmin(clubId) || (isMemberOf(clubId) && resource.data.cohort == callerCohort(clubId));
+        allow write: if false;
+      }
+
+      /* --------------------------- invites -------------------------- */
+
+      match /invites/{id} {
+        // Written as two equalities (not `uid in [a, b]`): for *queries* the
+        // rules engine must prove the rule from the query's own filters, and it
+        // can do that for `toMemberId == uid` / `fromMemberId == uid` but not
+        // for list membership — the `in` form silently denied the inbox query.
+        allow read: if isClubAdmin(clubId)
+          || (isMemberOf(clubId)
+              && (resource.data.toMemberId == request.auth.uid
+                  || resource.data.fromMemberId == request.auth.uid));
+        allow write: if false; // sending / responding / cancelling all go through callables.
+      }
+
+      /* ----------------- server-only, per club ------------------- */
+
+      // Admins read the audit log through the paged `listAuditLog` callable,
+      // not directly, to keep the rules surface minimal.
+      match /auditLog/{id} { allow read, write: if false; }
+      match /imports/{id} { allow read, write: if false; }
+      // Nightly/admin integrity sweep runs (plan §16 Phase 6) — read only
+      // through logs/`runPairingSweep`'s return value, never directly.
+      match /integrity/{id} { allow read, write: if false; }
+    }
+
+    /* ============================ people ============================ */
+
+    /* ---------------------------- users ------------------------------ */
+
+    match /users/{id} {
+      // Which clubs the person is an active member of. Readable by the
+      // person alone — even with no active membership left, so a client can
+      // tell "not a member anywhere" from "could not load". Nothing here
+      // reveals to anyone else which clubs a person belongs to.
+      allow read: if isSelf(id);
+      allow write: if false;
+    }
+
+    /* ------------------------- userPrivate --------------------------- */
+
+    match /userPrivate/{id} {
       // Owner only. Admins reach a member's private data (email, device
       // tokens, the plaintext iCal token) through callables such as
       // `getIcalFeed({ onBehalfOfMemberId })`, which write an audit row and
       // notify the member; a direct client read did neither, and no admin
       // screen used one (security review 2026-11-16 L3, fixed 2026-11-17).
-      allow read: if isSelf(id) && isActiveMember();
+      allow read: if isSelf(id) && isActiveUser();
       allow write: if false;
-    }
-
-    /* --------------------------- visitors ----------------------------- */
-
-    match /visitors/{id} {
-      allow read: if isAdmin() || (isActiveMember() && resource.data.createdByMemberId == request.auth.uid);
-      allow write: if false;
-    }
-
-    /* ------------------------- programmes -------------------------- */
-
-    match /programmes/{year} {
-      allow read: if isAdmin() || (isActiveMember() && resource.data.status == 'published');
-      allow write: if false;
-
-      // weekdays/{id}, series/{id}, sessions/{id} — gated on the parent
-      // programme's publish status for non-admins.
-      match /{sub}/{id} {
-        allow read: if isAdmin() || (isActiveMember() && programmePublished(year));
-        allow write: if false;
-      }
-    }
-
-    /* --------------------------- entries -------------------------- */
-
-    match /entries/{id} {
-      // Roster visibility: any active member can see who is playing / looking
-      // — but only within their own cohort (plan §8.1, decided 2026-09-05),
-      // EXCEPT for a member's own entries, which they must always be able to
-      // read regardless (the ownership disjunct below) — that's also what
-      // keeps a plain `where('memberId', '==', uid)` "my entries" query
-      // provable without a cohort filter (web `useMyEntries`). The isAdmin()
-      // branch is caller-only (never touches resource.data), so it alone
-      // keeps every admin query provable too. Every write — solo status,
-      // pairing, substitute, cancel, team roster — goes through a callable so
-      // pairing/team invariants can be enforced transactionally (plan §7).
-      allow read: if isAdmin()
-        || (isActiveMember()
-            && (resource.data.memberId == request.auth.uid || resource.data.cohort == callerCohort()));
-      allow write: if false;
-    }
-
-    /* ---------------------------- teams ------------------------------ */
-
-    match /teams/{id} {
-      // Roster parity: the booklet would list team members — within the
-      // caller's own cohort (plan §8.1, decided 2026-09-05).
-      allow read: if isAdmin() || (isActiveMember() && resource.data.cohort == callerCohort());
-      allow write: if false;
-    }
-
-    /* --------------------------- invites -------------------------- */
-
-    match /invites/{id} {
-      // Written as two equalities (not `uid in [a, b]`): for *queries* the
-      // rules engine must prove the rule from the query's own filters, and it
-      // can do that for `toMemberId == uid` / `fromMemberId == uid` but not
-      // for list membership — the `in` form silently denied the inbox query.
-      allow read: if isAdmin()
-        || (isActiveMember()
-            && (resource.data.toMemberId == request.auth.uid
-                || resource.data.fromMemberId == request.auth.uid));
-      allow write: if false; // sending / responding / cancelling all go through callables.
     }
 
     /* ------------------------ notifications ---------------------- */
 
     match /notifications/{id} {
-      allow read: if isActiveMember() && resource.data.memberId == request.auth.uid;
+      allow read: if isActiveUser() && resource.data.memberId == request.auth.uid;
 
       // The one exception to "no client writes": the owner may toggle their
       // own read flag, and nothing else.
-      allow update: if isActiveMember()
+      allow update: if isActiveUser()
         && resource.data.memberId == request.auth.uid
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read', 'readAt'])
         && request.resource.data.read is bool
@@ -165,23 +210,15 @@ service cloud.firestore {
 
     /* ------------------- server-only collections ---------------- */
 
-    // Admins read the audit log through the paged `listAuditLog` callable, not
-    // directly, to keep the rules surface minimal.
-    match /auditLog/{id} { allow read, write: if false; }
     match /emailCodes/{id} { allow read, write: if false; }
     match /rateLimits/{id} { allow read, write: if false; }
-    match /imports/{id} { allow read, write: if false; }
     // iCal feed token lookup (plan §21 B1) — read only by the `icalFeed`
     // HTTP endpoint (Admin SDK, bypasses rules) via `sha256hex(token)`.
     // Never client-readable, even by the owner or an admin: the whole point
     // is that a calendar client authorises with the token itself, not with
     // a Firebase session. The owner's plaintext copy (for redisplay) lives
-    // on `memberPrivate`, already covered by that collection's rule above.
+    // on `userPrivate`, already covered by that collection's rule above.
     match /icalTokens/{id} { allow read, write: if false; }
-    // Nightly/admin integrity sweep runs (plan §16 Phase 6) — read only through
-    // logs/`runPairingSweep`'s return value, never directly.
-    match /integrity/{id} { allow read, write: if false; }
-
     // Deny anything not matched above.
     match /{document=**} {
       allow read, write: if false;

@@ -238,7 +238,7 @@ export async function dispatchNotification(
   const notification = snap.data() as Notification | undefined;
   if (!notification) return;
 
-  const privateSnap = await db.doc(paths.memberPrivate(notification.memberId)).get();
+  const privateSnap = await db.doc(paths.userPrivate(notification.memberId)).get();
   const memberPrivate = privateSnap.data() as MemberPrivate | undefined;
   if (!memberPrivate) {
     logger.warn('notification_dispatch_missing_member_private', { type: notification.type });
@@ -292,7 +292,7 @@ async function sendPush(
     const dead = new Set(result.invalidTokens);
     const kept = memberPrivate.devices.filter((d) => !dead.has(d.token));
     await db
-      .doc(paths.memberPrivate(notification.memberId))
+      .doc(paths.userPrivate(notification.memberId))
       .set({ devices: kept, updatedAt: new Date().toISOString() }, { merge: true });
     // Keep the in-memory copy consistent for anything reading it later in
     // this same dispatch call (there isn't currently, but cheap insurance).

@@ -140,7 +140,7 @@ vi.mock('firebase/firestore', () => ({
     q: FakeQuery,
     onNext: (snap: { docs: Array<{ data: () => unknown }> }) => void,
   ) => {
-    const docs = q.collectionPath === 'entries' ? entriesFixture : [];
+    const docs = q.collectionPath.endsWith('/entries') ? entriesFixture : [];
     onNext({ docs: docs.map((d) => ({ data: () => d })) });
     return () => {};
   },

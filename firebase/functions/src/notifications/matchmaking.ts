@@ -73,7 +73,7 @@ export async function sendMatchmakingAlerts(cp: ClubPaths, input: SendMatchmakin
   const candidateIds = membersSnap.docs.map((d) => d.id).filter((id) => id !== posterMemberId && !busy.has(id));
   if (candidateIds.length === 0) return;
 
-  const privateRefs = candidateIds.map((id) => db.doc(paths.memberPrivate(id)));
+  const privateRefs = candidateIds.map((id) => db.doc(paths.userPrivate(id)));
   const privateSnaps = await db.getAll(...privateRefs);
   const optedIn = candidateIds.filter((_, i) => {
     const mp = privateSnaps[i]?.data() as MemberPrivate | undefined;

@@ -36,33 +36,33 @@ beforeEach(async () => {
   await seedMember(env, 'bob', { active: true, role: 'member' });
   await seedMember(env, 'inactive1', { active: false, role: 'member' });
   await seedMember(env, 'admin1', { active: true, role: 'admin' });
-  await seedDoc(env, 'visitors/vis1', visitorDoc());
+  await seedDoc(env, 'clubs/orewa/visitors/vis1', visitorDoc());
 });
 
 describe('visitors collection rules', () => {
   it('unauthenticated: cannot read', async () => {
-    await assertFails(getDoc(doc(clientAnon(env), 'visitors/vis1')));
+    await assertFails(getDoc(doc(clientAnon(env), 'clubs/orewa/visitors/vis1')));
   });
 
   it('inactive member: cannot read, even their own visitor', async () => {
-    await seedDoc(env, 'visitors/vis2', visitorDoc({ id: 'vis2', createdByMemberId: 'inactive1' }));
-    await assertFails(getDoc(doc(clientAs(env, 'inactive1'), 'visitors/vis2')));
+    await seedDoc(env, 'clubs/orewa/visitors/vis2', visitorDoc({ id: 'vis2', createdByMemberId: 'inactive1' }));
+    await assertFails(getDoc(doc(clientAs(env, 'inactive1'), 'clubs/orewa/visitors/vis2')));
   });
 
   it('active member (sponsor): can read their own visitor', async () => {
-    await assertSucceeds(getDoc(doc(clientAs(env, 'alice'), 'visitors/vis1')));
+    await assertSucceeds(getDoc(doc(clientAs(env, 'alice'), 'clubs/orewa/visitors/vis1')));
   });
 
   it('active member (other, not sponsor): cannot read someone else\'s visitor', async () => {
-    await assertFails(getDoc(doc(clientAs(env, 'bob'), 'visitors/vis1')));
+    await assertFails(getDoc(doc(clientAs(env, 'bob'), 'clubs/orewa/visitors/vis1')));
   });
 
   it('admin: can read any visitor', async () => {
-    await assertSucceeds(getDoc(doc(clientAs(env, 'admin1'), 'visitors/vis1')));
+    await assertSucceeds(getDoc(doc(clientAs(env, 'admin1'), 'clubs/orewa/visitors/vis1')));
   });
 
   it('nobody may write visitors from the client, even the sponsor', async () => {
-    await assertFails(updateDoc(doc(clientAs(env, 'alice'), 'visitors/vis1'), { displayName: 'New Name' }));
-    await assertFails(setDoc(doc(clientAs(env, 'admin1'), 'visitors/vis3'), visitorDoc({ id: 'vis3' })));
+    await assertFails(updateDoc(doc(clientAs(env, 'alice'), 'clubs/orewa/visitors/vis1'), { displayName: 'New Name' }));
+    await assertFails(setDoc(doc(clientAs(env, 'admin1'), 'clubs/orewa/visitors/vis3'), visitorDoc({ id: 'vis3' })));
   });
 });

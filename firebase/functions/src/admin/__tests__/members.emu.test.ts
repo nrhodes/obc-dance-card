@@ -277,7 +277,7 @@ describe('eraseMember', () => {
     await eraseMemberHandler(fakeCallableRequest<EraseMemberInput>({ memberId: member, confirmName: 'Erase Ical' }, { uid: admin }));
 
     expect((await lookupRef.get()).exists).toBe(false);
-    expect((await db.doc(paths.memberPrivate(member)).get()).get('icalToken')).toBeUndefined();
+    expect((await db.doc(paths.userPrivate(member)).get()).get('icalToken')).toBeUndefined();
   });
 
   it('refuses when confirmName does not match exactly', async () => {
@@ -364,7 +364,7 @@ describe('eraseMember', () => {
     expect(memberDoc?.phone).toBe('');
     expect(memberDoc?.erasedAt).toBeDefined();
 
-    const privateDoc = (await db.doc(paths.memberPrivate(member)).get()).data();
+    const privateDoc = (await db.doc(paths.userPrivate(member)).get()).data();
     expect(privateDoc?.emailLower).toBe(`erased-${member}@erased.invalid`);
     expect(privateDoc?.devices).toEqual([]);
     expect(privateDoc?.hasPassword).toBe(false);
@@ -416,7 +416,7 @@ describe('addMember', () => {
     const user = await auth.getUserByEmail('add-new@example.org');
     expect(user.uid).toBe(m.id);
     expect(user.disabled).toBe(false);
-    const priv = (await db.doc(paths.memberPrivate(m.id)).get()).data() as MemberPrivate;
+    const priv = (await db.doc(paths.userPrivate(m.id)).get()).data() as MemberPrivate;
     expect(priv.emailLower).toBe('add-new@example.org');
 
     const auditSnap = await db.collection(cp.auditLog()).where('action', '==', 'member_added').get();
@@ -513,7 +513,7 @@ describe('updateMember', () => {
 
     expect(result.member.email).toBe('upd-email-new@example.org');
     expect((await auth.getUser(target)).email).toBe('upd-email-new@example.org');
-    const priv = (await db.doc(paths.memberPrivate(target)).get()).data() as MemberPrivate;
+    const priv = (await db.doc(paths.userPrivate(target)).get()).data() as MemberPrivate;
     expect(priv.emailLower).toBe('upd-email-new@example.org');
     await expect(auth.getUserByEmail('upd-email-old@example.org')).rejects.toBeDefined();
     expect(await notificationsFor(target, 'security')).toHaveLength(1);
@@ -594,7 +594,7 @@ describe('club scoping (plan §21 B14, stage 1a)', () => {
 
     const explicit = await updateMemberHandler(
       fakeCallableRequest<UpdateMemberInput>(
-        { clubId: 'orewa', memberId: target, patch: { phone: '09 222 2222' } },
+        { clubId: cp.clubId, memberId: target, patch: { phone: '09 222 2222' } },
         { uid: admin },
       ),
     );
@@ -621,5 +621,28 @@ describe('club scoping (plan §21 B14, stage 1a)', () => {
         ),
       ),
     ).rejects.toMatchObject({ code: 'invalid-argument' });
+  });
+});
+
+describe('users/{uid}.clubIds follows the membership (plan §21 B14.2)', () => {
+  it('is set on add, cleared on deactivate, and restored on reactivate', async () => {
+    const admin = await makeMember('userdoc-admin@example.org', { role: 'admin' });
+    const clubIds = async (uid: string) => ((await db.doc(paths.user(uid)).get()).data()?.clubIds ?? null) as string[] | null;
+
+    const { member } = await addMemberHandler(
+      fakeCallableRequest<AddMemberInput>(
+        { firstName: 'Una', lastName: 'User', email: 'userdoc-new@example.org', grade: 'Open' },
+        { uid: admin },
+      ),
+    );
+    expect(await clubIds(member.id)).toEqual([cp.clubId]);
+
+    await deactivateMemberHandler(fakeCallableRequest<DeactivateMemberInput>({ memberId: member.id }, { uid: admin }));
+    expect(await clubIds(member.id)).toEqual([]);
+    expect((await auth.getUser(member.id)).disabled).toBe(true);
+
+    await reactivateMemberHandler(fakeCallableRequest<ReactivateMemberInput>({ memberId: member.id }, { uid: admin }));
+    expect(await clubIds(member.id)).toEqual([cp.clubId]);
+    expect((await auth.getUser(member.id)).disabled).toBe(false);
   });
 });

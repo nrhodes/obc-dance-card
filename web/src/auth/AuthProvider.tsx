@@ -118,7 +118,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     );
 
     const unsubPrivate = onSnapshot(
-      doc(db, paths.memberPrivate(user.uid)),
+      doc(db, paths.userPrivate(user.uid)),
       (snap) => setMemberPrivate(snap.exists() ? (snap.data() as MemberPrivate) : null),
       () => setMemberPrivate(null),
     );

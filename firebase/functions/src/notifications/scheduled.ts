@@ -87,7 +87,7 @@ async function sendSessionRemindersForClub(cp: ClubPaths, now: Date): Promise<nu
 
   for (const memberDoc of membersSnap.docs) {
     const memberId = memberDoc.id;
-    const privateSnap = await db.doc(paths.memberPrivate(memberId)).get();
+    const privateSnap = await db.doc(paths.userPrivate(memberId)).get();
     const mp = privateSnap.data() as MemberPrivate | undefined;
     if (!mp?.notificationPrefs.reminders) continue;
 
@@ -148,7 +148,7 @@ export async function runSendDailyDigest(now: Date = new Date()): Promise<Digest
   // The digest is per person — one email however many clubs they are in —
   // because notifications are person-level (plan §21 B14.5).
   for (const memberId of await activePersonIds()) {
-    const privateSnap = await db.doc(paths.memberPrivate(memberId)).get();
+    const privateSnap = await db.doc(paths.userPrivate(memberId)).get();
     const mp = privateSnap.data() as MemberPrivate | undefined;
     if (!mp || !mp.notificationPrefs.email || mp.notificationPrefs.digest !== 'daily') continue;
 

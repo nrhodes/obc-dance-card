@@ -19,6 +19,7 @@ import {
   type ClubPaths,
 } from '@obc/shared';
 import { auth, db } from '../lib/admin.js';
+import { userClubsWrite } from '../lib/clubs.js';
 import type { BatchWriter } from '../lib/batchWriter.js';
 
 export interface MemberRow {
@@ -69,13 +70,19 @@ async function writeDoc(
   }
 }
 
+/** Records an active membership of `cp`'s club on `users/{uid}` (see `userClubsWrite`). */
+async function writeUserClub(writer: BatchWriter | undefined, uid: string, cp: ClubPaths): Promise<void> {
+  const w = userClubsWrite(uid, cp.clubId, true);
+  await writeDoc(writer, db.doc(w.path), w.data, true);
+}
+
 export async function provisionMember(
   cp: ClubPaths,
   row: MemberRow,
   opts: ProvisionOptions = { dryRun: false },
 ): Promise<ProvisionResult> {
   const existingPrivate = await db
-    .collection(paths.memberPrivates())
+    .collection(paths.userPrivates())
     .where('emailLower', '==', row.emailLower)
     .limit(1)
     .get();
@@ -95,6 +102,31 @@ export async function provisionMember(
       member.email !== row.emailLower ||
       wasInactive;
 
+    if (!opts.dryRun && !member) {
+      // The person exists (they are, or were, a member of another club) but
+      // has no record in this one: create the membership in full rather than
+      // merging a partial document into nothing (plan §21 B14.2 — email is
+      // the join key across clubs).
+      const now = new Date().toISOString();
+      const created: Member = {
+        id: uid,
+        firstName: row.firstName,
+        lastName: row.lastName,
+        phone: row.phone,
+        email: row.emailLower,
+        grade: row.grade,
+        role: row.role ?? 'member',
+        cohort: row.cohort ?? 'club',
+        active: true,
+        createdAt: now,
+        updatedAt: now,
+      };
+      await writeDoc(opts.writer, memberRef, created, false);
+      await writeUserClub(opts.writer, uid, cp);
+      await auth.updateUser(uid, { disabled: false });
+      return { outcome: 'added', memberId: uid };
+    }
+
     if (!opts.dryRun) {
       const now = new Date().toISOString();
       await writeDoc(
@@ -105,7 +137,7 @@ export async function provisionMember(
           lastName: row.lastName,
           phone: row.phone,
           grade: row.grade,
-          // Kept in sync with memberPrivate.emailLower on every import pass —
+          // Kept in sync with userPrivate.emailLower on every import pass —
           // matching is by emailLower (see file header), so this is always
           // the address that was just matched on; it also backfills members
           // created before `email` existed on the doc.
@@ -117,10 +149,12 @@ export async function provisionMember(
         true,
       );
       if (wasInactive) {
+        await writeUserClub(opts.writer, uid, cp);
         await auth.updateUser(uid, { disabled: false });
       }
     }
 
+    if (!member) return { outcome: 'added', memberId: opts.dryRun ? null : uid };
     return { outcome: changed ? 'updated' : 'unchanged', memberId: uid };
   }
 
@@ -162,7 +196,8 @@ export async function provisionMember(
   };
 
   await writeDoc(opts.writer, db.doc(cp.member(uid)), member, false);
-  await writeDoc(opts.writer, db.doc(paths.memberPrivate(uid)), memberPrivate, false);
+  await writeDoc(opts.writer, db.doc(paths.userPrivate(uid)), memberPrivate, false);
+  await writeUserClub(opts.writer, uid, cp);
 
   return { outcome: 'added', memberId: uid };
 }

@@ -21,7 +21,7 @@
 import { checkEmulatorSafe } from '../functions/src/lib/seedGuard.js';
 // Pure date helpers only (no Admin SDK, no I/O) — safe to import statically
 // alongside `seedGuard.ts` above, ahead of the guard running.
-import { DEFAULT_CLUB_ID, addDaysNZ, clubPaths, todayNZ, weekdayOfNZ } from '@obc/shared';
+import { DEFAULT_CLUB_ID, addDaysNZ, clubPaths, paths, todayNZ, weekdayOfNZ } from '@obc/shared';
 
 /** The seed populates the one club that exists (plan §21 B14, stage 1a). */
 const cp = clubPaths(DEFAULT_CLUB_ID);
@@ -329,6 +329,10 @@ async function main(): Promise<void> {
   const { db, auth } = await import('../functions/src/lib/admin.js');
 
   console.log(`Seeding demo data into project "${projectId}" (Firestore: ${process.env.FIRESTORE_EMULATOR_HOST}, Auth: ${process.env.FIREBASE_AUTH_EMULATOR_HOST})`);
+
+  // The club record itself (plan §21 B14.2).
+  const { defaultClubRecord } = await import('../functions/src/lib/clubs.js');
+  await db.doc(paths.club(DEFAULT_CLUB_ID)).set(defaultClubRecord(new Date().toISOString()));
 
   const writer = new BatchWriter();
   const members = buildSeedMembers();

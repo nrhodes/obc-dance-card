@@ -74,6 +74,12 @@ function resolveCredential(argsProject: string | undefined): ResolvedCredential 
 }
 
 async function main(): Promise<void> {
+  // These one-off backfills ran against the pre-club layout (top-level
+  // `members` / `entries` / `teams`) and were completed before stage 1b of
+  // plan §21 B14 moved that data under `clubs/{clubId}/`. Nothing reads the
+  // old collections any more, so running this now would only patch dead data.
+  throw new Error('This backfill is obsolete: it targets the pre-migration layout (plan §21 B14, stage 1b).');
+
   const args = parseArgs(process.argv.slice(2));
   const { projectId, credentialPath } = resolveCredential(args.project);
 

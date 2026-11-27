@@ -1,8 +1,8 @@
 /**
- * `auditLog`, `emailCodes`, `rateLimits`, `imports`, `icalTokens` (plan §5.10,
+ * `clubs/orewa/auditLog`, `emailCodes`, `rateLimits`, `clubs/orewa/imports`, `icalTokens` (plan §5.10,
  * §21 B1): every server-only collection the rules deny to *every* client role
  * — unauthenticated, inactive member, active member (self/other), and admin.
- * Unlike `integrity.rules.test.ts` (which covers `integrity/{id}` alone),
+ * Unlike `integrity.rules.test.ts` (which covers `clubs/orewa/integrity/{id}` alone),
  * this is the consolidated "server-only" suite the plan's B1 spec asks for,
  * grown to include the new `icalTokens` collection alongside the four
  * originals.
@@ -22,8 +22,8 @@ interface ServerOnlyCollection {
 
 const COLLECTIONS: ServerOnlyCollection[] = [
   {
-    name: 'auditLog',
-    path: 'auditLog/entry1',
+    name: 'clubs/orewa/auditLog',
+    path: 'clubs/orewa/auditLog/entry1',
     doc: { id: 'entry1', at: 'now', actorMemberId: 'admin1', action: 'role_changed' },
   },
   {
@@ -37,9 +37,9 @@ const COLLECTIONS: ServerOnlyCollection[] = [
     doc: { id: 'bucket:hash', windowStart: 'now', count: 1 },
   },
   {
-    name: 'imports',
-    path: 'imports/import1',
-    doc: { id: 'import1', kind: 'members', actorMemberId: 'admin1', startedAt: 'now' },
+    name: 'clubs/orewa/imports',
+    path: 'clubs/orewa/imports/import1',
+    doc: { id: 'import1', kind: 'clubs/orewa/members', actorMemberId: 'admin1', startedAt: 'now' },
   },
   {
     name: 'icalTokens',

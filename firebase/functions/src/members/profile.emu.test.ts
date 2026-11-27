@@ -17,11 +17,11 @@ describe('registerDevice', () => {
       platform: 'web' as const,
       lastSeenAt: new Date(base + i * 1000).toISOString(),
     }));
-    await db.doc(paths.memberPrivate(uid)).set({ devices }, { merge: true });
+    await db.doc(paths.userPrivate(uid)).set({ devices }, { merge: true });
 
     await registerDeviceHandler(fakeCallableRequest<RegisterDeviceInput>({ token: 'token-new', platform: 'ios' }, { uid }));
 
-    const snap = await db.doc(paths.memberPrivate(uid)).get();
+    const snap = await db.doc(paths.userPrivate(uid)).get();
     const data = snap.data() as MemberPrivate;
     expect(data.devices).toHaveLength(10);
     expect(data.devices.find((d) => d.token === 'token-0')).toBeUndefined(); // oldest evicted
@@ -39,7 +39,7 @@ describe('registerDevice', () => {
       fakeCallableRequest<RegisterDeviceInput>({ token: 'same', platform: 'web', label: 'updated' }, { uid }),
     );
 
-    const snap = await db.doc(paths.memberPrivate(uid)).get();
+    const snap = await db.doc(paths.userPrivate(uid)).get();
     const data = snap.data() as MemberPrivate;
     expect(data.devices).toHaveLength(1);
     expect(data.devices[0]?.label).toBe('updated');
@@ -52,7 +52,7 @@ describe('removePassword', () => {
 
     await removePasswordHandler(fakeCallableRequest({}, { uid }));
 
-    const snap = await db.doc(paths.memberPrivate(uid)).get();
+    const snap = await db.doc(paths.userPrivate(uid)).get();
     expect((snap.data() as MemberPrivate).hasPassword).toBe(false);
 
     const userRecord = await auth.getUser(uid);

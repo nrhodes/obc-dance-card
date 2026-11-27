@@ -9,13 +9,10 @@
 //   * `ClubPaths` — everything a club owns: members, programme, entries,
 //     invites, teams, visitors. Reached through `Club.current`.
 //   * `Paths` — what belongs to the person whatever clubs they are in:
-//     `memberPrivate` and notifications.
+//     `userPrivate` and notifications.
 //
-//  **Stage 1a (plan §21 B14.8): the club is threaded through the code, but
-//  the data has not moved.** `ClubPaths` deliberately ignores `clubId` when
-//  spelling a path, so every builder still returns today's top-level
-//  location. Stage 1b changes `root` below to `clubs/{clubId}/`, in step with
-//  `shared/src/paths.ts`, the data migration and the rules.
+//  Stage 1b (plan §21 B14.8) moved the data: club-owned collections live
+//  under `clubs/{clubId}/…` and `memberPrivate` became `userPrivate`.
 //
 //  Only the collections a member client actually reads are listed. The
 //  server-only ones (`auditLog`, `emailCodes`, `rateLimits`, `imports`,
@@ -32,8 +29,8 @@ typealias ClubId = String
 struct ClubPaths: Equatable {
     let clubId: ClubId
 
-    /// Stage 1b: `"clubs/\(clubId)/"`. Until then the data is top-level.
-    private var root: String { "" }
+    /// Everything a club owns lives under `clubs/{clubId}/`.
+    private var root: String { "clubs/\(clubId)/" }
 
     var members: String { "\(root)members" }
     func member(_ memberId: String) -> String { "\(root)members/\(memberId)" }
@@ -82,8 +79,11 @@ enum Club {
 
 /// Person-level paths: not owned by any one club.
 enum Paths {
-    static let memberPrivates = "memberPrivate"
-    static func memberPrivate(_ memberId: String) -> String { "memberPrivate/\(memberId)" }
+    /// The person's private record (login email, devices, prefs, iCal token).
+    /// Was `memberPrivate/{memberId}` before stage 1b; the Swift model keeps
+    /// the name `MemberPrivate`.
+    static let userPrivates = "userPrivate"
+    static func userPrivate(_ uid: String) -> String { "userPrivate/\(uid)" }
 
     static let notifications = "notifications"
     static func notification(_ id: String) -> String { "notifications/\(id)" }

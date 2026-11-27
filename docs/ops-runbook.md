@@ -187,6 +187,87 @@ change to that file against that version.
 7. **Switch on deploy-on-merge:** extend the `deploy` job's `if:` as its
    header comment describes. From then on, "deploy" means "merge to `main`".
 
+## Stage 1b cutover: moving the data under `clubs/orewa` (plan §21 B14.8)
+
+**What changes.** The build that contains this section reads and writes the per-club
+layout (`clubs/orewa/…`, `userPrivate`, `users`) and its rules deny the old top-level
+collections. The data must be copied across around the same moment that build goes
+live. **Never deploy that build without running the copy: the app would open onto
+empty collections and nobody could sign in.** Merging its PR starts the deploy, so
+the PR stays unmerged until step 4 below.
+
+**The tool.** `firebase/scripts/migrate-to-clubs.ts` (logic and exact semantics in
+`firebase/functions/src/migration/toClubs.ts`). It only ever copies: the old
+documents are never modified or deleted. It needs a service account key with
+**Cloud Datastore User**, and `--project` must match the key.
+
+| Run | Writes? | What it does |
+|---|---|---|
+| *(no flag)* | no | Dry run: a table of what would be copied |
+| `--execute` | yes | Copies anything missing or changed on the old side since the last run; never overwrites a document the new build has since changed |
+| `--verify` | no | Exits 1 unless every old document has an up-to-date copy and `users/{uid}.clubIds` agrees with each membership |
+| `--close` | one field | Declares the migration finished; `--execute` is refused from then on |
+
+```sh
+M="npx tsx firebase/scripts/migrate-to-clubs.ts --project obc-dance-card"
+export GOOGLE_APPLICATION_CREDENTIALS=/path/to/key.json
+```
+
+### Before the day
+
+1. The stage-1b PR is reviewed and green but **not merged**.
+2. Confirm a recent scheduled backup exists (`gcloud firestore backups list`, see
+   "Backups and disaster recovery"). The copy never touches the old data, so this
+   is belt and braces.
+3. Run `$M` (dry run) once to see the counts and confirm the key works.
+4. Pick a quiet time. Avoid 03:00–04:00 and 08:00 NZ, when the scheduled jobs
+   (integrity sweep, purge, reminders) write and delete documents.
+
+### Cutover (allow 30 minutes; the gap between steps 2 and 5 should be as short as the deploy allows)
+
+1. `$M` — dry run; sanity-check the table.
+2. `$M --execute` — first copy. The live app is still the old build and is
+   unaffected.
+3. `$M --verify` — must print `OK`.
+4. Merge the PR. When CI's tests finish, approve the `production` deploy. It
+   deploys functions, then rules, then hosting, then smoke-tests.
+   During those few minutes a browser tab on the old build may show stale data
+   and then "can't load" until it reloads; the app's updater prompts for that.
+5. As soon as the deploy job is green: `$M --execute` again. This catches
+   anything the old build wrote between step 2 and the deploy. Expect a handful
+   of `refreshed` / `created` rows, or none.
+6. `$M --verify` — must print `OK`.
+7. By hand, on the live site: sign in with an email code; open your card;
+   make and cancel a booking; open Admin → Members (the table should list
+   everyone) and Admin → Integrity (run the sweep; it should be clean).
+8. `$M --close`. It refuses unless verify is clean.
+
+### If something is wrong
+
+- **Before step 8, and before members have used the new build for real:**
+  roll back by dispatching the deploy workflow with `deploy_ref` set to the
+  last commit before the stage-1b merge ("Rolling back", above). The old build
+  reads the old collections, which are untouched. Fix, then start again from
+  step 1 — the copy is safe to repeat.
+- **After members have been writing to the new build:** those changes exist
+  only under `clubs/orewa`. Rolling back would lose them, and there is no
+  reverse-copy script. Prefer fixing forward. This is why steps 5–8 follow
+  the deploy immediately and step 7 is done by you, not left for members to
+  discover.
+- **Do not run `--execute` after step 8**, and the tool will not let you: once
+  the new build is live it also deletes documents (a removed visitor, a purged
+  invite), and a later copy would bring them back from the old side.
+
+### Afterwards
+
+- The old top-level collections (`members`, `memberPrivate`, `entries`, `invites`,
+  `teams`, `visitors`, `programmes`, `auditLog`, `imports`, `integrity`) stay in
+  place, unread and unwritten, as the rollback copy. They are deleted in stage 1c,
+  once the new layout has been in use long enough to trust.
+- `make-admin.ts` and `provision-review-cohort.ts` in this build already use the
+  new layout. `backfill-cohort.ts` and `backfill-member-emails.ts` targeted the
+  old one and now refuse to run.
+
 ## App-Store-review cohort partition (decided 2026-09-05, plan §2/§8.1)
 
 **Deployment order — read this before deploying the cohort partition to an

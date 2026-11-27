@@ -219,7 +219,7 @@ async function resolveStewards(
   const uidByEmail = new Map<string, string>();
   for (let i = 0; i < emails.length; i += 30) {
     const chunk = emails.slice(i, i + 30);
-    const snap = await db.collection(paths.memberPrivates()).where('emailLower', 'in', chunk).get();
+    const snap = await db.collection(paths.userPrivates()).where('emailLower', 'in', chunk).get();
     for (const doc of snap.docs) {
       uidByEmail.set((doc.data() as MemberPrivate).emailLower, doc.id);
     }

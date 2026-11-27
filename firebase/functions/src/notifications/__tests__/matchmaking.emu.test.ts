@@ -5,7 +5,7 @@ import { setSoloStatusHandler } from '../../entries/entries.js';
 import { fakeCallableRequest, makeMember, makeProgramme, notificationsFor, sessionInFuture, cp } from '../../testing/fixtures.js';
 
 async function optIn(memberId: string): Promise<void> {
-  const ref = db.doc(paths.memberPrivate(memberId));
+  const ref = db.doc(paths.userPrivate(memberId));
   const mp = (await ref.get()).data() as MemberPrivate;
   await ref.set({ notificationPrefs: { ...mp.notificationPrefs, matchmakingAlerts: true } }, { merge: true });
 }

@@ -225,7 +225,7 @@ export async function verifyLoginCodeHandler(
 
   const token = await auth.createCustomToken(userRecord.uid);
   await db
-    .doc(paths.memberPrivate(userRecord.uid))
+    .doc(paths.userPrivate(userRecord.uid))
     .set({ lastLoginAt: new Date().toISOString() }, { merge: true });
 
   return { token };

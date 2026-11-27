@@ -65,7 +65,7 @@ export async function setPasswordHandler(req: CallableRequest<SetPasswordInput>)
 
   await auth.updateUser(caller.uid, { password });
   await db
-    .doc(paths.memberPrivate(caller.uid))
+    .doc(paths.userPrivate(caller.uid))
     .set({ hasPassword: true, updatedAt: new Date().toISOString() }, { merge: true });
 
   await createNotification(
@@ -96,7 +96,7 @@ export async function markPasswordSetHandler(
   }
 
   await db
-    .doc(paths.memberPrivate(caller.uid))
+    .doc(paths.userPrivate(caller.uid))
     .set({ hasPassword: true, updatedAt: new Date().toISOString() }, { merge: true });
 
   await createNotification(
@@ -122,7 +122,7 @@ export async function removePasswordHandler(
   await auth.updateUser(caller.uid, { password: unknowablePassword });
 
   await db
-    .doc(paths.memberPrivate(caller.uid))
+    .doc(paths.userPrivate(caller.uid))
     .set({ hasPassword: false, updatedAt: new Date().toISOString() }, { merge: true });
 
   // Intentionally NOT revoking refresh tokens: the current session is
