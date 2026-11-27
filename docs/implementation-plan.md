@@ -1946,9 +1946,10 @@ sees does. The client resolves "the current club" as the member's only club
   callable schema and client hook takes a `clubId`, but the builders still return
   today's paths and callables default a missing `clubId` to `orewa`. A pure
   refactor: deployed like any other change, no data risk, full test suite green.
-- **1b. Move the data and flip.** *(Built 2026-11-28: code, rules, `migrate-to-clubs.ts`
-  and the cutover steps in `docs/ops-runbook.md` "Stage 1b cutover". Not live until
-  that cutover is run.)* A script copies every club-owned collection under
+- **1b. Move the data and flip.** *(Live 2026-11-28, #145. Cutover run per
+  `docs/ops-runbook.md` "Stage 1b cutover": 793 documents copied, the catch-up copy
+  after the deploy found nothing changed, migration closed. The old top-level
+  collections remain as the cutover snapshot until stage 1c.)* A script copies every club-owned collection under
   `clubs/orewa`, splits `members` into `users` + membership, renames
   `memberPrivate` → `userPrivate`, and the `paths` builders and `firestore.rules`
   switch to the new layout in the same deploy. Rehearsed on the emulator against a

@@ -181,12 +181,6 @@ jobs:
           distribution: temurin
           java-version: 21
 
-      - name: Install and build backend
-        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
-        run: |
-          npm ci
-          npm run build
-
       - name: Write local-dev secrets for the emulator
         if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
         run: |
@@ -194,14 +188,32 @@ jobs:
           echo "SMTP_PASS=ci-dev-smtp-pass" >> firebase/functions/.secret.local
           echo "SMTP_USER=ci-dev-smtp-user" >> firebase/functions/.secret.local
 
-      - name: Start emulators
+      # Started in the background so the backend install, build and emulator
+      # start-up overlap the Xcode build below instead of preceding it. If
+      # any part of the chain fails, "Wait for emulators" times out and
+      # prints this log.
+      - name: Install, build and start emulators (background)
         if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
-        run: nohup npm run emulators > firebase-emulators.out 2>&1 &
+        run: |
+          nohup bash -c 'npm ci && npm run build && npm run emulators' > firebase-emulators.out 2>&1 &
+
+      # Deliberately unpiped: filtering xcodebuild's output through `grep -v`
+      # makes a *passing* build fail whenever every line happens to be
+      # filtered, because grep exits 1 when it prints nothing. The log is
+      # verbose; the result bundle uploaded below is the thing to read.
+      - name: Build for testing
+        working-directory: ios
+        run: |
+          xcodebuild build-for-testing \
+            -project OBCDanceCard.xcodeproj \
+            -scheme "OBCDanceCard (Emulator)" \
+            -destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
+            -clonedSourcePackagesDirPath .spm
 
       - name: Wait for emulators
         if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
         run: |
-          for i in $(seq 1 90); do
+          for i in $(seq 1 240); do
             if grep -q "All emulators ready" firebase-emulators.out 2>/dev/null; then exit 0; fi
             sleep 1
           done
@@ -217,14 +229,10 @@ jobs:
           GCLOUD_PROJECT: demo-obc
         run: npm run seed
 
-      # Deliberately unpiped: filtering xcodebuild's output through `grep -v`
-      # makes a *passing* build fail whenever every line happens to be
-      # filtered, because grep exits 1 when it prints nothing. The log is
-      # verbose; the result bundle uploaded below is the thing to read.
-      - name: Build and test
+      - name: Test
         working-directory: ios
         run: |
-          xcodebuild test \
+          xcodebuild test-without-building \
             -project OBCDanceCard.xcodeproj \
             -scheme "OBCDanceCard (Emulator)" \
             -destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
@@ -352,14 +360,20 @@ jobs:
     # check), so merges to main now deploy themselves (plan §21 B12 item 8);
     # dispatch remains for rollback (`deploy_ref`) and for re-running. A
     # merge-triggered run is gated exactly like a dispatched one: the same
-    # five jobs, with the iOS emulator steps widened above to run on main.
+    # four jobs (see the note on `needs` below).
     #
     # Credentials: Workload Identity Federation — GitHub's OIDC token is
     # exchanged for a ~1 h Google token; there is no key or secret anywhere.
     # The two identifiers below are NOT secrets; they are variables on the
     # GitHub Environment `production`, which also carries a
     # required-reviewer rule so a deploy waits for a click.
-    needs: [build-test, secret-scan, emulator-tests, ios-build-test, e2e-test]
+    #
+    # `ios-build-test` is deliberately NOT in `needs` (2026-11-28): a deploy
+    # ships functions, rules and the web app — nothing from `ios/` — and that
+    # job is the slowest here by several minutes. It still runs on every PR
+    # and is still a required check before merging, which is where drift
+    # between `shared/` and the hand-mirrored Swift models has to be caught.
+    needs: [build-test, secret-scan, emulator-tests, e2e-test]
     if: >-
       (github.event_name == 'workflow_dispatch' && inputs.deploy_project != 'none' &&
        (inputs.deploy_project != 'obc-dance-card' || github.ref == 'refs/heads/main'))
