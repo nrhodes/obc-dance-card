@@ -1694,7 +1694,7 @@ one and need an integrated personal calendar. Each club has its own independent
 administrators; Neil is additionally a platform ("master") administrator.
 
 **Status.** Design only. Nothing below is built. The sketches are SHOULD; the items
-under "Decisions to confirm" are open and must be settled before building. This
+under "Decisions to confirm" (B14.10) are open and must be settled before building. This
 supersedes, for a multi-club build, the single-club assumptions in §2 (Membership),
 §5, §8.2, §9 and §10.
 
@@ -1995,7 +1995,51 @@ header switcher alone, with every screen scoped to the chosen club.
   first, rather than ported twice. The same goes for the iOS app: once stage 1b has
   run, it must use the new paths before it is released.
 
-#### B14.9 Decisions to confirm (Neil)
+#### B14.9 Hosting and URLs (Neil, 2026-11-27)
+
+**Intent.** The shared app moves to a club-neutral address, `dance-card.web.app`.
+`obc-dance-card.web.app` stays as Orewa's own front door: for someone who is not
+signed in, a sign-in page skinned for Orewa Bridge Club.
+
+**Sketch.** One web build, served from several Firebase Hosting sites in the one
+project: the neutral site plus one site per club that wants its own address.
+
+- **The host selects the club, not the data.** A small host → `clubId` map (in
+  `clubs/{clubId}.hostnames`, readable before sign-in, or baked into the build)
+  lets a club host show that club's name and colours on the sign-in screen and
+  preselect it as the current club. Membership still decides what a person can
+  see; the host is presentation only and grants nothing.
+- **Sign-in does not carry across hosts.** Firebase Auth keeps its session per
+  origin, so a person signed in at `obc-dance-card.web.app` is not signed in at
+  `dance-card.web.app`. Two workable shapes, to be chosen:
+  - *Club host is the whole app* (recommended): the same app runs on both hosts.
+    A one-club member can live entirely on their club's address; the neutral
+    address is for multi-club members and for clubs without their own.
+  - *Club host is only a front door*: it shows the skinned sign-in page and then
+    sends the person to the neutral address, where they must sign in (again).
+    Simpler to reason about, but a login page that cannot log you in to itself
+    is a poor experience; it only works well if the sign-in itself happens on
+    the neutral host after the redirect.
+- **A site id is not guaranteed.** Hosting site ids are global across all Firebase
+  users; `dance-card` must be checked for availability and reserved early. A
+  custom domain avoids the question and is the better long-term address.
+- **Everything that names the host must follow:** Firebase Auth authorised
+  domains, the App Check (reCAPTCHA) site key's allowed domains, the CSP,
+  `WEB_APP_BASE_URL` (links in emails), the hard-coded host in
+  `MembershipUnavailableScreen`, the post-deploy smoke test, and the deploy job
+  (one deploy, several hosting targets).
+- **Things tied to the old address must keep working:** iCal subscriptions already
+  handed out point at `…/ical/{token}.ics` on the current host, so the `/ical/**`
+  rewrite stays on `obc-dance-card.web.app` indefinitely; a home-screen install
+  of the web app is bound to the origin it was installed from, so members who
+  installed from the old address stay there unless told to reinstall — another
+  reason to prefer "club host is the whole app".
+- **Staging.** Independent of the data model. Adding the neutral site alongside
+  the existing one can happen any time; the skinned sign-in page needs the club
+  record (stage 2); it must be in place by stage 3, when a second club's members
+  need an address that is not Orewa's.
+
+#### B14.10 Decisions to confirm (Neil)
 
 - **Contact details per club (recommended) or one shared profile.** Per club avoids
   import conflicts and matches each club's own records; shared is simpler for the
@@ -2008,6 +2052,9 @@ header switcher alone, with every screen scoped to the chosen club.
 - **Branding.** The app, emails and App Store listing are named for Orewa Bridge
   Club. A neutral product name with the club shown inside is a product decision
   with App Store consequences (rename vs new listing).
+- **Hosts** (B14.9): whether a club's own address runs the whole app (recommended)
+  or is only a sign-in front door; and whether to use `dance-card.web.app` (if the
+  site id is free) or a custom domain.
 - **Email sender** (B14.7): confirm the move off the personal Gmail relay to a
   transactional provider at the second club, which provider, and whether any club
   needs its own from-domain.
