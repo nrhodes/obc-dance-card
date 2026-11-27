@@ -12,7 +12,7 @@ describe('setPassword', () => {
 
     const user = await auth.getUser(uid);
     expect(user.providerData.some((p) => p.providerId === 'password')).toBe(true);
-    const priv = (await db.doc(paths.memberPrivate(uid)).get()).data() as MemberPrivate;
+    const priv = (await db.doc(paths.userPrivate(uid)).get()).data() as MemberPrivate;
     expect(priv.hasPassword).toBe(true);
   });
 

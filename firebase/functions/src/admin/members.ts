@@ -45,7 +45,7 @@ import { audit } from '../lib/audit.js';
 import { BatchWriter } from '../lib/batchWriter.js';
 import { callableOptions } from '../lib/callable.js';
 import { requireAdmin } from '../lib/context.js';
-import { clubOf } from '../lib/clubs.js';
+import { clubOf, hasOtherActiveMembership, userClubsWrite } from '../lib/clubs.js';
 import { logger } from '../lib/logger.js';
 import { parseInput } from '../lib/parseInput.js';
 import { cancelEntryInTx, type CancelEntryNotification } from '../entries/lib.js';
@@ -124,7 +124,7 @@ export async function addMemberHandler(req: CallableRequest<AddMemberInput>): Pr
   const cp = clubOf(input);
   const caller = await requireAdmin(req, cp);
 
-  const existing = await db.collection(paths.memberPrivates()).where('emailLower', '==', input.email).limit(1).get();
+  const existing = await db.collection(paths.userPrivates()).where('emailLower', '==', input.email).limit(1).get();
   if (!existing.empty) {
     const existingMember = (await db.doc(cp.member(existing.docs[0]!.id)).get()).data() as Member | undefined;
     throw new HttpsError(
@@ -183,7 +183,7 @@ export async function updateMemberHandler(req: CallableRequest<UpdateMemberInput
   const caller = await requireAdmin(req, cp);
 
   const memberRef = db.doc(cp.member(input.memberId));
-  const privateRef = db.doc(paths.memberPrivate(input.memberId));
+  const privateRef = db.doc(paths.userPrivate(input.memberId));
   const [memberSnap, privateSnap] = await Promise.all([memberRef.get(), privateRef.get()]);
   const current = memberSnap.data() as Member | undefined;
   const currentPrivate = privateSnap.data() as MemberPrivate | undefined;
@@ -225,7 +225,7 @@ export async function updateMemberHandler(req: CallableRequest<UpdateMemberInput
 
   const newEmail = emailChanged ? patch.email! : undefined;
   if (newEmail) {
-    const clash = await db.collection(paths.memberPrivates()).where('emailLower', '==', newEmail).limit(1).get();
+    const clash = await db.collection(paths.userPrivates()).where('emailLower', '==', newEmail).limit(1).get();
     if (!clash.empty) {
       throw new HttpsError('failed-precondition', 'Another member already has this email address.');
     }
@@ -389,6 +389,8 @@ export async function deactivateMemberHandler(
     const now = new Date().toISOString();
     const updated: Member = { ...m, active: false, deactivatedAt: now, updatedAt: now };
     tx.set(memberRef, updated);
+    const userWrite = userClubsWrite(input.memberId, cp.clubId, false);
+    tx.set(db.doc(userWrite.path), userWrite.data, { merge: true });
     return { member: updated, wasActive: true };
   });
 
@@ -396,7 +398,11 @@ export async function deactivateMemberHandler(
     return { member, cancelledEntries: 0, expiredInvites: 0 };
   }
 
-  await auth.updateUser(input.memberId, { disabled: true });
+  // The account itself is only shut when no club has them active any more
+  // (plan §21 B14.3); their sessions are revoked either way.
+  if (!(await hasOtherActiveMembership(input.memberId, cp.clubId))) {
+    await auth.updateUser(input.memberId, { disabled: true });
+  }
   await auth.revokeRefreshTokens(input.memberId);
 
   const memberName = `${member.firstName} ${member.lastName}`;
@@ -511,6 +517,8 @@ export async function reactivateMemberHandler(
     delete rest.deactivatedAt;
     const updated: Member = { ...rest, active: true, updatedAt: now };
     tx.set(memberRef, updated);
+    const userWrite = userClubsWrite(input.memberId, cp.clubId, true);
+    tx.set(db.doc(userWrite.path), userWrite.data, { merge: true });
     return { member: updated, changed: true };
   });
 
@@ -580,7 +588,7 @@ export async function eraseMemberHandler(req: CallableRequest<EraseMemberInput>)
   await memberRef.set(scrubbedMember);
 
   // 2. memberPrivate/{uid}: scrub PII, reset prefs/devices.
-  const privateRef = db.doc(paths.memberPrivate(input.memberId));
+  const privateRef = db.doc(paths.userPrivate(input.memberId));
   const privateSnap = await privateRef.get();
   const existingPrivate = privateSnap.data() as MemberPrivate | undefined;
   const scrubbedPrivate: MemberPrivate = {

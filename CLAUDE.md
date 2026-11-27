@@ -19,7 +19,7 @@ npm run emulators                       # Firestore+Auth+Functions+UI on localho
 
 - Clients never write Firestore except `notifications/{id}.read/readAt`. All mutations are callables.
 - `shared/` is the single source of truth for types, enums, zod schemas, callable contracts.
-- Club-owned data (members, programme, entries, invites, teams, visitors, audit log) is addressed only through `clubPaths(clubId)` (`shared/src/paths.ts`); person-level data through `paths`. Server handlers get the club from `clubOf(input)`, web from `useClub()`, iOS from `Club.current`. Never spell a collection name inline (plan §21 B14).
+- Club-owned data (members, programme, entries, invites, teams, visitors, audit log) is addressed only through `clubPaths(clubId)` (`shared/src/paths.ts`); person-level data through `paths`. Server handlers get the club from `clubOf(input)`, web from `useClub()`, iOS from `Club.current`. Never spell a collection name inline (plan §21 B14). Any code that creates a membership or changes its `active` flag must also write `users/{uid}.clubIds` (`userClubsWrite`) — the rules read it.
 - Every pairing/team mutation runs in a transaction and must satisfy `validatePairingGroup` / `validateTeamGroup` (plan §7) before commit.
 - Never log codes, tokens, emails, phones. Never commit secrets (`.env`, service accounts are gitignored). `GoogleService-Info.plist` is public Firebase config, committed like `web/.env.production`.
 - Tests and seeds talk only to the emulator (`demo-*` project ids).

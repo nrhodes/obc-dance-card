@@ -51,7 +51,7 @@ export async function updateMyPrefsHandler(
   const caller = await requireUser(req);
 
   await db
-    .doc(paths.memberPrivate(caller.uid))
+    .doc(paths.userPrivate(caller.uid))
     .set({ notificationPrefs: input, updatedAt: new Date().toISOString() }, { merge: true });
 
   return { ok: true };
@@ -64,7 +64,7 @@ export async function registerDeviceHandler(
 ): Promise<{ ok: true }> {
   const input = parseInput(RegisterDeviceInputSchema, req.data);
   const caller = await requireUser(req);
-  const ref = db.doc(paths.memberPrivate(caller.uid));
+  const ref = db.doc(paths.userPrivate(caller.uid));
 
   await db.runTransaction(async (tx) => {
     const snap = await tx.get(ref);
@@ -107,7 +107,7 @@ export async function unregisterDeviceHandler(
 ): Promise<{ ok: true }> {
   const input = parseInput(UnregisterDeviceInputSchema, req.data);
   const caller = await requireUser(req);
-  const ref = db.doc(paths.memberPrivate(caller.uid));
+  const ref = db.doc(paths.userPrivate(caller.uid));
 
   await db.runTransaction(async (tx) => {
     const snap = await tx.get(ref);

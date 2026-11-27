@@ -25,20 +25,20 @@ beforeEach(async () => {
   await env.clearFirestore();
   await seedMember(env, 'alice', { active: true, role: 'member' });
   await seedMember(env, 'admin1', { active: true, role: 'admin' });
-  await seedDoc(env, 'integrity/run1', runDoc());
+  await seedDoc(env, 'clubs/orewa/integrity/run1', runDoc());
 });
 
 describe('integrity collection rules — server-only (plan §16 Phase 6)', () => {
   it('active member: cannot read a sweep run', async () => {
-    await assertFails(getDoc(doc(clientAs(env, 'alice'), 'integrity/run1')));
+    await assertFails(getDoc(doc(clientAs(env, 'alice'), 'clubs/orewa/integrity/run1')));
   });
 
   it('admin: cannot read a sweep run either — `listAuditLog`-style callables are the only path, and there is none for this collection', async () => {
-    await assertFails(getDoc(doc(clientAs(env, 'admin1'), 'integrity/run1')));
+    await assertFails(getDoc(doc(clientAs(env, 'admin1'), 'clubs/orewa/integrity/run1')));
   });
 
   it('nobody may write, even an admin', async () => {
-    await assertFails(setDoc(doc(clientAs(env, 'admin1'), 'integrity/run2'), runDoc()));
-    await assertFails(setDoc(doc(clientAs(env, 'alice'), 'integrity/run3'), runDoc()));
+    await assertFails(setDoc(doc(clientAs(env, 'admin1'), 'clubs/orewa/integrity/run2'), runDoc()));
+    await assertFails(setDoc(doc(clientAs(env, 'alice'), 'clubs/orewa/integrity/run3'), runDoc()));
   });
 });

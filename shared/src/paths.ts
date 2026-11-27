@@ -10,11 +10,10 @@
  *    clubs they are in: `memberPrivate`, notifications, iCal tokens, rate
  *    limits, login codes.
  *
- * **Stage 1a (B14.8): the club is threaded through the code, but the data has
- * not moved.** `clubPaths` deliberately ignores `clubId` when spelling a path,
- * so every builder still returns today's top-level location. Stage 1b flips
- * the builders in this one file to `clubs/{clubId}/…` together with the data
- * migration and the rules.
+ * Stage 1b (B14.8) moved the data: club-owned collections live under
+ * `clubs/{clubId}/…`, and `memberPrivate` became `userPrivate`. The
+ * pre-migration top-level collections are no longer read or written by
+ * anything; `LEGACY_PATHS` names them for the migration script alone.
  */
 
 import type { Id } from './primitives.js';
@@ -67,10 +66,9 @@ export interface ClubPaths {
   integrityRun(id: Id): string;
 }
 
-/** Path builders for one club's data. See the file header for the stage-1a caveat. */
+/** Path builders for one club's data, all under `clubs/{clubId}/`. */
 export function clubPaths(clubId: ClubId): ClubPaths {
-  // Stage 1b: `const root = `clubs/${clubId}/`;` — until then the data is top-level.
-  const root = '';
+  const root = `clubs/${clubId}/`;
   return {
     clubId,
 
@@ -111,8 +109,17 @@ export function clubPaths(clubId: ClubId): ClubPaths {
 
 /** Person-level and platform-level paths: not owned by any one club. */
 export const paths = {
-  memberPrivates: () => 'memberPrivate',
-  memberPrivate: (memberId: Id) => `memberPrivate/${memberId}`,
+  /** The club record itself: name, colour, status (plan §21 B14.2). */
+  clubs: () => 'clubs',
+  club: (clubId: ClubId) => `clubs/${clubId}`,
+
+  /** The person: which clubs they are an active member of. Server-maintained. */
+  users: () => 'users',
+  user: (uid: Id) => `users/${uid}`,
+
+  /** The person's private record: login email, devices, notification prefs, iCal token. */
+  userPrivates: () => 'userPrivate',
+  userPrivate: (uid: Id) => `userPrivate/${uid}`,
 
   rateLimits: () => 'rateLimits',
   rateLimit: (key: Id) => `rateLimits/${key}`,
@@ -124,4 +131,19 @@ export const paths = {
   notification: (notificationId: Id) => `notifications/${notificationId}`,
 
   emailCodes: () => 'emailCodes',
+} as const;
+
+/**
+ * Where club-owned data lived before stage 1b. Used ONLY by
+ * `firebase/scripts/migrate-to-clubs.ts` to read the old layout; nothing in
+ * the app reads or writes these, and the rules deny them.
+ */
+export const LEGACY_PATHS = {
+  /** Top-level collections that moved under `clubs/{clubId}/`, same collection name. */
+  clubCollections: ['members', 'visitors', 'teams', 'imports', 'entries', 'invites', 'auditLog', 'integrity'],
+  /** `programmes/{year}` and its sub-collections moved under the club as a tree. */
+  programmes: 'programmes',
+  programmeSubcollections: ['weekdays', 'series', 'sessions'],
+  /** Renamed to `userPrivate`. */
+  memberPrivate: 'memberPrivate',
 } as const;

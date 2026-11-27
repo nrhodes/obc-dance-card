@@ -51,27 +51,27 @@ beforeEach(async () => {
 
 describe('entries collection rules — read', () => {
   beforeEach(async () => {
-    await seedDoc(env, 'entries/e1', soloEntry());
+    await seedDoc(env, 'clubs/orewa/entries/e1', soloEntry());
   });
 
   it('unauthenticated: cannot read', async () => {
-    await assertFails(getDoc(doc(clientAnon(env), 'entries/e1')));
+    await assertFails(getDoc(doc(clientAnon(env), 'clubs/orewa/entries/e1')));
   });
 
   it('inactive member: cannot read', async () => {
-    await assertFails(getDoc(doc(clientAs(env, 'inactive1'), 'entries/e1')));
+    await assertFails(getDoc(doc(clientAs(env, 'inactive1'), 'clubs/orewa/entries/e1')));
   });
 
   it('active member (self): can read', async () => {
-    await assertSucceeds(getDoc(doc(clientAs(env, 'alice'), 'entries/e1')));
+    await assertSucceeds(getDoc(doc(clientAs(env, 'alice'), 'clubs/orewa/entries/e1')));
   });
 
   it('active member (other, same cohort): can read — roster visibility', async () => {
-    await assertSucceeds(getDoc(doc(clientAs(env, 'bob'), 'entries/e1')));
+    await assertSucceeds(getDoc(doc(clientAs(env, 'bob'), 'clubs/orewa/entries/e1')));
   });
 
   it('admin: can read', async () => {
-    await assertSucceeds(getDoc(doc(clientAs(env, 'admin1'), 'entries/e1')));
+    await assertSucceeds(getDoc(doc(clientAs(env, 'admin1'), 'clubs/orewa/entries/e1')));
   });
 
   // App-Store-review cohort partition (plan §8.1, decided 2026-09-05):
@@ -82,56 +82,56 @@ describe('entries collection rules — read', () => {
   // provable again; a plain `memberId == uid` "my entries" query is provable
   // via the ownership disjunct with NO cohort filter at all.
   it("active member: an unfiltered roster query fails (can't prove cohort scoping)", async () => {
-    await assertFails(getDocs(collection(clientAs(env, 'bob'), 'entries')));
+    await assertFails(getDocs(collection(clientAs(env, 'bob'), 'clubs/orewa/entries')));
   });
 
   it('active member: a cohort-filtered roster query succeeds', async () => {
     await assertSucceeds(
-      getDocs(query(collection(clientAs(env, 'bob'), 'entries'), where('cohort', '==', 'club'))),
+      getDocs(query(collection(clientAs(env, 'bob'), 'clubs/orewa/entries'), where('cohort', '==', 'club'))),
     );
   });
 
   it('active member: a memberId==uid "my entries" query succeeds with NO cohort filter', async () => {
     const snap = await assertSucceeds(
-      getDocs(query(collection(clientAs(env, 'alice'), 'entries'), where('memberId', '==', 'alice'))),
+      getDocs(query(collection(clientAs(env, 'alice'), 'clubs/orewa/entries'), where('memberId', '==', 'alice'))),
     );
     expect(snap.docs.map((d) => d.id)).toEqual(['e1']);
   });
 
   it('admin: an unfiltered roster query succeeds', async () => {
-    await assertSucceeds(getDocs(collection(clientAs(env, 'admin1'), 'entries')));
+    await assertSucceeds(getDocs(collection(clientAs(env, 'admin1'), 'clubs/orewa/entries')));
   });
 });
 
 describe('entries collection rules — every client write is denied', () => {
   it('a member may not create any entry, solo or otherwise', async () => {
-    await assertFails(setDoc(doc(clientAs(env, 'alice'), 'entries/e1'), soloEntry()));
+    await assertFails(setDoc(doc(clientAs(env, 'alice'), 'clubs/orewa/entries/e1'), soloEntry()));
   });
 
   it('an admin may not create an entry either — pairing/team invariants require a callable', async () => {
-    await assertFails(setDoc(doc(clientAs(env, 'admin1'), 'entries/e1'), soloEntry()));
+    await assertFails(setDoc(doc(clientAs(env, 'admin1'), 'clubs/orewa/entries/e1'), soloEntry()));
   });
 
   it('a member may not update their own existing entry', async () => {
-    await seedDoc(env, 'entries/e1', soloEntry());
+    await seedDoc(env, 'clubs/orewa/entries/e1', soloEntry());
     await assertFails(
-      updateDoc(doc(clientAs(env, 'alice'), 'entries/e1'), { status: 'cancelled', updatedAt: 'now2' }),
+      updateDoc(doc(clientAs(env, 'alice'), 'clubs/orewa/entries/e1'), { status: 'cancelled', updatedAt: 'now2' }),
     );
   });
 
   it('an admin may not update an entry from the client', async () => {
-    await seedDoc(env, 'entries/e1', soloEntry());
-    await assertFails(updateDoc(doc(clientAs(env, 'admin1'), 'entries/e1'), { status: 'cancelled' }));
+    await seedDoc(env, 'clubs/orewa/entries/e1', soloEntry());
+    await assertFails(updateDoc(doc(clientAs(env, 'admin1'), 'clubs/orewa/entries/e1'), { status: 'cancelled' }));
   });
 
   it('a member may not delete their own entry', async () => {
-    await seedDoc(env, 'entries/e1', soloEntry());
-    await assertFails(deleteDoc(doc(clientAs(env, 'alice'), 'entries/e1')));
+    await seedDoc(env, 'clubs/orewa/entries/e1', soloEntry());
+    await assertFails(deleteDoc(doc(clientAs(env, 'alice'), 'clubs/orewa/entries/e1')));
   });
 
   it('an admin may not delete an entry from the client', async () => {
-    await seedDoc(env, 'entries/e1', soloEntry());
-    await assertFails(deleteDoc(doc(clientAs(env, 'admin1'), 'entries/e1')));
+    await seedDoc(env, 'clubs/orewa/entries/e1', soloEntry());
+    await assertFails(deleteDoc(doc(clientAs(env, 'admin1'), 'clubs/orewa/entries/e1')));
   });
 });
 
@@ -139,34 +139,34 @@ describe('entries collection rules — every client write is denied', () => {
 describe('entries collection rules — cohort partition', () => {
   beforeEach(async () => {
     await seedMember(env, 'reviewer1', { active: true, role: 'member', cohort: 'review' });
-    await seedDoc(env, 'entries/e1', soloEntry({ cohort: 'club' }));
+    await seedDoc(env, 'clubs/orewa/entries/e1', soloEntry({ cohort: 'club' }));
     await seedDoc(
       env,
-      'entries/e2',
+      'clubs/orewa/entries/e2',
       soloEntry({ id: 'e2', sessionId: 's2', memberId: 'reviewer1', cohort: 'review', createdBy: 'reviewer1' }),
     );
   });
 
   it('club member: cannot get() a review entry', async () => {
-    await assertFails(getDoc(doc(clientAs(env, 'alice'), 'entries/e2')));
+    await assertFails(getDoc(doc(clientAs(env, 'alice'), 'clubs/orewa/entries/e2')));
   });
 
   it('review member: cannot get() a club entry belonging to someone else', async () => {
-    await assertFails(getDoc(doc(clientAs(env, 'reviewer1'), 'entries/e1')));
+    await assertFails(getDoc(doc(clientAs(env, 'reviewer1'), 'clubs/orewa/entries/e1')));
   });
 
   it('review member: can always read their OWN entry, even without a cohort filter', async () => {
-    await assertSucceeds(getDoc(doc(clientAs(env, 'reviewer1'), 'entries/e2')));
+    await assertSucceeds(getDoc(doc(clientAs(env, 'reviewer1'), 'clubs/orewa/entries/e2')));
   });
 
   it('club member: a cohort-filtered roster query never returns the review entry', async () => {
     const snap = await assertSucceeds(
-      getDocs(query(collection(clientAs(env, 'alice'), 'entries'), where('cohort', '==', 'club'))),
+      getDocs(query(collection(clientAs(env, 'alice'), 'clubs/orewa/entries'), where('cohort', '==', 'club'))),
     );
     expect(snap.docs.map((d) => d.id)).toEqual(['e1']);
   });
 
   it('admin: can get() a review entry', async () => {
-    await assertSucceeds(getDoc(doc(clientAs(env, 'admin1'), 'entries/e2')));
+    await assertSucceeds(getDoc(doc(clientAs(env, 'admin1'), 'clubs/orewa/entries/e2')));
   });
 });

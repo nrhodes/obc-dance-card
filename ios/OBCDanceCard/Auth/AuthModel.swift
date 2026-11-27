@@ -147,7 +147,7 @@ final class AuthModel: ObservableObject {
                 }
             }
 
-        privateListener = FirebaseService.db.document(Paths.memberPrivate(uid))
+        privateListener = FirebaseService.db.document(Paths.userPrivate(uid))
             .addSnapshotListener { [weak self] snapshot, error in
                 Task { @MainActor in
                     guard let self else { return }

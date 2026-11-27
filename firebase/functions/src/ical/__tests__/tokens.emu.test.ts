@@ -43,7 +43,7 @@ describe('getIcalFeed / createIcalFeed / rotateIcalFeed / removeIcalFeed (plan Â
     const token1 = tokenFromUrl(created.url);
     expect(token1).toHaveLength(43);
 
-    const privateSnap1 = await db.doc(paths.memberPrivate(uid)).get();
+    const privateSnap1 = await db.doc(paths.userPrivate(uid)).get();
     const private1 = privateSnap1.data() as MemberPrivate;
     expect(private1.icalToken).toBe(token1);
     expect(private1.icalTokenCreatedAt).toBeTruthy();
@@ -72,14 +72,14 @@ describe('getIcalFeed / createIcalFeed / rotateIcalFeed / removeIcalFeed (plan Â
     expect(newTokenDocSnap.exists).toBe(true);
     expect((newTokenDocSnap.data() as IcalToken).memberId).toBe(uid);
 
-    const privateSnap2 = await db.doc(paths.memberPrivate(uid)).get();
+    const privateSnap2 = await db.doc(paths.userPrivate(uid)).get();
     expect((privateSnap2.data() as MemberPrivate).icalToken).toBe(token2);
 
     // Remove: both docs gone.
     const removed = await removeIcalFeedHandler(fakeCallableRequest<RemoveIcalFeedInput>({}, { uid }));
     expect(removed).toEqual({ ok: true });
 
-    const privateSnap3 = await db.doc(paths.memberPrivate(uid)).get();
+    const privateSnap3 = await db.doc(paths.userPrivate(uid)).get();
     expect((privateSnap3.data() as MemberPrivate).icalToken).toBeUndefined();
     const tokenDocSnap2 = await db.doc(paths.icalToken(sha256Hex(token2))).get();
     expect(tokenDocSnap2.exists).toBe(false);

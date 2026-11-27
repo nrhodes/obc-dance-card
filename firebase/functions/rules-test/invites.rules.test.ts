@@ -43,59 +43,59 @@ beforeEach(async () => {
   await seedMember(env, 'carol', { active: true, role: 'member' });
   await seedMember(env, 'inactive1', { active: false, role: 'member' });
   await seedMember(env, 'admin1', { active: true, role: 'admin' });
-  await seedDoc(env, 'invites/inv1', inviteDoc());
+  await seedDoc(env, 'clubs/orewa/invites/inv1', inviteDoc());
 });
 
 describe('invites collection rules', () => {
   it('unauthenticated: cannot read', async () => {
-    await assertFails(getDoc(doc(clientAnon(env), 'invites/inv1')));
+    await assertFails(getDoc(doc(clientAnon(env), 'clubs/orewa/invites/inv1')));
   });
 
   it('inactive member: cannot read even if named on the invite', async () => {
-    await seedDoc(env, 'invites/inv2', inviteDoc({ id: 'inv2', toMemberId: 'inactive1' }));
-    await assertFails(getDoc(doc(clientAs(env, 'inactive1'), 'invites/inv2')));
+    await seedDoc(env, 'clubs/orewa/invites/inv2', inviteDoc({ id: 'inv2', toMemberId: 'inactive1' }));
+    await assertFails(getDoc(doc(clientAs(env, 'inactive1'), 'clubs/orewa/invites/inv2')));
   });
 
   it('active member (participant, sender): can read', async () => {
-    await assertSucceeds(getDoc(doc(clientAs(env, 'alice'), 'invites/inv1')));
+    await assertSucceeds(getDoc(doc(clientAs(env, 'alice'), 'clubs/orewa/invites/inv1')));
   });
 
   it('active member (participant, recipient): can read', async () => {
-    await assertSucceeds(getDoc(doc(clientAs(env, 'bob'), 'invites/inv1')));
+    await assertSucceeds(getDoc(doc(clientAs(env, 'bob'), 'clubs/orewa/invites/inv1')));
   });
 
   it('active member (other, not a participant): cannot read', async () => {
-    await assertFails(getDoc(doc(clientAs(env, 'carol'), 'invites/inv1')));
+    await assertFails(getDoc(doc(clientAs(env, 'carol'), 'clubs/orewa/invites/inv1')));
   });
 
   it('admin: can read any invite', async () => {
-    await assertSucceeds(getDoc(doc(clientAs(env, 'admin1'), 'invites/inv1')));
+    await assertSucceeds(getDoc(doc(clientAs(env, 'admin1'), 'clubs/orewa/invites/inv1')));
   });
 
   it('nobody may write invites from the client, participants included', async () => {
-    await assertFails(updateDoc(doc(clientAs(env, 'bob'), 'invites/inv1'), { status: 'accepted' }));
-    await assertFails(updateDoc(doc(clientAs(env, 'alice'), 'invites/inv1'), { status: 'cancelled' }));
-    await assertFails(setDoc(doc(clientAs(env, 'admin1'), 'invites/inv3'), inviteDoc({ id: 'inv3' })));
+    await assertFails(updateDoc(doc(clientAs(env, 'bob'), 'clubs/orewa/invites/inv1'), { status: 'accepted' }));
+    await assertFails(updateDoc(doc(clientAs(env, 'alice'), 'clubs/orewa/invites/inv1'), { status: 'cancelled' }));
+    await assertFails(setDoc(doc(clientAs(env, 'admin1'), 'clubs/orewa/invites/inv3'), inviteDoc({ id: 'inv3' })));
   });
 
   it('the inbox and outbox QUERIES (not just single-doc reads) are allowed for the participant', async () => {
-    await seedDoc(env, 'invites/q1', {
+    await seedDoc(env, 'clubs/orewa/invites/q1', {
       id: 'q1', scope: 'session', year: 2027, sessionIds: ['s1'], seriesId: null, teamId: null,
       fromMemberId: 'alice', toMemberId: 'bob', status: 'pending', expiresAt: '2099-01-01T00:00:00.000Z',
       createdBy: 'alice', createdAt: '2026-08-29T00:00:00.000Z', updatedAt: '2026-08-29T00:00:00.000Z',
     });
     const bob = clientAs(env, 'bob');
-    const inbox = query(collection(bob, 'invites'), where('toMemberId', '==', 'bob'), where('status', '==', 'pending'), orderBy('createdAt', 'desc'));
+    const inbox = query(collection(bob, 'clubs/orewa/invites'), where('toMemberId', '==', 'bob'), where('status', '==', 'pending'), orderBy('createdAt', 'desc'));
     await assertSucceeds(getDocs(inbox));
     const alice = clientAs(env, 'alice');
-    const outbox = query(collection(alice, 'invites'), where('fromMemberId', '==', 'alice'), where('status', '==', 'pending'), orderBy('createdAt', 'desc'));
+    const outbox = query(collection(alice, 'clubs/orewa/invites'), where('fromMemberId', '==', 'alice'), where('status', '==', 'pending'), orderBy('createdAt', 'desc'));
     await assertSucceeds(getDocs(outbox));
-    const resolved = query(collection(bob, 'invites'), where('toMemberId', '==', 'bob'), where('status', 'in', ['accepted', 'declined']), orderBy('createdAt', 'desc'));
+    const resolved = query(collection(bob, 'clubs/orewa/invites'), where('toMemberId', '==', 'bob'), where('status', 'in', ['accepted', 'declined']), orderBy('createdAt', 'desc'));
     await assertSucceeds(getDocs(resolved));
   });
 
   it('a non-participant cannot query the invites collection', async () => {
     const carol = clientAs(env, 'carol');
-    await assertFails(getDocs(query(collection(carol, 'invites'), where('status', '==', 'pending'))));
+    await assertFails(getDocs(query(collection(carol, 'clubs/orewa/invites'), where('status', '==', 'pending'))));
   });
 });

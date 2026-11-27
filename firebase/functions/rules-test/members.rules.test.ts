@@ -18,41 +18,41 @@ beforeEach(async () => {
 
 describe('members collection rules', () => {
   it('unauthenticated: cannot read', async () => {
-    await assertFails(getDoc(doc(clientAnon(env), 'members/alice')));
+    await assertFails(getDoc(doc(clientAnon(env), 'clubs/orewa/members/alice')));
   });
 
   it('inactive member: cannot read', async () => {
     await seedMember(env, 'bob', { active: false });
-    await assertFails(getDoc(doc(clientAs(env, 'bob'), 'members/alice')));
+    await assertFails(getDoc(doc(clientAs(env, 'bob'), 'clubs/orewa/members/alice')));
   });
 
   it('active member (self): can read their own doc', async () => {
-    await assertSucceeds(getDoc(doc(clientAs(env, 'alice'), 'members/alice')));
+    await assertSucceeds(getDoc(doc(clientAs(env, 'alice'), 'clubs/orewa/members/alice')));
   });
 
   it('active member (other): can read another active member (roster parity)', async () => {
     await seedMember(env, 'bob', { active: true });
-    await assertSucceeds(getDoc(doc(clientAs(env, 'bob'), 'members/alice')));
+    await assertSucceeds(getDoc(doc(clientAs(env, 'bob'), 'clubs/orewa/members/alice')));
   });
 
   it('active member: cannot read a deactivated member other than themselves', async () => {
     await seedMember(env, 'bob', { active: true });
     await seedMember(env, 'carol', { active: false });
-    await assertFails(getDoc(doc(clientAs(env, 'bob'), 'members/carol')));
+    await assertFails(getDoc(doc(clientAs(env, 'bob'), 'clubs/orewa/members/carol')));
   });
 
   it('admin: can read any member, active or not', async () => {
     await seedMember(env, 'admin1', { role: 'admin', active: true });
     await seedMember(env, 'carol', { active: false });
-    await assertSucceeds(getDoc(doc(clientAs(env, 'admin1'), 'members/carol')));
+    await assertSucceeds(getDoc(doc(clientAs(env, 'admin1'), 'clubs/orewa/members/carol')));
   });
 
   it('no client — member, or admin — may create, update, or delete a member doc', async () => {
     await seedMember(env, 'admin1', { role: 'admin', active: true });
-    await assertFails(setDoc(doc(clientAs(env, 'admin1'), 'members/dave'), { id: 'dave', active: true }));
-    await assertFails(updateDoc(doc(clientAs(env, 'alice'), 'members/alice'), { phone: '021 999 9999' }));
-    await assertFails(updateDoc(doc(clientAs(env, 'admin1'), 'members/alice'), { role: 'admin' }));
-    await assertFails(deleteDoc(doc(clientAs(env, 'admin1'), 'members/alice')));
+    await assertFails(setDoc(doc(clientAs(env, 'admin1'), 'clubs/orewa/members/dave'), { id: 'dave', active: true }));
+    await assertFails(updateDoc(doc(clientAs(env, 'alice'), 'clubs/orewa/members/alice'), { phone: '021 999 9999' }));
+    await assertFails(updateDoc(doc(clientAs(env, 'admin1'), 'clubs/orewa/members/alice'), { role: 'admin' }));
+    await assertFails(deleteDoc(doc(clientAs(env, 'admin1'), 'clubs/orewa/members/alice')));
   });
 });
 
@@ -63,31 +63,31 @@ describe('members collection rules — cohort partition', () => {
   });
 
   it('club member: cannot get() a review member', async () => {
-    await assertFails(getDoc(doc(clientAs(env, 'alice'), 'members/reviewer1')));
+    await assertFails(getDoc(doc(clientAs(env, 'alice'), 'clubs/orewa/members/reviewer1')));
   });
 
   it('review member: cannot get() a club member', async () => {
-    await assertFails(getDoc(doc(clientAs(env, 'reviewer1'), 'members/alice')));
+    await assertFails(getDoc(doc(clientAs(env, 'reviewer1'), 'clubs/orewa/members/alice')));
   });
 
   it('review member: can get() another review member', async () => {
     await seedMember(env, 'reviewer2', { firstName: 'Reviewer Two', active: true, cohort: 'review' });
-    await assertSucceeds(getDoc(doc(clientAs(env, 'reviewer1'), 'members/reviewer2')));
+    await assertSucceeds(getDoc(doc(clientAs(env, 'reviewer1'), 'clubs/orewa/members/reviewer2')));
   });
 
   it('admin: can get() a review member', async () => {
     await seedMember(env, 'admin1', { role: 'admin', active: true });
-    await assertSucceeds(getDoc(doc(clientAs(env, 'admin1'), 'members/reviewer1')));
+    await assertSucceeds(getDoc(doc(clientAs(env, 'admin1'), 'clubs/orewa/members/reviewer1')));
   });
 
   it("club member: an unfiltered active-members query fails (can't prove every result is club-cohort)", async () => {
-    await assertFails(getDocs(query(collection(clientAs(env, 'alice'), 'members'), where('active', '==', true))));
+    await assertFails(getDocs(query(collection(clientAs(env, 'alice'), 'clubs/orewa/members'), where('active', '==', true))));
   });
 
   it('club member: an active+cohort-filtered query succeeds and returns only club members', async () => {
     const snap = await assertSucceeds(
       getDocs(
-        query(collection(clientAs(env, 'alice'), 'members'), where('active', '==', true), where('cohort', '==', 'club')),
+        query(collection(clientAs(env, 'alice'), 'clubs/orewa/members'), where('active', '==', true), where('cohort', '==', 'club')),
       ),
     );
     const ids = snap.docs.map((d) => d.id);
@@ -99,7 +99,7 @@ describe('members collection rules — cohort partition', () => {
     const snap = await assertSucceeds(
       getDocs(
         query(
-          collection(clientAs(env, 'reviewer1'), 'members'),
+          collection(clientAs(env, 'reviewer1'), 'clubs/orewa/members'),
           where('active', '==', true),
           where('cohort', '==', 'review'),
         ),
@@ -112,7 +112,7 @@ describe('members collection rules — cohort partition', () => {
 
   it('admin: an unfiltered members query succeeds and returns both cohorts', async () => {
     await seedMember(env, 'admin1', { role: 'admin', active: true });
-    const snap = await assertSucceeds(getDocs(collection(clientAs(env, 'admin1'), 'members')));
+    const snap = await assertSucceeds(getDocs(collection(clientAs(env, 'admin1'), 'clubs/orewa/members')));
     const ids = snap.docs.map((d) => d.id);
     expect(ids).toContain('alice');
     expect(ids).toContain('reviewer1');

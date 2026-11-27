@@ -29,9 +29,9 @@ vi.mock('firebase/firestore', () => ({
     onNext: (snap: { docs: Array<{ data: () => unknown }> }) => void,
   ) => {
     const path = ref.__path;
-    if (path === 'programmes') {
+    if (path.endsWith('/programmes')) {
       onNext({ docs: programmesFixture.map((p) => ({ data: () => p })) });
-    } else if (path === 'entries') {
+    } else if (path.endsWith('/entries')) {
       onNext({ docs: entriesFixture.map((e) => ({ data: () => e })) });
     } else if (path.endsWith('/weekdays')) {
       onNext({ docs: weekdaysFixture.map((w) => ({ data: () => w })) });

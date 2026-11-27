@@ -96,6 +96,47 @@ export interface RegisteredDevice {
   lastSeenAt: IsoDateTime;
 }
 
+/* -------------------------------------------------------------------------- */
+/* clubs/{clubId} and users/{uid} (plan §21 B14.2)                             */
+/* -------------------------------------------------------------------------- */
+
+/** A bridge club. Everything it owns lives under `clubs/{clubId}/…`. */
+export interface Club extends Timestamps {
+  /** Stable, URL-safe slug; also the document id. Never renamed. */
+  id: Id;
+  name: string;
+  /** For badges and compact headers. */
+  shortName: string;
+  /** IANA zone the club's dates and cutoffs are reckoned in. */
+  timezone: string;
+  status: 'active' | 'suspended';
+  /**
+   * Set once, when the stage-1b copy of this club's pre-club data was
+   * declared finished (plan §21 B14.8). The migration refuses to copy again
+   * after this. Absent on a club created natively.
+   */
+  migratedFromLegacyAt?: IsoDateTime;
+}
+
+/**
+ * The person, independent of any club. `clubIds` lists the clubs they hold an
+ * ACTIVE membership of. Maintained only by the server, whenever a membership
+ * is created, deactivated or reactivated. It is an index for clients and for
+ * the rules' "signed-in person with at least one active membership" check —
+ * never an authority on its own: every club-scoped rule and callable reads
+ * the membership document itself.
+ */
+export interface UserDoc {
+  id: Id;
+  clubIds: Id[];
+  updatedAt: IsoDateTime;
+}
+
+/**
+ * `userPrivate/{uid}` — the person's private record (login email, devices,
+ * notification prefs, iCal token). Named `MemberPrivate` from when it was
+ * `memberPrivate/{memberId}`; it has always been per person, not per club.
+ */
 export interface MemberPrivate extends Timestamps {
   id: Id;
   /** Natural key. Always lower-cased. Unique across active + inactive members. */

@@ -19,7 +19,7 @@ import { createNotification } from '../create.js';
 import { runPurgeExpired, runSendDailyDigest, runSendSessionReminders } from '../scheduled.js';
 
 async function setPrefs(memberId: string, patch: Partial<NotificationPrefs>): Promise<void> {
-  const ref = db.doc(paths.memberPrivate(memberId));
+  const ref = db.doc(paths.userPrivate(memberId));
   const mp = (await ref.get()).data() as MemberPrivate;
   await ref.set({ notificationPrefs: { ...mp.notificationPrefs, ...patch } }, { merge: true });
 }

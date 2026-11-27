@@ -22,6 +22,7 @@ import {
   paths,
 } from '@obc/shared';
 import { auth, db } from '../lib/admin.js';
+import { hasOtherActiveMembership, userClubsWrite } from '../lib/clubs.js';
 import { callableOptions } from '../lib/callable.js';
 import { requireAdmin } from '../lib/context.js';
 import { clubOf } from '../lib/clubs.js';
@@ -203,18 +204,21 @@ export async function importMembersHandler(req: CallableRequest<ImportMembersInp
   // Members present in Firestore but absent from the file: deactivate
   // (never delete, never an admin). Two passes: first collect candidates, then
   // apply — so a wrong/partial file cannot wipe out the club in one click.
-  const allPrivateSnap = await db.collection(paths.memberPrivates()).get();
+  // The scan is of THIS club's active members (plan §21 B14): a person who
+  // belongs only to another club is none of this import's business. Their
+  // login email is on `userPrivate`; the membership's own `email` is the
+  // fallback for a record that somehow has no private doc.
+  const activeSnap = await db.collection(cp.members()).where('active', '==', true).get();
   const toDeactivate: Array<{ uid: string; memberRef: FirebaseFirestore.DocumentReference }> = [];
   let activeCount = 0;
-  for (const privateDoc of allPrivateSnap.docs) {
-    const emailLower = (privateDoc.data() as MemberPrivate).emailLower;
-    const uid = privateDoc.id;
-    const memberRef = db.doc(cp.member(uid));
-    const memberSnap = await memberRef.get();
-    const member = memberSnap.data() as Member | undefined;
-    if (!member || member.active !== true) continue; // already inactive: no-op
+  for (const memberDoc of activeSnap.docs) {
+    const member = memberDoc.data() as Member;
+    const uid = memberDoc.id;
+    const memberRef = memberDoc.ref;
+    const privateSnap = await db.doc(paths.userPrivate(uid)).get();
+    const emailLower = (privateSnap.data() as MemberPrivate | undefined)?.emailLower ?? member.email;
     activeCount++;
-    if (fileEmails.has(emailLower)) continue;
+    if (emailLower && fileEmails.has(emailLower)) continue;
 
     if (member.role === 'admin') {
       warnings.push(
@@ -238,7 +242,12 @@ export async function importMembersHandler(req: CallableRequest<ImportMembersInp
     try {
       if (!input.dryRun) {
         writer!.update(memberRef, { active: false, updatedAt: new Date().toISOString() });
-        await auth.updateUser(uid, { disabled: true });
+        const userWrite = userClubsWrite(uid, cp.clubId, false);
+        writer!.set(db.doc(userWrite.path), userWrite.data, { merge: true });
+        // The account is only shut when no club has them active any more.
+        if (!(await hasOtherActiveMembership(uid, cp.clubId))) {
+          await auth.updateUser(uid, { disabled: true });
+        }
         await auth.revokeRefreshTokens(uid);
       }
       deactivated++;

@@ -48,7 +48,7 @@ export interface MakeMemberOptions {
   cohort?: MemberCohort;
 }
 
-/** Creates a real emulator Auth user plus matching `members`/`memberPrivate` docs. */
+/** Creates a real emulator Auth user plus its membership, `userPrivate` and `users` docs. */
 export async function makeMember(email: string, opts: MakeMemberOptions = {}): Promise<string> {
   const user = await auth.createUser({ email, emailVerified: true, disabled: opts.active === false });
   const now = new Date().toISOString();
@@ -74,7 +74,12 @@ export async function makeMember(email: string, opts: MakeMemberOptions = {}): P
     createdAt: now,
     updatedAt: now,
   };
-  await db.doc(paths.memberPrivate(user.uid)).set(memberPrivate);
+  await db.doc(paths.userPrivate(user.uid)).set(memberPrivate);
+  await db.doc(paths.user(user.uid)).set({
+    id: user.uid,
+    clubIds: (opts.active ?? true) ? [cp.clubId] : [],
+    updatedAt: now,
+  });
   return user.uid;
 }
 
