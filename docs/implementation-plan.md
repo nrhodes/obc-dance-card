@@ -1888,18 +1888,33 @@ one place, and a picker makes them look twice.
 Per-club SMTP credentials are **not** required to make mail look like it comes from
 the right club, and are not recommended.
 
-- **Recommended: one platform sender, per-club identity.** Mail is sent through the
-  one relay configured today, from one platform address, with the club's
-  `emailFromName` as the display name ("Orewa Bridge Club") and the club's
-  `emailReplyTo` as `Reply-To`. Recipients see the club's name and replies go to the
-  club. Only two non-secret strings are stored per club, on `clubs/{clubId}`. The
-  current relay is a Google Workspace mailbox, which accepts any display name but
-  only its own address (or a configured alias) in `From`.
-- **If a club must send from its own domain** (`noreply@theirclub.org.nz`): move to
-  a transactional provider (the stubbed `postmark` / `sendgrid` providers in
-  `email/provider.ts`). One platform API key covers many verified sender domains;
-  each club adds DNS records (SPF/DKIM) for its domain once, and `clubs/{clubId}`
-  stores only the verified from-address. Still no per-club secret.
+- **Today.** Production sends through `smtp.gmail.com` as one consumer Gmail
+  account (a personal mailbox; its login is the `SMTP_USER` secret), with the display
+  name "Orewa Bridge Club". This is not a Google Workspace relay, despite §19's
+  "prefer the Workspace SMTP route". It is adequate for one club.
+- **Why it does not stretch to several clubs.** Gmail accepts any display name, so a
+  per-club name works, but every club's mail would still come from that one address.
+  A consumer account is capped at roughly 500 recipients a day and can be throttled
+  or locked when Google judges it to be sending automated mail; several clubs'
+  digests and login codes share that one allowance. And it ties every club's
+  sign-in to one personal account: if it is locked or its app password revoked,
+  nobody at any club receives a login code.
+- **Recommended: move to a transactional provider when the second club is
+  onboarded** (phase 2 of B14.8), rather than waiting for a club to ask for its own
+  domain. Implement one of the stubbed providers in `email/provider.ts` (Postmark
+  preferred: transactional-only and fast, which suits time-sensitive login codes;
+  Amazon SES is the cheapest alternative). One platform API key (`EMAIL_PROVIDER_KEY`,
+  already defined in `lib/secrets.ts`) covers every club. It also gives delivery,
+  bounce and complaint visibility, which the Gmail relay does not: today a login
+  code that never arrives is invisible.
+- **Sender identity per club**, on `clubs/{clubId}` — non-secret strings only:
+  - `emailFromName` (display name) and `emailReplyTo`: always. Recipients see the
+    club's name and replies reach the club.
+  - `emailFromAddress`: optional, only for a club with its own domain
+    (`noreply@theirclub.org.nz`). The club adds the provider's DNS records (SPF/DKIM)
+    once and the platform admin marks the domain verified; until then, and for a
+    club with no domain, mail goes from the platform's own verified address under
+    the club's display name.
 - **Per-club SMTP credentials** (each club supplies its own relay login) are the
   last resort. If ever needed, the password goes in Secret Manager under a
   per-club name and `clubs/{clubId}` holds only the secret's name, never the
@@ -1908,10 +1923,13 @@ the right club, and are not recommended.
 - **Account-level mail has no club.** Login codes and password notices are about
   the person, and `requestLoginCode` must not reveal membership, so they are sent
   under the platform's name (or, for a one-club person, optionally that club's
-  name once the code path already knows the address is valid; decide in build,
-  keeping the timing-uniformity work of the 2026-11-16 review).
-- `EmailMessage` gains optional `fromName` and `replyTo`; templates take the club's
-  name instead of the hard-coded "Orewa Bridge Club".
+  name once the code path already knows the address is valid; decide in build).
+- **Build notes.** `EmailMessage` gains optional `fromName`, `fromAddress` and
+  `replyTo`; templates take the club's name instead of the hard-coded "Orewa Bridge
+  Club". The login-code timing safeguard from the 2026-11-16 review (`warm()`,
+  uniform response time for known and unknown addresses) must be re-established
+  against the new provider's API. The provider becomes another processor of member
+  email addresses and must be named in the privacy policy (§8.1 "Privacy law").
 
 #### B14.8 Migration and phasing
 
@@ -1921,7 +1939,8 @@ the right club, and are not recommended.
    Scripted, emulator-rehearsed against a production export, run in a maintenance
    window; old collections kept read-only until verified, then deleted.
 2. **Platform admin + club management**: `platformAdmins`, `createClub`,
-   `setClubAdmin`, the Platform area, per-club email identity (B14.7).
+   `setClubAdmin`, the Platform area, the transactional email provider and per-club
+   sender identity (B14.7).
 3. **Multi-club UI**: switcher, badges, merged Home/Calendar, clash marker, merged
    iCal feed, routes under `/c/{clubId}`.
 4. **Onboard a second club**; convert the review cohort into a demo club.
@@ -1949,8 +1968,9 @@ the right club, and are not recommended.
 - **Branding.** The app, emails and App Store listing are named for Orewa Bridge
   Club. A neutral product name with the club shown inside is a product decision
   with App Store consequences (rename vs new listing).
-- **Email sender** (B14.7): platform address with club display name (recommended)
-  or per-club domains via a transactional provider.
+- **Email sender** (B14.7): confirm the move off the personal Gmail relay to a
+  transactional provider at the second club, which provider, and whether any club
+  needs its own from-domain.
 - **Review cohort → demo club** (recommended) or keep `cohort` alongside clubs.
 
 ### Cross-cutting notes for the backlog
