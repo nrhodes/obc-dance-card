@@ -23,7 +23,7 @@
     "@obc/shared": "*",
     "firebase-admin": "^14.5.1",
     "firebase-functions": "^7.4.0",
-    "nodemailer": "^10.6.0",
+    "nodemailer": "^10.6.1",
     "papaparse": "^5.7.1"
   },
   "devDependencies": {
@@ -35,6 +35,6 @@
     "firebase": "^13.3.0",
     "tsx": "^4.23.15",
     "typescript": "^5.7.2",
-    "vitest": "^5.1.0"
+    "vitest": "^5.1.1"
   }
 }
