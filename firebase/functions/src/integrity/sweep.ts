@@ -3,7 +3,7 @@
  * row, §9.2 scheduled `verifyPairingConsistency`, §16 Phase 6).
  *
  * Three exported shapes, deliberately kept separate:
- *  - `runPairingSweep(opts)` — the plain, directly-callable core. No
+ *  - `runPairingSweep(cp, opts)` — the plain, directly-callable core. No
  *    `CallableRequest`/`onCall` involved, so tests can call it exactly like
  *    `runPublishProgramme`/`runProgrammeImport`/`runSendSessionReminders` —
  *    the established pattern in this codebase for "scheduled-job logic that
@@ -30,7 +30,6 @@
 import { randomUUID } from 'node:crypto';
 import {
   RunPairingSweepInputSchema,
-  paths,
   todayNZ,
   validatePairingGroup,
   validateTeamGroup,
@@ -43,6 +42,7 @@ import {
   type Series,
   type Session,
   type Team,
+  type ClubPaths,
 } from '@obc/shared';
 import { onCall, type CallableRequest } from 'firebase-functions/v2/https';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
@@ -50,6 +50,7 @@ import { db } from '../lib/admin.js';
 import { audit } from '../lib/audit.js';
 import { callableOptions } from '../lib/callable.js';
 import { requireAdmin } from '../lib/context.js';
+import { allClubs, clubOf } from '../lib/clubs.js';
 import { logger } from '../lib/logger.js';
 import { parseInput } from '../lib/parseInput.js';
 import { entryId } from '../entries/lib.js';
@@ -70,11 +71,12 @@ function activeEntryOf(entries: Entry[], memberId: string): Entry | undefined {
  * been deleted.
  */
 async function repairEntryDoc(
+  cp: ClubPaths,
   id: string,
   patch: Partial<Entry>,
   actorMemberId: string,
 ): Promise<{ before: Entry; after: Entry } | null> {
-  const ref = db.doc(paths.entry(id));
+  const ref = db.doc(cp.entry(id));
   const outcome = await db.runTransaction(async (tx) => {
     const snap = await tx.get(ref);
     const entry = snap.data() as Entry | undefined;
@@ -85,7 +87,7 @@ async function repairEntryDoc(
     return { before: entry, after };
   });
   if (!outcome) return null;
-  await audit({
+  await audit(cp, {
     actorMemberId,
     action: 'pairing_repair',
     entityRef: ref.path,
@@ -111,7 +113,7 @@ async function repairEntryDoc(
  * Anything not covered by R1 or the orphan-field pass is left as a reported,
  * unrepaired violation.
  */
-async function repairSessionEntries(entries: Entry[], actorMemberId: string): Promise<number> {
+async function repairSessionEntries(cp: ClubPaths, entries: Entry[], actorMemberId: string): Promise<number> {
   let repaired = 0;
   const nonCancelled = entries.filter((e) => e.status !== 'cancelled');
   const mirrorBroken = new Set<string>();
@@ -125,7 +127,7 @@ async function repairSessionEntries(entries: Entry[], actorMemberId: string): Pr
   }
   for (const id of mirrorBroken) {
     const e = nonCancelled.find((x) => x.id === id)!;
-    const outcome = await repairEntryDoc(
+    const outcome = await repairEntryDoc(cp,
       id,
       {
         status: 'looking_for_partner',
@@ -178,7 +180,7 @@ async function repairSessionEntries(entries: Entry[], actorMemberId: string): Pr
     }
 
     if (Object.keys(patch).length > 0) {
-      const outcome = await repairEntryDoc(e.id, patch, actorMemberId);
+      const outcome = await repairEntryDoc(cp, e.id, patch, actorMemberId);
       if (outcome) repaired += 1;
     }
   }
@@ -187,19 +189,19 @@ async function repairSessionEntries(entries: Entry[], actorMemberId: string): Pr
 }
 
 /** Every entry tagged `teamId` (any session, any status). */
-async function loadAllTeamEntries(teamId: string): Promise<Entry[]> {
-  const snap = await db.collection(paths.entries()).where('teamId', '==', teamId).get();
+async function loadAllTeamEntries(cp: ClubPaths, teamId: string): Promise<Entry[]> {
+  const snap = await db.collection(cp.entries()).where('teamId', '==', teamId).get();
   return snap.docs.map((d) => d.data() as Entry);
 }
 
 /** `team`'s series plus its sessions dated `>= today` — the sweep's "future sessions" scope. */
-async function loadFutureTeamContext(team: Team, today: string): Promise<{ series: Series | null; futureSessions: Session[] }> {
-  const seriesSnap = await db.doc(paths.seriesDoc(team.year, team.seriesId)).get();
+async function loadFutureTeamContext(cp: ClubPaths, team: Team, today: string): Promise<{ series: Series | null; futureSessions: Session[] }> {
+  const seriesSnap = await db.doc(cp.seriesDoc(team.year, team.seriesId)).get();
   const series = (seriesSnap.data() as Series | undefined) ?? null;
   if (!series) return { series: null, futureSessions: [] };
   const sessions: Session[] = [];
   for (const sessionId of series.sessionIds) {
-    const snap = await db.doc(paths.session(team.year, sessionId)).get();
+    const snap = await db.doc(cp.session(team.year, sessionId)).get();
     const session = snap.data() as Session | undefined;
     if (session && session.date >= today) sessions.push(session);
   }
@@ -212,7 +214,7 @@ async function loadFutureTeamContext(team: Team, today: string): Promise<{ serie
  * future session, and cancels a non-cancelled team entry belonging to a
  * member no longer on the roster. No notifications (not specified).
  */
-async function repairTeam(team: Team, futureSessions: Session[], allEntries: Entry[], actorMemberId: string): Promise<number> {
+async function repairTeam(cp: ClubPaths, team: Team, futureSessions: Session[], allEntries: Entry[], actorMemberId: string): Promise<number> {
   let repaired = 0;
   const rosterMemberIds = new Set(
     team.members.filter((m): m is { ref: Extract<PartnerRef, { kind: 'member' }>; joinedAt: string } => m.ref.kind === 'member').map((m) => m.ref.memberId),
@@ -251,15 +253,15 @@ async function repairTeam(team: Team, futureSessions: Session[], allEntries: Ent
         createdAt: now,
         updatedAt: now,
       };
-      await db.doc(paths.entry(doc.id)).set(doc);
-      await audit({ actorMemberId, action: 'pairing_repair', entityRef: paths.entry(doc.id), before: null, after: doc });
+      await db.doc(cp.entry(doc.id)).set(doc);
+      await audit(cp, { actorMemberId, action: 'pairing_repair', entityRef: cp.entry(doc.id), before: null, after: doc });
       repaired += 1;
     }
 
     for (const e of sessionEntries) {
       if (e.status === 'cancelled') continue;
       if (rosterMemberIds.has(e.memberId)) continue;
-      const outcome = await repairEntryDoc(e.id, { status: 'cancelled' }, actorMemberId);
+      const outcome = await repairEntryDoc(cp, e.id, { status: 'cancelled' }, actorMemberId);
       if (outcome) repaired += 1;
     }
   }
@@ -274,7 +276,7 @@ export interface RunPairingSweepOptions {
 }
 
 /** Plain core (see module doc comment) — call this directly from tests. */
-export async function runPairingSweep(opts: RunPairingSweepOptions = {}): Promise<RunPairingSweepResult> {
+export async function runPairingSweep(cp: ClubPaths, opts: RunPairingSweepOptions = {}): Promise<RunPairingSweepResult> {
   const repair = !!opts.repair;
   const actorMemberId = opts.actorMemberId ?? 'system';
   const today = todayNZ();
@@ -283,7 +285,7 @@ export async function runPairingSweep(opts: RunPairingSweepOptions = {}): Promis
   let repaired = 0;
 
   // ---- pairing sessions ----
-  const entriesSnap = await db.collection(paths.entries()).where('date', '>=', today).get();
+  const entriesSnap = await db.collection(cp.entries()).where('date', '>=', today).get();
   const bySession = new Map<string, Entry[]>();
   for (const doc of entriesSnap.docs) {
     const entry = doc.data() as Entry;
@@ -301,23 +303,23 @@ export async function runPairingSweep(opts: RunPairingSweepOptions = {}): Promis
     // exactly that class of bug (two entries for one member under different
     // pairingIds would end up in two different buckets, each looking fine).
     violations.push({ kind: 'pairing', id: sessionId, issues });
-    if (repair) repaired += await repairSessionEntries(entries, actorMemberId);
+    if (repair) repaired += await repairSessionEntries(cp, entries, actorMemberId);
   }
 
   // ---- teams ----
   let checkedTeams = 0;
-  const teamsSnap = await db.collection(paths.teams()).where('status', 'in', ['forming', 'active']).get();
+  const teamsSnap = await db.collection(cp.teams()).where('status', 'in', ['forming', 'active']).get();
   for (const doc of teamsSnap.docs) {
     const team = doc.data() as Team;
-    const { series, futureSessions } = await loadFutureTeamContext(team, today);
+    const { series, futureSessions } = await loadFutureTeamContext(cp, team, today);
     if (!series || futureSessions.length === 0) continue; // scope: non-disbanded teams *with future sessions*
     checkedTeams += 1;
 
-    const allEntries = await loadAllTeamEntries(team.id);
+    const allEntries = await loadAllTeamEntries(cp, team.id);
     const issues = validateTeamGroup(team, series, allEntries);
     if (issues.length === 0) continue;
     violations.push({ kind: 'team', id: team.id, issues });
-    if (repair) repaired += await repairTeam(team, futureSessions, allEntries, actorMemberId);
+    if (repair) repaired += await repairTeam(cp, team, futureSessions, allEntries, actorMemberId);
   }
 
   const report: RunPairingSweepResult = {
@@ -337,7 +339,7 @@ export async function runPairingSweep(opts: RunPairingSweepOptions = {}): Promis
     violations: report.violations,
     repaired: report.repaired,
   };
-  await db.doc(paths.integrityRun(runId)).set(runDoc);
+  await db.doc(cp.integrityRun(runId)).set(runDoc);
 
   logger.info('pairing_sweep_done', {
     checkedSessions: report.checkedSessions,
@@ -355,7 +357,9 @@ export const verifyPairingConsistency = onSchedule(
   { schedule: '0 3 * * *', timeZone: NZ_TIME_ZONE, region: REGION },
   async () => {
     const repair = process.env.PAIRING_SWEEP_REPAIR === 'true';
-    await runPairingSweep({ repair, actorMemberId: 'system' });
+    for (const cp of await allClubs()) {
+      await runPairingSweep(cp, { repair, actorMemberId: 'system' });
+    }
   },
 );
 
@@ -364,8 +368,9 @@ export async function runPairingSweepCallableHandler(
   req: CallableRequest<RunPairingSweepInput>,
 ): Promise<RunPairingSweepResult> {
   const input = parseInput(RunPairingSweepInputSchema, req.data);
-  const caller = await requireAdmin(req);
-  return runPairingSweep({ repair: input.repair, actorMemberId: caller.uid });
+  const cp = clubOf(input);
+  const caller = await requireAdmin(req, cp);
+  return runPairingSweep(cp, { repair: input.repair, actorMemberId: caller.uid });
 }
 
 export const runPairingSweepCallable = onCall(callableOptions, runPairingSweepCallableHandler);

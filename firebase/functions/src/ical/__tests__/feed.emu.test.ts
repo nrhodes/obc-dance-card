@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import type { Request } from 'firebase-functions/v2/https';
 import type { Response } from 'express';
 import type { CreateIcalFeedInput, Entry, RotateIcalFeedInput } from '@obc/shared';
-import { paths } from '@obc/shared';
 import { db } from '../../lib/admin.js';
 import { entryId } from '../../entries/lib.js';
 import {
@@ -10,6 +9,7 @@ import {
   makeMember,
   makeProgramme,
   sessionInFuture,
+  cp,
 } from '../../testing/fixtures.js';
 import { createIcalFeedHandler, rotateIcalFeedHandler } from '../tokens.js';
 import { icalFeedHandler } from '../feed.js';
@@ -124,24 +124,24 @@ describe('icalFeed HTTP endpoint (plan §21 B1)', () => {
     const prog = await makeProgramme({ dates: [d1, d2, d3, d4] });
 
     // Confirmed, paired — should appear as STATUS:CONFIRMED.
-    await db.doc(paths.entry(entryId(prog.sessionIds[0]!, uid))).set({
+    await db.doc(cp.entry(entryId(prog.sessionIds[0]!, uid))).set({
       ...baseEntry(prog.sessionIds[0]!, uid, d1, prog.weekday),
       status: 'confirmed',
       partner: { kind: 'member', memberId: otherUid, displayName: 'Pat Partner' },
       pairingId: 'pairing-1',
     });
     // looking_for_partner — should appear as STATUS:TENTATIVE with the suffix.
-    await db.doc(paths.entry(entryId(prog.sessionIds[1]!, uid))).set({
+    await db.doc(cp.entry(entryId(prog.sessionIds[1]!, uid))).set({
       ...baseEntry(prog.sessionIds[1]!, uid, d2, prog.weekday),
       status: 'looking_for_partner',
     });
     // unavailable — must be skipped entirely (never on the feed).
-    await db.doc(paths.entry(entryId(prog.sessionIds[2]!, uid))).set({
+    await db.doc(cp.entry(entryId(prog.sessionIds[2]!, uid))).set({
       ...baseEntry(prog.sessionIds[2]!, uid, d3, prog.weekday),
       status: 'unavailable',
     });
     // cancelled — must be skipped entirely.
-    await db.doc(paths.entry(entryId(prog.sessionIds[3]!, uid))).set({
+    await db.doc(cp.entry(entryId(prog.sessionIds[3]!, uid))).set({
       ...baseEntry(prog.sessionIds[3]!, uid, d4, prog.weekday),
       status: 'cancelled',
     });
@@ -196,7 +196,7 @@ describe('icalFeed HTTP endpoint (plan §21 B1)', () => {
     await icalFeedHandler(fakeRequest({ path: `/ical/${token}.ics` }), resActive as unknown as Response);
     expect(resActive.statusCode).toBe(200);
 
-    await db.doc(paths.member(uid)).set({ active: false }, { merge: true });
+    await db.doc(cp.member(uid)).set({ active: false }, { merge: true });
 
     const resInactive = fakeResponse();
     await icalFeedHandler(fakeRequest({ path: `/ical/${token}.ics` }), resInactive as unknown as Response);

@@ -3,7 +3,7 @@ import { FieldValue } from 'firebase-admin/firestore';
 import type { ImportMembersInput } from '@obc/shared';
 import { paths } from '@obc/shared';
 import { auth, db } from '../lib/admin.js';
-import { fakeCallableRequest, makeMember } from '../testing/fixtures.js';
+import { fakeCallableRequest, makeMember, cp } from '../testing/fixtures.js';
 import { importMembersHandler } from './importMembers.js';
 
 const HEADER = 'firstName,lastName,email,phone,grade';
@@ -63,7 +63,7 @@ describe('importMembers', () => {
     const authUser = await auth.getUserByEmail(email);
     expect(authUser).toBeTruthy();
 
-    const memberSnap = await db.doc(paths.member(authUser.uid)).get();
+    const memberSnap = await db.doc(cp.member(authUser.uid)).get();
     expect(memberSnap.data()).toMatchObject({
       firstName: 'Happy',
       lastName: 'Path',
@@ -83,8 +83,8 @@ describe('importMembers', () => {
     const uid = await makeMember(email, { role: 'member', active: true, firstName: 'Sync', lastName: 'Member' });
 
     // Simulate a pre-backfill member doc that predates the `email` field.
-    await db.doc(paths.member(uid)).update({ email: FieldValue.delete() });
-    expect((await db.doc(paths.member(uid)).get()).data()?.email).toBeUndefined();
+    await db.doc(cp.member(uid)).update({ email: FieldValue.delete() });
+    expect((await db.doc(cp.member(uid)).get()).data()?.email).toBeUndefined();
 
     const report = await importMembersHandler(
       await adminReq({ csv: csv([['Sync', 'Member', email, '021', 'Open']]) }),
@@ -92,7 +92,7 @@ describe('importMembers', () => {
     expect(report.errors).toEqual([]);
     expect(report.updated).toBe(1); // missing email counts as a change
 
-    const memberAfter = (await db.doc(paths.member(uid)).get()).data();
+    const memberAfter = (await db.doc(cp.member(uid)).get()).data();
     expect(memberAfter?.email).toBe(email);
   });
 
@@ -168,15 +168,15 @@ describe('importMembers', () => {
     expect(report2.errors).toEqual([]);
 
     const stayingUid = (await auth.getUserByEmail(staying)).uid;
-    const stayingMember = (await db.doc(paths.member(stayingUid)).get()).data();
+    const stayingMember = (await db.doc(cp.member(stayingUid)).get()).data();
     expect(stayingMember).toMatchObject({ phone: '099', active: true });
 
-    const goingAwayMember = (await db.doc(paths.member(goingAwayUid)).get()).data();
+    const goingAwayMember = (await db.doc(cp.member(goingAwayUid)).get()).data();
     expect(goingAwayMember?.active).toBe(false);
     const goingAwayAuth = await auth.getUser(goingAwayUid);
     expect(goingAwayAuth.disabled).toBe(true);
 
-    const adminMember = (await db.doc(paths.member(adminUid)).get()).data();
+    const adminMember = (await db.doc(cp.member(adminUid)).get()).data();
     expect(adminMember?.active).toBe(true); // never deactivated
     const adminAuth = await auth.getUser(adminUid);
     expect(adminAuth.disabled).toBe(false);
@@ -193,7 +193,7 @@ describe('importMembers', () => {
       }),
     );
     expect(report3.errors).toEqual([]);
-    const revivedMember = (await db.doc(paths.member(goingAwayUid)).get()).data();
+    const revivedMember = (await db.doc(cp.member(goingAwayUid)).get()).data();
     expect(revivedMember?.active).toBe(true);
     const revivedAuth = await auth.getUser(goingAwayUid);
     expect(revivedAuth.disabled).toBe(false);
@@ -208,7 +208,7 @@ describe('importMembers', () => {
       await adminReq({ csv: csv([['Protected', '', email, '021', 'Open']]), allowMassDeactivation: true }),
     );
     expect(report.errors.some((e) => e.message.includes('lastName'))).toBe(true);
-    const member = (await db.doc(paths.member(uid)).get()).data();
+    const member = (await db.doc(cp.member(uid)).get()).data();
     expect(member?.active).toBe(true);
     expect((await auth.getUser(uid)).disabled).toBe(false);
   });
@@ -234,7 +234,7 @@ describe('importMembers', () => {
     expect(report.deactivated).toBe(0);
     expect(report.warnings.some((w) => w.includes('allowMassDeactivation'))).toBe(true);
     for (const uid of uids) {
-      expect((await db.doc(paths.member(uid)).get()).data()?.active).toBe(true);
+      expect((await db.doc(cp.member(uid)).get()).data()?.active).toBe(true);
       expect((await auth.getUser(uid)).disabled).toBe(false);
     }
   }, 30_000);

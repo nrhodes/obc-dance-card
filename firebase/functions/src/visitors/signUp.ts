@@ -8,7 +8,6 @@ import { randomUUID } from 'node:crypto';
 import { onCall, HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
 import {
   SignUpWithVisitorInputSchema,
-  paths,
   sessionCutoff,
   validatePairingGroup,
   type Entry,
@@ -23,6 +22,7 @@ import { callableOptions } from '../lib/callable.js';
 import { logger } from '../lib/logger.js';
 import { SMTP_SECRETS } from '../lib/secrets.js';
 import { requireMember, resolveActingMember } from '../lib/context.js';
+import { clubOf } from '../lib/clubs.js';
 import { getEmailProvider } from '../email/provider.js';
 import { visitorCourtesyEmail } from '../email/templates/visitorCourtesy.js';
 import { parseInput } from '../lib/parseInput.js';
@@ -35,11 +35,12 @@ export async function signUpWithVisitorHandler(
   req: CallableRequest<SignUpWithVisitorInput>,
 ): Promise<SignUpWithVisitorResult> {
   const input = parseInput(SignUpWithVisitorInputSchema, req.data);
-  const caller = await requireMember(req);
+  const cp = clubOf(input);
+  const caller = await requireMember(req, cp);
   assertForceAllowed(caller, input.force);
   const actor = await resolveActingMember(caller, input.onBehalfOfMemberId);
 
-  const visitorSnap = await db.doc(paths.visitor(input.visitorId)).get();
+  const visitorSnap = await db.doc(cp.visitor(input.visitorId)).get();
   const visitor = visitorSnap.data() as Visitor | undefined;
   if (!visitor) throw new HttpsError('not-found', 'Visitor not found.');
   if (visitor.createdByMemberId !== actor.memberId && !caller.isAdmin) {
@@ -53,7 +54,7 @@ export async function signUpWithVisitorHandler(
     if (input.scope === 'session') {
       targetSessionIds = [input.sessionId!];
     } else {
-      const seriesSnap = await tx.get(db.doc(paths.seriesDoc(input.year, input.seriesId!)));
+      const seriesSnap = await tx.get(db.doc(cp.seriesDoc(input.year, input.seriesId!)));
       series = (seriesSnap.data() as Series | undefined) ?? null;
       if (!series) throw new HttpsError('not-found', 'Series not found.');
       targetSessionIds = series.sessionIds;
@@ -61,7 +62,7 @@ export async function signUpWithVisitorHandler(
 
     const loaded: LoadedSession[] = [];
     for (const sid of targetSessionIds) {
-      loaded.push(await loadSession(tx, input.year, sid));
+      loaded.push(await loadSession(cp, tx, input.year, sid));
     }
 
     let target = loaded;
@@ -81,7 +82,7 @@ export async function signUpWithVisitorHandler(
 
     const conflictDates: string[] = [];
     for (const ls of target) {
-      const existing = await readEntry(tx, ls.session.id, actor.memberId);
+      const existing = await readEntry(cp, tx, ls.session.id, actor.memberId);
       if (!isFree(existing)) conflictDates.push(ls.session.date);
     }
     if (conflictDates.length > 0) {
@@ -119,21 +120,21 @@ export async function signUpWithVisitorHandler(
       if (issues.length > 0) {
         throw new HttpsError('internal', `Pairing invariant violated: ${issues.join('; ')}`);
       }
-      tx.set(db.doc(paths.entry(entry.id)), entry);
+      tx.set(db.doc(cp.entry(entry.id)), entry);
       written.push(entry);
     }
 
-    tx.set(db.doc(paths.visitor(visitor.id)), { lastUsedAt: now }, { merge: true });
+    tx.set(db.doc(cp.visitor(visitor.id)), { lastUsedAt: now }, { merge: true });
 
     return { entries: written, seriesName: series?.name };
   });
 
   if (actor.onBehalfBy) {
-    await audit({
+    await audit(cp, {
       actorMemberId: actor.onBehalfBy,
       action: 'sign_up_with_visitor_on_behalf',
       targetMemberId: actor.memberId,
-      entityRef: paths.visitor(visitor.id),
+      entityRef: cp.visitor(visitor.id),
     });
     await createNotification(
       actor.memberId,

@@ -6,7 +6,6 @@ import type {
   CancelInviteInput,
   SetSoloStatusInput,
 } from '@obc/shared';
-import { paths } from '@obc/shared';
 import { db } from '../../lib/admin.js';
 import {
   assertSessionPairingValid,
@@ -17,6 +16,7 @@ import {
   notificationsFor,
   sessionInFuture,
   sessionInPast,
+  cp,
 } from '../../testing/fixtures.js';
 import { setSoloStatusHandler } from '../entries.js';
 import { cancelInviteHandler, respondToInviteHandler, sendInviteHandler } from '../invites.js';
@@ -98,7 +98,7 @@ describe('sendInvite', () => {
         { uid: a },
       ),
     );
-    const invites = await db.collection(paths.invites()).where('fromMemberId', '==', a).get();
+    const invites = await db.collection(cp.invites()).where('fromMemberId', '==', a).get();
     const inviteId = invites.docs[0]!.id;
     await respondToInviteHandler(fakeCallableRequest<RespondToInviteInput>({ inviteId, accept: true }, { uid: b }));
 
@@ -136,7 +136,7 @@ describe('sendInvite', () => {
       ),
     ).rejects.toMatchObject({ code: 'failed-precondition' });
 
-    const invites = await db.collection(paths.invites()).where('fromMemberId', '==', a).get();
+    const invites = await db.collection(cp.invites()).where('fromMemberId', '==', a).get();
     expect(invites.empty).toBe(true);
   });
 
@@ -237,7 +237,7 @@ describe('respondToInvite', () => {
       fakeCallableRequest<RespondToInviteInput>({ inviteId: inviteAB.id, accept: true }, { uid: b }),
     );
 
-    const otherSnap = await db.doc(paths.invite(inviteCB.id)).get();
+    const otherSnap = await db.doc(cp.invite(inviteCB.id)).get();
     expect((otherSnap.data() as Invite).status).toBe('expired');
 
     const expiredNotifications = await notificationsFor(c, 'invite_expired');
@@ -306,7 +306,7 @@ describe('respondToInvite', () => {
       respondToInviteHandler(fakeCallableRequest<RespondToInviteInput>({ inviteId: invite.id, accept: true }, { uid: b })),
     ).rejects.toMatchObject({ code: 'failed-precondition' });
 
-    const snap = await db.doc(paths.invite(invite.id)).get();
+    const snap = await db.doc(cp.invite(invite.id)).get();
     expect((snap.data() as Invite).status).toBe('pending');
 
     await assertSessionPairingValid(prog.sessionIds[0]!);
@@ -336,7 +336,7 @@ describe('respondToInvite', () => {
       respondToInviteHandler(fakeCallableRequest<RespondToInviteInput>({ inviteId: invite.id, accept: true }, { uid: b })),
     ).rejects.toMatchObject({ code: 'failed-precondition' });
 
-    const snap = await db.doc(paths.invite(invite.id)).get();
+    const snap = await db.doc(cp.invite(invite.id)).get();
     expect((snap.data() as Invite).status).toBe('pending');
     await assertSessionPairingValid(prog.sessionIds[0]!);
   });
@@ -371,7 +371,7 @@ describe('respondToInvite', () => {
     const firstSessionEntries = await entriesForSession(prog.sessionIds[0]!);
     expect(firstSessionEntries.filter((e) => e.status !== 'cancelled')).toHaveLength(0);
 
-    const stillPending = await db.doc(paths.invite(invite.id)).get();
+    const stillPending = await db.doc(cp.invite(invite.id)).get();
     expect((stillPending.data() as Invite).status).toBe('pending');
   });
 
@@ -387,13 +387,13 @@ describe('respondToInvite', () => {
       ),
     );
     // Force it into the past.
-    await db.doc(paths.invite(invite.id)).set({ expiresAt: '2000-01-01T00:00:00.000Z' }, { merge: true });
+    await db.doc(cp.invite(invite.id)).set({ expiresAt: '2000-01-01T00:00:00.000Z' }, { merge: true });
 
     await expect(
       respondToInviteHandler(fakeCallableRequest<RespondToInviteInput>({ inviteId: invite.id, accept: true }, { uid: b })),
     ).rejects.toMatchObject({ code: 'failed-precondition' });
 
-    const snap = await db.doc(paths.invite(invite.id)).get();
+    const snap = await db.doc(cp.invite(invite.id)).get();
     expect((snap.data() as Invite).status).toBe('expired');
   });
 });

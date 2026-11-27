@@ -9,6 +9,9 @@ import { describe, expect, it } from 'vitest';
 import type { Entry, Member, Programme, Session, WeekdayProgramme } from '@obc/shared';
 import { assertForceAllowed, assertSessionOpen, entryId, isFree, isSessionLocked, memberRef } from './lib.js';
 import type { Caller } from '../lib/context.js';
+import { DEFAULT_CLUB_ID, clubPaths } from '@obc/shared';
+
+const cp = clubPaths(DEFAULT_CLUB_ID);
 
 describe('entryId', () => {
   it('joins sessionId and memberId with an underscore', () => {
@@ -167,8 +170,8 @@ describe('isSessionLocked', () => {
 });
 
 describe('assertForceAllowed', () => {
-  const admin: Caller = { uid: 'a1', isAdmin: true, member: {} as Caller['member'] };
-  const member: Caller = { uid: 'm1', isAdmin: false, member: {} as Caller['member'] };
+  const admin: Caller = { uid: 'a1', isAdmin: true, member: {} as Caller['member'], cp };
+  const member: Caller = { uid: 'm1', isAdmin: false, member: {} as Caller['member'], cp };
 
   it('allows force=false/undefined for anyone', () => {
     expect(() => assertForceAllowed(member, false)).not.toThrow();

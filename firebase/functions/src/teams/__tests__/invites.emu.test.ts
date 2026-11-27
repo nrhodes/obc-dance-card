@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { paths, type CreateTeamInput, type Invite, type InviteToTeamInput, type RespondToInviteInput } from '@obc/shared';
+import { type CreateTeamInput, type Invite, type InviteToTeamInput, type RespondToInviteInput } from '@obc/shared';
 import { db } from '../../lib/admin.js';
 import {
   assertTeamValid,
@@ -8,6 +8,7 @@ import {
   makeProgramme,
   notificationsFor,
   sessionInFuture,
+  cp,
 } from '../../testing/fixtures.js';
 import { respondToInviteHandler } from '../../entries/invites.js';
 import { createTeamHandler, inviteToTeamHandler } from '../teams.js';
@@ -101,7 +102,7 @@ describe('inviteToTeam', () => {
     // this team needs — the simplest way to make them "busy" there.
     const busyId = `${prog.sessionIds[0]}_${invitee}`;
     const now = new Date().toISOString();
-    await db.doc(paths.entry(busyId)).set({
+    await db.doc(cp.entry(busyId)).set({
       id: busyId,
       sessionId: prog.sessionIds[0],
       date,
@@ -292,13 +293,13 @@ describe('respondToInvite (team, kind=join)', () => {
       createdAt: now,
       updatedAt: now,
     };
-    await db.doc(paths.invite(competingId)).set(competing);
+    await db.doc(cp.invite(competingId)).set(competing);
 
     await respondToInviteHandler(
       fakeCallableRequest<RespondToInviteInput>({ inviteId: teamInvite.invite.id, accept: true }, { uid: invitee }),
     );
 
-    const competingSnap = await db.doc(paths.invite(competingId)).get();
+    const competingSnap = await db.doc(cp.invite(competingId)).get();
     expect((competingSnap.data() as Invite).status).toBe('expired');
   });
 });

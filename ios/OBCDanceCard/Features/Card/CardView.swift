@@ -36,7 +36,7 @@ final class CardTeamsModel: ObservableObject {
         listener?.remove()
         listener = nil
         guard !ids.isEmpty, let cohort else { teams = []; return }
-        listener = FirebaseService.db.collection(Paths.teams)
+        listener = FirebaseService.db.collection(Club.current.teams)
             .whereField(FieldPath.documentID(), in: ids)
             .whereField("cohort", isEqualTo: cohort.rawValue)
             .addSnapshotListener { [weak self] snap, err in

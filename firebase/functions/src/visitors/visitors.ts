@@ -11,7 +11,6 @@ import {
   CreateVisitorInputSchema,
   DeleteVisitorInputSchema,
   UpdateVisitorInputSchema,
-  paths,
   todayNZ,
   type CreateVisitorInput,
   type CreateVisitorResult,
@@ -22,12 +21,14 @@ import {
   type UpdateVisitorInput,
   type UpdateVisitorResult,
   type Visitor,
+  type ClubPaths,
 } from '@obc/shared';
 import { db } from '../lib/admin.js';
 import { audit } from '../lib/audit.js';
 import { callableOptions } from '../lib/callable.js';
 import { BatchWriter } from '../lib/batchWriter.js';
 import { requireMember, resolveActingMember } from '../lib/context.js';
+import { clubOf } from '../lib/clubs.js';
 import { parseInput } from '../lib/parseInput.js';
 import { createNotification } from '../notifications/create.js';
 
@@ -40,9 +41,9 @@ function refIsVisitor(ref: Entry['partner'], visitorId: string): boolean {
 }
 
 /** Every non-cancelled entry, from today onward, that references `visitorId` anywhere. */
-async function futureEntriesReferencing(visitorId: string): Promise<Entry[]> {
+async function futureEntriesReferencing(cp: ClubPaths, visitorId: string): Promise<Entry[]> {
   const today = todayNZ();
-  const snap = await db.collection(paths.entries()).where('date', '>=', today).get();
+  const snap = await db.collection(cp.entries()).where('date', '>=', today).get();
   return snap.docs
     .map((d) => d.data() as Entry)
     .filter(
@@ -59,9 +60,9 @@ async function futureEntriesReferencing(visitorId: string): Promise<Entry[]> {
  * member and compares in code (same trade-off `updateVisitor`'s rename sweep
  * makes below).
  */
-async function activeMemberNameCollision(displayName: string): Promise<boolean> {
+async function activeMemberNameCollision(cp: ClubPaths, displayName: string): Promise<boolean> {
   const target = displayName.trim().toLowerCase();
-  const snap = await db.collection(paths.members()).where('active', '==', true).get();
+  const snap = await db.collection(cp.members()).where('active', '==', true).get();
   return snap.docs.some((d) => {
     const m = d.data() as Member;
     return `${m.firstName} ${m.lastName}`.trim().toLowerCase() === target;
@@ -72,12 +73,13 @@ async function activeMemberNameCollision(displayName: string): Promise<boolean> 
 
 export async function createVisitorHandler(req: CallableRequest<CreateVisitorInput>): Promise<CreateVisitorResult> {
   const input = parseInput(CreateVisitorInputSchema, req.data);
-  const caller = await requireMember(req);
+  const cp = clubOf(input);
+  const caller = await requireMember(req, cp);
   const actor = await resolveActingMember(caller, input.onBehalfOfMemberId);
 
   const courtesyEmails = input.email ? (input.courtesyEmails ?? false) : false;
   const warnings: string[] = [];
-  if (await activeMemberNameCollision(input.displayName)) {
+  if (await activeMemberNameCollision(cp, input.displayName)) {
     warnings.push(
       `An active member is also named "${input.displayName}" — double check you meant to add a visitor, not invite a member.`,
     );
@@ -88,7 +90,7 @@ export async function createVisitorHandler(req: CallableRequest<CreateVisitorInp
   const visitor = await db.runTransaction(async (tx) => {
     const countSnap = await tx.get(
       db
-        .collection(paths.visitors())
+        .collection(cp.visitors())
         .where('createdByMemberId', '==', actor.memberId)
         .where('createdAt', '>=', yearStart),
     );
@@ -113,16 +115,16 @@ export async function createVisitorHandler(req: CallableRequest<CreateVisitorInp
       createdAt: now,
       updatedAt: now,
     };
-    tx.set(db.doc(paths.visitor(id)), doc);
+    tx.set(db.doc(cp.visitor(id)), doc);
     return doc;
   });
 
   if (actor.onBehalfBy) {
-    await audit({
+    await audit(cp, {
       actorMemberId: actor.onBehalfBy,
       action: 'create_visitor_on_behalf',
       targetMemberId: actor.memberId,
-      entityRef: paths.visitor(visitor.id),
+      entityRef: cp.visitor(visitor.id),
     });
     await createNotification(
       actor.memberId,
@@ -142,8 +144,9 @@ export const createVisitor = onCall(callableOptions, createVisitorHandler);
 
 export async function updateVisitorHandler(req: CallableRequest<UpdateVisitorInput>): Promise<UpdateVisitorResult> {
   const input = parseInput(UpdateVisitorInputSchema, req.data);
-  const caller = await requireMember(req);
-  const ref = db.doc(paths.visitor(input.visitorId));
+  const cp = clubOf(input);
+  const caller = await requireMember(req, cp);
+  const ref = db.doc(cp.visitor(input.visitorId));
 
   const { updated, nameChanged } = await db.runTransaction(async (tx) => {
     const snap = await tx.get(ref);
@@ -171,7 +174,7 @@ export async function updateVisitorHandler(req: CallableRequest<UpdateVisitorInp
   });
 
   if (nameChanged) {
-    await renameVisitorOnFutureEntries(updated.id, updated.displayName);
+    await renameVisitorOnFutureEntries(cp, updated.id, updated.displayName);
   }
 
   return { visitor: updated };
@@ -187,9 +190,9 @@ export const updateVisitor = onCall(callableOptions, updateVisitorHandler);
  * filters `entries where date >= todayNZ()` in code — acceptable at club
  * scale (plan's own words for this exact case).
  */
-async function renameVisitorOnFutureEntries(visitorId: string, displayName: string): Promise<void> {
+async function renameVisitorOnFutureEntries(cp: ClubPaths, visitorId: string, displayName: string): Promise<void> {
   const today = todayNZ();
-  const snap = await db.collection(paths.entries()).where('date', '>=', today).get();
+  const snap = await db.collection(cp.entries()).where('date', '>=', today).get();
   const writer = new BatchWriter();
   const now = new Date().toISOString();
   let any = false;
@@ -220,8 +223,9 @@ async function renameVisitorOnFutureEntries(visitorId: string, displayName: stri
 
 export async function deleteVisitorHandler(req: CallableRequest<DeleteVisitorInput>): Promise<DeleteVisitorResult> {
   const input = parseInput(DeleteVisitorInputSchema, req.data);
-  const caller = await requireMember(req);
-  const ref = db.doc(paths.visitor(input.visitorId));
+  const cp = clubOf(input);
+  const caller = await requireMember(req, cp);
+  const ref = db.doc(cp.visitor(input.visitorId));
 
   const snap = await ref.get();
   const visitor = snap.data() as Visitor | undefined;
@@ -230,7 +234,7 @@ export async function deleteVisitorHandler(req: CallableRequest<DeleteVisitorInp
     throw new HttpsError('permission-denied', 'You do not own this visitor.');
   }
 
-  const future = await futureEntriesReferencing(input.visitorId);
+  const future = await futureEntriesReferencing(cp, input.visitorId);
   if (future.length > 0) {
     throw new HttpsError(
       'failed-precondition',

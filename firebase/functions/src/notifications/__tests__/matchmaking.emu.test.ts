@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { paths, type MemberPrivate, type SetSoloStatusInput } from '@obc/shared';
 import { db } from '../../lib/admin.js';
 import { setSoloStatusHandler } from '../../entries/entries.js';
-import { fakeCallableRequest, makeMember, makeProgramme, notificationsFor, sessionInFuture } from '../../testing/fixtures.js';
+import { fakeCallableRequest, makeMember, makeProgramme, notificationsFor, sessionInFuture, cp } from '../../testing/fixtures.js';
 
 async function optIn(memberId: string): Promise<void> {
   const ref = db.doc(paths.memberPrivate(memberId));
@@ -71,7 +71,7 @@ describe('matchmaking alerts (setSoloStatus -> looking_for_partner)', () => {
     // perspective on this same session) — cancel their listing and have a
     // second poster (a different free member) post again for the same
     // session within the 24h window.
-    await db.doc(paths.entry(`${sessionId}_${poster1}`)).set({ status: 'cancelled' }, { merge: true });
+    await db.doc(cp.entry(`${sessionId}_${poster1}`)).set({ status: 'cancelled' }, { merge: true });
     await setSoloStatusHandler(
       fakeCallableRequest<SetSoloStatusInput>({ year: prog.year, sessionId, status: 'looking_for_partner' }, { uid: poster2 }),
     );

@@ -20,7 +20,8 @@ import {
 } from '@obc/shared';
 import { db } from '../lib/admin.js';
 import { callableOptions } from '../lib/callable.js';
-import { requireMember } from '../lib/context.js';
+import { requireMember, requireUser } from '../lib/context.js';
+import { clubOf } from '../lib/clubs.js';
 import { parseInput } from '../lib/parseInput.js';
 
 const MAX_DEVICES = 10;
@@ -29,11 +30,12 @@ export async function updateMyContactHandler(
   req: CallableRequest<UpdateMyContactInput>,
 ): Promise<{ ok: true }> {
   const input = parseInput(UpdateMyContactInputSchema, req.data);
-  const caller = await requireMember(req);
+  const cp = clubOf(input);
+  const caller = await requireMember(req, cp);
 
   if (input.phone !== undefined) {
     await db
-      .doc(paths.member(caller.uid))
+      .doc(cp.member(caller.uid))
       .set({ phone: input.phone, updatedAt: new Date().toISOString() }, { merge: true });
   }
 
@@ -46,7 +48,7 @@ export async function updateMyPrefsHandler(
   req: CallableRequest<UpdateMyPrefsInput>,
 ): Promise<{ ok: true }> {
   const input = parseInput(UpdateMyPrefsInputSchema, req.data);
-  const caller = await requireMember(req);
+  const caller = await requireUser(req);
 
   await db
     .doc(paths.memberPrivate(caller.uid))
@@ -61,7 +63,7 @@ export async function registerDeviceHandler(
   req: CallableRequest<RegisterDeviceInput>,
 ): Promise<{ ok: true }> {
   const input = parseInput(RegisterDeviceInputSchema, req.data);
-  const caller = await requireMember(req);
+  const caller = await requireUser(req);
   const ref = db.doc(paths.memberPrivate(caller.uid));
 
   await db.runTransaction(async (tx) => {
@@ -104,7 +106,7 @@ export async function unregisterDeviceHandler(
   req: CallableRequest<UnregisterDeviceInput>,
 ): Promise<{ ok: true }> {
   const input = parseInput(UnregisterDeviceInputSchema, req.data);
-  const caller = await requireMember(req);
+  const caller = await requireUser(req);
   const ref = db.doc(paths.memberPrivate(caller.uid));
 
   await db.runTransaction(async (tx) => {

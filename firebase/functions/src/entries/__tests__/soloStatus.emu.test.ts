@@ -15,8 +15,8 @@ import {
   notificationsFor,
   sessionInFuture,
   sessionInPast,
+  cp,
 } from '../../testing/fixtures.js';
-import { paths } from '@obc/shared';
 import {
   claimLookingForPartnerHandler,
   clearSoloStatusHandler,
@@ -151,7 +151,7 @@ describe('setSoloStatus / clearSoloStatus', () => {
     );
     expect(entry.status).toBe('looking_for_partner');
 
-    const auditSnap = await db.collection(paths.auditLog()).where('action', '==', 'set_solo_status_on_behalf').get();
+    const auditSnap = await db.collection(cp.auditLog()).where('action', '==', 'set_solo_status_on_behalf').get();
     expect(auditSnap.docs.some((d) => d.data().actorMemberId === admin && d.data().targetMemberId === m)).toBe(true);
 
     expect(await notificationsFor(m, 'on_behalf_action')).toHaveLength(1);

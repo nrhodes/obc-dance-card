@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import {
-  paths,
   type CancelEntryInput,
   type Entry,
   type RespondToInviteInput,
@@ -18,6 +17,7 @@ import {
   notificationsFor,
   sessionInFuture,
   sessionInPast,
+  cp,
 } from '../../testing/fixtures.js';
 import { entryId } from '../lib.js';
 import { cancelEntryHandler } from '../entries.js';
@@ -47,7 +47,7 @@ function baseEntry(sessionId: string, memberId: string, date: string): Entry {
 }
 
 async function seed(entry: Entry): Promise<void> {
-  await db.doc(paths.entry(entry.id)).set(entry);
+  await db.doc(cp.entry(entry.id)).set(entry);
 }
 
 /** Seeds the I4 shape directly: A (remaining) & B (substituted by member X). */
@@ -134,7 +134,7 @@ describe('cancelEntry — plain pairing', () => {
 
     // Move the session into the past directly (simulating time passing).
     await db
-      .doc(paths.session(prog.year, prog.sessionIds[0]!))
+      .doc(cp.session(prog.year, prog.sessionIds[0]!))
       .set({ date: sessionInPast('monday') }, { merge: true });
 
     const aEntryId = entryId(prog.sessionIds[0]!, a);
@@ -162,7 +162,7 @@ describe('cancelEntry — plain pairing', () => {
       fakeCallableRequest<CancelEntryInput>({ entryId: aEntryId, onBehalfOfMemberId: a }, { uid: admin }),
     );
 
-    const auditSnap = await db.collection(paths.auditLog()).where('action', '==', 'cancel_entry_on_behalf').get();
+    const auditSnap = await db.collection(cp.auditLog()).where('action', '==', 'cancel_entry_on_behalf').get();
     expect(auditSnap.docs.some((d) => d.data().actorMemberId === admin && d.data().targetMemberId === a)).toBe(true);
     expect(await notificationsFor(a, 'on_behalf_action')).toHaveLength(1);
   });
@@ -279,7 +279,7 @@ describe('cancelEntry — visitor pairing', () => {
     const date = sessionInFuture('monday');
     const visitorId = randomUUID();
 
-    await db.doc(paths.visitor(visitorId)).set({
+    await db.doc(cp.visitor(visitorId)).set({
       id: visitorId,
       displayName: 'Courtesy Visitor',
       email: 'courtesy-cancel@example.org',
@@ -313,7 +313,7 @@ describe('cancelEntry — visitor pairing', () => {
     const date = sessionInFuture('monday');
     const visitorId = randomUUID();
 
-    await db.doc(paths.visitor(visitorId)).set({
+    await db.doc(cp.visitor(visitorId)).set({
       id: visitorId,
       displayName: 'No Courtesy Visitor',
       email: 'no-courtesy-cancel@example.org',
@@ -358,7 +358,7 @@ describe('cancelEntry — team entry', () => {
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
-    await db.doc(paths.team(team.id)).set(team);
+    await db.doc(cp.team(team.id)).set(team);
 
     await seed({ ...baseEntry(sessionId, captain, date), teamId: team.id });
     await seed({ ...baseEntry(sessionId, member, date), teamId: team.id });
@@ -392,7 +392,7 @@ describe('cancelEntry — team entry', () => {
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
-    await db.doc(paths.team(team.id)).set(team);
+    await db.doc(cp.team(team.id)).set(team);
     await seed({ ...baseEntry(sessionId, captain, date), teamId: team.id });
 
     await cancelEntryHandler(fakeCallableRequest<CancelEntryInput>({ entryId: entryId(sessionId, captain) }, { uid: captain }));

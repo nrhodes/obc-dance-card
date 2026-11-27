@@ -26,10 +26,15 @@ import {
   type TimeOfDay,
   type Weekday,
   type WeekdayProgramme,
+  DEFAULT_CLUB_ID,
+  clubPaths,
 } from '@obc/shared';
 import { expect } from 'vitest';
 import { auth, db } from '../lib/admin.js';
 import { sessionIdForSeries, slugify } from '../admin/programmeIds.js';
+
+/** Tests run against the one club that exists (plan §21 B14, stage 1a). */
+export const cp = clubPaths(DEFAULT_CLUB_ID);
 
 export interface MakeMemberOptions {
   role?: MemberRole;
@@ -47,7 +52,7 @@ export interface MakeMemberOptions {
 export async function makeMember(email: string, opts: MakeMemberOptions = {}): Promise<string> {
   const user = await auth.createUser({ email, emailVerified: true, disabled: opts.active === false });
   const now = new Date().toISOString();
-  await db.doc(paths.member(user.uid)).set({
+  await db.doc(cp.member(user.uid)).set({
     id: user.uid,
     firstName: opts.firstName ?? 'Test',
     lastName: opts.lastName ?? 'Member',
@@ -209,7 +214,7 @@ export async function makeProgramme(opts: MakeProgrammeOptions): Promise<MadePro
     createdAt: now,
     updatedAt: now,
   };
-  await db.doc(paths.programme(year)).set(programme);
+  await db.doc(cp.programme(year)).set(programme);
 
   const weekdayDoc: WeekdayProgramme = {
     id: weekday,
@@ -220,7 +225,7 @@ export async function makeProgramme(opts: MakeProgrammeOptions): Promise<MadePro
     createdAt: now,
     updatedAt: now,
   };
-  await db.doc(paths.weekday(year, weekday)).set(weekdayDoc);
+  await db.doc(cp.weekday(year, weekday)).set(weekdayDoc);
 
   const sessionIds = opts.dates.map((date) => sessionIdForSeries(seriesId, date));
 
@@ -239,7 +244,7 @@ export async function makeProgramme(opts: MakeProgrammeOptions): Promise<MadePro
     createdAt: now,
     updatedAt: now,
   };
-  await db.doc(paths.seriesDoc(year, seriesId)).set(series);
+  await db.doc(cp.seriesDoc(year, seriesId)).set(series);
 
   const partnerRequired = format !== 'Teams';
   for (let i = 0; i < opts.dates.length; i++) {
@@ -258,7 +263,7 @@ export async function makeProgramme(opts: MakeProgrammeOptions): Promise<MadePro
       createdAt: now,
       updatedAt: now,
     };
-    await db.doc(paths.session(year, sessionIds[i]!)).set(session);
+    await db.doc(cp.session(year, sessionIds[i]!)).set(session);
   }
 
   return { year, weekday, seriesId, sessionIds };
@@ -270,7 +275,7 @@ export async function makeProgramme(opts: MakeProgrammeOptions): Promise<MadePro
 
 /** Every entry doc for one session, straight from Firestore. */
 export async function entriesForSession(sessionId: string): Promise<Entry[]> {
-  const snap = await db.collection(paths.entries()).where('sessionId', '==', sessionId).get();
+  const snap = await db.collection(cp.entries()).where('sessionId', '==', sessionId).get();
   return snap.docs.map((d) => d.data() as Entry);
 }
 
@@ -289,7 +294,7 @@ export async function assertSessionPairingValid(sessionId: string): Promise<Entr
 
 /** Every entry doc currently tagged with `teamId`, straight from Firestore. */
 export async function entriesForTeam(teamId: string): Promise<Entry[]> {
-  const snap = await db.collection(paths.entries()).where('teamId', '==', teamId).get();
+  const snap = await db.collection(cp.entries()).where('teamId', '==', teamId).get();
   return snap.docs.map((d) => d.data() as Entry);
 }
 
@@ -300,9 +305,9 @@ export async function entriesForTeam(teamId: string): Promise<Entry[]> {
  * callers can chain further assertions without a second read.
  */
 export async function assertTeamValid(teamId: string): Promise<{ team: Team; series: Series; entries: Entry[] }> {
-  const teamSnap = await db.doc(paths.team(teamId)).get();
+  const teamSnap = await db.doc(cp.team(teamId)).get();
   const team = teamSnap.data() as Team;
-  const seriesSnap = await db.doc(paths.seriesDoc(team.year, team.seriesId)).get();
+  const seriesSnap = await db.doc(cp.seriesDoc(team.year, team.seriesId)).get();
   const series = seriesSnap.data() as Series;
   const entries = await entriesForTeam(teamId);
   const issues = validateTeamGroup(team, series, entries);

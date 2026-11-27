@@ -9,7 +9,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
-import { paths, sessionCutoff, type Entry } from '@obc/shared';
+import { sessionCutoff, type Entry } from '@obc/shared';
 import { db } from '../firebase';
 import type { AppError } from '../firebase';
 import { useAuth } from '../auth/useAuth';
@@ -49,6 +49,7 @@ import { SubstituteDialog } from '../components/SubstituteDialog';
 import type { PartnerRefInput } from '../components/PartnerPickerDialog';
 import { TeamPanel } from '../components/TeamPanel';
 import type { VisitorFormValues } from '../components/VisitorForm';
+import { useClub } from '../club/useClub';
 
 interface InviteDialogState {
   initialMemberId: string | null;
@@ -60,6 +61,7 @@ interface ClaimTarget {
 }
 
 export function SessionScreen() {
+  const cp = useClub();
   const { year: yearParam, sessionId } = useParams<{ year: string; sessionId: string }>();
   const year = Number(yearParam);
   const { sessions, series, weekdays, loading: programmeLoading } = useProgramme(year);
@@ -94,7 +96,7 @@ export function SessionScreen() {
     // `entries` rule requires `resource.data.cohort == callerCohort()` to be
     // provable — add it explicitly.
     const q = query(
-      collection(db, paths.entries()),
+      collection(db, cp.entries()),
       where('sessionId', '==', sessionId),
       where('cohort', '==', member.cohort),
     );
@@ -112,7 +114,7 @@ export function SessionScreen() {
         setEntriesLoaded(true);
       },
     );
-  }, [sessionId, member?.cohort]);
+  }, [sessionId, member?.cohort, cp]);
 
   const seriesTeams = seriesDoc ? teamsCtx.teamsForSeries(seriesDoc.id) : [];
   const myTeam = seriesDoc ? teamsCtx.myTeamForSeries(seriesDoc.id) : null;

@@ -19,7 +19,7 @@ import {
 } from '@obc/shared';
 import { auth, db } from '../lib/admin.js';
 import { callableOptions } from '../lib/callable.js';
-import { requireMember } from '../lib/context.js';
+import { requireUser } from '../lib/context.js';
 import { createNotification } from '../notifications/create.js';
 import { parseInput } from '../lib/parseInput.js';
 
@@ -48,7 +48,7 @@ const RECENT_LOGIN_WINDOW_SECONDS = 10 * 60;
  */
 export async function setPasswordHandler(req: CallableRequest<SetPasswordInput>): Promise<{ ok: true }> {
   const { password } = parseInput(SetPasswordInputSchema, req.data);
-  const caller = await requireMember(req);
+  const caller = await requireUser(req);
 
   const authTime = req.auth?.token.auth_time;
   const nowSeconds = Date.now() / 1000;
@@ -84,7 +84,7 @@ export async function markPasswordSetHandler(
   req: CallableRequest<MarkPasswordSetInput>,
 ): Promise<{ ok: true }> {
   parseInput(MarkPasswordSetInputSchema, req.data);
-  const caller = await requireMember(req);
+  const caller = await requireUser(req);
 
   // Do not take the client's word for it: `hasPassword` drives UI and the
   // security notification, so confirm Auth actually has a password provider
@@ -115,7 +115,7 @@ export async function removePasswordHandler(
   req: CallableRequest<RemovePasswordInput>,
 ): Promise<{ ok: true }> {
   parseInput(RemovePasswordInputSchema, req.data);
-  const caller = await requireMember(req);
+  const caller = await requireUser(req);
 
   // Firebase has no "unset password" API: rotate to an unknowable value.
   const unknowablePassword = randomBytes(64).toString('base64');

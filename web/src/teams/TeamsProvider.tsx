@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
-import { paths, type Team } from '@obc/shared';
+import { type Team } from '@obc/shared';
 import { db } from '../firebase';
 import { useAuth } from '../auth/useAuth';
 import { useEffectiveMember } from '../admin/useEffectiveMember';
 import { TeamsContext, type TeamsContextValue } from './TeamsContext';
+import { useClub } from '../club/useClub';
 
 export function TeamsProvider({ children }: { children: ReactNode }) {
+  const cp = useClub();
   // Plan Phase 6b task deliverable 2: `myTeamForSeries` reads as the acted-on
   // member while an admin is acting on their behalf.
   const { effectiveMemberId: selfId } = useEffectiveMember();
@@ -27,7 +29,7 @@ export function TeamsProvider({ children }: { children: ReactNode }) {
       return;
     }
     const q = query(
-      collection(db, paths.teams()),
+      collection(db, cp.teams()),
       where('status', 'in', ['forming', 'active']),
       where('cohort', '==', ownCohort),
     );
@@ -45,7 +47,7 @@ export function TeamsProvider({ children }: { children: ReactNode }) {
         setLoading(false);
       },
     );
-  }, [ownCohort]);
+  }, [ownCohort, cp]);
 
   const teamsForSeries = useCallback((seriesId: string) => teams.filter((t) => t.seriesId === seriesId), [teams]);
 

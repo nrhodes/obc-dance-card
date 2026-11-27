@@ -1,5 +1,6 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { AuthProvider } from './auth/AuthProvider';
+import { ClubProvider } from './club/ClubProvider';
 import { ActingAsProvider } from './admin/ActingAsProvider';
 import { MembersDirectoryProvider } from './members/MembersDirectoryProvider';
 import { ProgrammeProvider } from './programme/ProgrammeProvider';
@@ -28,6 +29,7 @@ import { PwaUpdater } from './pwa/PwaUpdater';
 export function App() {
   return (
     <ErrorBoundary>
+      <ClubProvider>
       <AuthProvider>
         <PwaUpdater />
         <Routes>
@@ -83,6 +85,7 @@ export function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </AuthProvider>
+      </ClubProvider>
     </ErrorBoundary>
   );
 }

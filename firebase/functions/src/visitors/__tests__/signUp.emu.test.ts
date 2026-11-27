@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import type { CreateVisitorInput, SignUpWithVisitorInput } from '@obc/shared';
-import { paths } from '@obc/shared';
 import { db } from '../../lib/admin.js';
 import {
   assertSessionPairingValid,
@@ -9,6 +8,7 @@ import {
   makeProgramme,
   sessionInFuture,
   sessionInPast,
+  cp,
 } from '../../testing/fixtures.js';
 import { createVisitorHandler } from '../visitors.js';
 import { signUpWithVisitorHandler } from '../signUp.js';
@@ -36,7 +36,7 @@ describe('signUpWithVisitor — session scope', () => {
 
     await assertSessionPairingValid(sessionId);
 
-    const updatedVisitor = (await db.doc(paths.visitor(visitor.id)).get()).data();
+    const updatedVisitor = (await db.doc(cp.visitor(visitor.id)).get()).data();
     expect(updatedVisitor!.lastUsedAt).not.toBe(visitor.lastUsedAt);
   });
 
@@ -115,7 +115,7 @@ describe('signUpWithVisitor — session scope', () => {
     ).rejects.toMatchObject({ code: 'failed-precondition' });
 
     // s1 must remain untouched by the failed series call (atomic — nothing written).
-    const s1Entries = await db.collection(paths.entries()).where('sessionId', '==', s1).get();
+    const s1Entries = await db.collection(cp.entries()).where('sessionId', '==', s1).get();
     expect(s1Entries.empty).toBe(true);
   });
 });

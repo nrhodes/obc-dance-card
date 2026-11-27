@@ -10,7 +10,6 @@ import { onCall, HttpsError, type CallableRequest } from 'firebase-functions/v2/
 import {
   BroadcastInputSchema,
   ListAuditLogInputSchema,
-  paths,
   todayNZ,
   type AuditLogEntry,
   type BroadcastInput,
@@ -24,6 +23,7 @@ import { db } from '../lib/admin.js';
 import { audit } from '../lib/audit.js';
 import { callableOptions } from '../lib/callable.js';
 import { requireAdmin } from '../lib/context.js';
+import { clubOf } from '../lib/clubs.js';
 import { parseInput } from '../lib/parseInput.js';
 import { assertRateLimit } from '../lib/rateLimit.js';
 import { createNotification } from '../notifications/create.js';
@@ -36,7 +36,8 @@ const NOTIFY_CHUNK_SIZE = 50;
 
 export async function broadcastHandler(req: CallableRequest<BroadcastInput>): Promise<BroadcastResult> {
   const input = parseInput(BroadcastInputSchema, req.data);
-  const caller = await requireAdmin(req);
+  const cp = clubOf(input);
+  const caller = await requireAdmin(req, cp);
 
   await assertRateLimit('broadcast', caller.uid, BROADCAST_DAILY_LIMIT, BROADCAST_WINDOW_SEC);
 
@@ -45,7 +46,7 @@ export async function broadcastHandler(req: CallableRequest<BroadcastInput>): Pr
   // and it would leak that the club is actively communicating with members
   // outside the reviewer's synthetic world) — restrict to cohort 'club'.
   const activeSnap = await db
-    .collection(paths.members())
+    .collection(cp.members())
     .where('active', '==', true)
     .where('cohort', '==', 'club')
     .get();
@@ -57,7 +58,7 @@ export async function broadcastHandler(req: CallableRequest<BroadcastInput>): Pr
   } else {
     const weekdaySet = new Set(input.weekdays);
     const today = todayNZ();
-    const entriesSnap = await db.collection(paths.entries()).where('date', '>=', today).get();
+    const entriesSnap = await db.collection(cp.entries()).where('date', '>=', today).get();
     const membersWithMatchingSession = new Set<string>();
     for (const doc of entriesSnap.docs) {
       const entry = doc.data() as Entry;
@@ -72,7 +73,7 @@ export async function broadcastHandler(req: CallableRequest<BroadcastInput>): Pr
     await Promise.all(chunk.map((memberId) => createNotification(memberId, 'broadcast', input.title, input.body, {})));
   }
 
-  await audit({
+  await audit(cp, {
     actorMemberId: caller.uid,
     action: 'broadcast_sent',
     detail: { recipients: recipientIds.length, title: input.title },
@@ -89,7 +90,8 @@ const DEFAULT_LIMIT = 50;
 
 export async function listAuditLogHandler(req: CallableRequest<ListAuditLogInput>): Promise<ListAuditLogResult> {
   const input = parseInput(ListAuditLogInputSchema, req.data);
-  await requireAdmin(req);
+  const cp = clubOf(input);
+  await requireAdmin(req, cp);
 
   const limit = input.limit ?? DEFAULT_LIMIT;
   const filterCount = [input.actorMemberId, input.action, input.targetMemberId].filter((v) => v !== undefined).length;
@@ -97,7 +99,7 @@ export async function listAuditLogHandler(req: CallableRequest<ListAuditLogInput
     throw new HttpsError('invalid-argument', 'Filter by only one of actorMemberId, action, or targetMemberId at a time.');
   }
 
-  let query: FirebaseFirestore.Query = db.collection(paths.auditLog());
+  let query: FirebaseFirestore.Query = db.collection(cp.auditLog());
   if (input.actorMemberId) query = query.where('actorMemberId', '==', input.actorMemberId);
   else if (input.action) query = query.where('action', '==', input.action);
   else if (input.targetMemberId) query = query.where('targetMemberId', '==', input.targetMemberId);

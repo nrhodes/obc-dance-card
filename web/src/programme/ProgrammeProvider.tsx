@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { collection, limit, onSnapshot, orderBy, query, where } from 'firebase/firestore';
-import { paths, type Programme, type Series, type Session, type WeekdayProgramme } from '@obc/shared';
+import { type Programme, type Series, type Session, type WeekdayProgramme } from '@obc/shared';
 import { db } from '../firebase';
 import { ProgrammeContext, type ProgrammeContextValue, type ProgrammeYearData } from './ProgrammeContext';
+import { useClub } from '../club/useClub';
 
 /**
  * How many of the newest published years to load at once (plan §21 B3:
@@ -33,6 +34,7 @@ type YearUpdate = Partial<Omit<YearSubState, 'loaded'>> & { loaded?: true };
  * all three listeners.
  */
 function YearSubscriber({ year, onUpdate }: { year: number; onUpdate: (year: number, patch: YearUpdate) => void }) {
+  const cp = useClub();
   useEffect(() => {
     let weekdaysDone = false;
     let seriesDone = false;
@@ -46,7 +48,7 @@ function YearSubscriber({ year, onUpdate }: { year: number; onUpdate: (year: num
     };
 
     const unsubWeekdays = onSnapshot(
-      collection(db, paths.weekdays(year)),
+      collection(db, cp.weekdays(year)),
       (snap) => {
         onUpdate(year, { weekdays: snap.docs.map((d) => d.data() as WeekdayProgramme) });
         weekdaysDone = true;
@@ -55,7 +57,7 @@ function YearSubscriber({ year, onUpdate }: { year: number; onUpdate: (year: num
       onSubError('weekdays'),
     );
     const unsubSeries = onSnapshot(
-      collection(db, paths.series(year)),
+      collection(db, cp.series(year)),
       (snap) => {
         onUpdate(year, { series: snap.docs.map((d) => d.data() as Series) });
         seriesDone = true;
@@ -64,7 +66,7 @@ function YearSubscriber({ year, onUpdate }: { year: number; onUpdate: (year: num
       onSubError('series'),
     );
     const unsubSessions = onSnapshot(
-      collection(db, paths.sessions(year)),
+      collection(db, cp.sessions(year)),
       (snap) => {
         onUpdate(year, { sessions: snap.docs.map((d) => d.data() as Session) });
         sessionsDone = true;
@@ -78,19 +80,20 @@ function YearSubscriber({ year, onUpdate }: { year: number; onUpdate: (year: num
       unsubSeries();
       unsubSessions();
     };
-  }, [year, onUpdate]);
+  }, [year, onUpdate, cp]);
 
   return null;
 }
 
 export function ProgrammeProvider({ children }: { children: ReactNode }) {
+  const cp = useClub();
   const [programmes, setProgrammes] = useState<Programme[]>([]);
   const [programmeLoaded, setProgrammeLoaded] = useState(false);
   const [programmeError, setProgrammeError] = useState<{ code: string } | null>(null);
 
   useEffect(() => {
     const q = query(
-      collection(db, paths.programmes()),
+      collection(db, cp.programmes()),
       where('status', '==', 'published'),
       orderBy('year', 'desc'),
       limit(MAX_YEARS),
@@ -110,7 +113,7 @@ export function ProgrammeProvider({ children }: { children: ReactNode }) {
       },
     );
     return unsub;
-  }, []);
+  }, [cp]);
 
   // `programmes` is already ordered newest-year-first (the query's `orderBy`)
   // — every merged array below inherits that order, which is what lets

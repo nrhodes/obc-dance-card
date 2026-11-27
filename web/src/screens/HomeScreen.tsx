@@ -8,7 +8,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { collection, documentId, onSnapshot, query, where } from 'firebase/firestore';
-import { paths, todayNZ, type Entry, type Team } from '@obc/shared';
+import { todayNZ, type Entry, type Team } from '@obc/shared';
 import { db } from '../firebase';
 import { useAuth } from '../auth/useAuth';
 import { useEffectiveMember } from '../admin/useEffectiveMember';
@@ -17,6 +17,7 @@ import { useMyEntries } from '../entries/useMyEntries';
 import { formatDateNZ } from '../lib/format';
 import { buildPastRows, groupCardEntries, type CardRow } from '../lib/card';
 import { SubscriptionError } from '../components/SubscriptionError';
+import { useClub } from '../club/useClub';
 
 const PAST_LIMIT = 10;
 const MAX_TEAM_IDS = 10; // Firestore `in` query cap
@@ -26,6 +27,7 @@ function entryYear(entry: Entry): number {
 }
 
 export function HomeScreen() {
+  const cp = useClub();
   const { member } = useAuth();
   // Plan Phase 6b task deliverable 2: while an admin is acting on behalf of
   // a member, "My dance card" shows that member's card instead of the
@@ -60,7 +62,7 @@ export function HomeScreen() {
       return;
     }
     const q = query(
-      collection(db, paths.teams()),
+      collection(db, cp.teams()),
       where(documentId(), 'in', teamIds),
       where('cohort', '==', member.cohort),
     );
@@ -70,7 +72,7 @@ export function HomeScreen() {
       () => setTeams([]),
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [teamIdsKey, member?.cohort]);
+  }, [teamIdsKey, member?.cohort, cp]);
 
   const groups = groupCardEntries(futureEntries, sessions, series, weekdays, teams);
   const pastRows = buildPastRows(pastEntries, sessions, series, teams).slice(0, PAST_LIMIT);

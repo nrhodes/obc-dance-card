@@ -5,7 +5,7 @@
  * repairs) listed in `AuditAction`.
  */
 import { randomUUID } from 'node:crypto';
-import type { AuditAction, AuditLogEntry } from '@obc/shared';
+import type { AuditAction, AuditLogEntry, ClubPaths } from '@obc/shared';
 import { db } from './admin.js';
 
 export interface AuditInput {
@@ -19,7 +19,8 @@ export interface AuditInput {
   detail?: Record<string, unknown>;
 }
 
-export async function audit(entry: AuditInput): Promise<void> {
+/** Appends to `cp`'s club's audit log — each club has its own (plan §21 B14.2). */
+export async function audit(cp: ClubPaths, entry: AuditInput): Promise<void> {
   const id = randomUUID();
   const doc: AuditLogEntry = {
     id,
@@ -34,5 +35,5 @@ export async function audit(entry: AuditInput): Promise<void> {
   };
   // `ignoreUndefinedProperties` (set in lib/admin.ts) drops the unset optional
   // fields above rather than rejecting the write.
-  await db.collection('auditLog').doc(id).set(doc);
+  await db.doc(cp.auditLogEntry(id)).set(doc);
 }

@@ -94,7 +94,7 @@ final class ProgrammeStore: ObservableObject {
 
     func start() {
         guard programmesListener == nil else { return }
-        programmesListener = FirebaseService.db.collection(Paths.programmes)
+        programmesListener = FirebaseService.db.collection(Club.current.programmes)
             .whereField("status", isEqualTo: ProgrammeStatus.published.rawValue)
             .order(by: "year", descending: true)
             .limit(to: Self.maxYears)
@@ -138,7 +138,7 @@ final class ProgrammeStore: ObservableObject {
             yearData[y] = YearData()
             let db = FirebaseService.db
             yearListeners[y] = [
-                db.collection(Paths.weekdays(y)).addSnapshotListener { [weak self] snap, err in
+                db.collection(Club.current.weekdays(y)).addSnapshotListener { [weak self] snap, err in
                     Task { @MainActor in
                         guard let self, self.yearData[y] != nil else { return }
                         if let err { logSubscriptionFailure("weekdays", err); self.error = SubscriptionError(code: "\((err as NSError).code)", resource: "the programme") }
@@ -149,7 +149,7 @@ final class ProgrammeStore: ObservableObject {
                         self.recompute()
                     }
                 },
-                db.collection(Paths.series(y)).addSnapshotListener { [weak self] snap, err in
+                db.collection(Club.current.series(y)).addSnapshotListener { [weak self] snap, err in
                     Task { @MainActor in
                         guard let self, self.yearData[y] != nil else { return }
                         if let err { logSubscriptionFailure("series", err); self.error = SubscriptionError(code: "\((err as NSError).code)", resource: "the programme") }
@@ -160,7 +160,7 @@ final class ProgrammeStore: ObservableObject {
                         self.recompute()
                     }
                 },
-                db.collection(Paths.sessions(y)).addSnapshotListener { [weak self] snap, err in
+                db.collection(Club.current.sessions(y)).addSnapshotListener { [weak self] snap, err in
                     Task { @MainActor in
                         guard let self, self.yearData[y] != nil else { return }
                         if let err { logSubscriptionFailure("sessions", err); self.error = SubscriptionError(code: "\((err as NSError).code)", resource: "the programme") }
@@ -224,7 +224,7 @@ final class MembersDirectoryStore: ObservableObject {
         stop()
         self.cohort = cohort
         loading = true
-        listener = FirebaseService.db.collection(Paths.members)
+        listener = FirebaseService.db.collection(Club.current.members)
             .whereField("active", isEqualTo: true)
             .whereField("cohort", isEqualTo: cohort.rawValue)
             .addSnapshotListener { [weak self] snap, err in
@@ -289,7 +289,7 @@ final class InvitesStore: ObservableObject {
         }
         loading = true
 
-        let invites = FirebaseService.db.collection(Paths.invites)
+        let invites = FirebaseService.db.collection(Club.current.invites)
 
         listeners.append(
             invites
@@ -476,7 +476,7 @@ final class TeamsStore: ObservableObject {
         self.selfId = selfId
         self.cohort = cohort
         loading = true
-        listener = FirebaseService.db.collection(Paths.teams)
+        listener = FirebaseService.db.collection(Club.current.teams)
             .whereField("status", in: [TeamStatus.forming.rawValue, TeamStatus.active.rawValue])
             .whereField("cohort", isEqualTo: cohort.rawValue)
             .addSnapshotListener { [weak self] snap, err in
@@ -537,7 +537,7 @@ final class VisitorsStore: ObservableObject {
         }
         loading = true
 
-        listener = FirebaseService.db.collection(Paths.visitors)
+        listener = FirebaseService.db.collection(Club.current.visitors)
             .whereField("createdByMemberId", isEqualTo: uid)
             .order(by: "lastUsedAt", descending: true)
             .addSnapshotListener { [weak self] snap, err in
@@ -588,7 +588,7 @@ final class MyEntriesStore: ObservableObject {
             return
         }
         loading = true
-        listener = FirebaseService.db.collection(Paths.entries)
+        listener = FirebaseService.db.collection(Club.current.entries)
             .whereField("memberId", isEqualTo: uid)
             .order(by: "date")
             .addSnapshotListener { [weak self] snap, err in

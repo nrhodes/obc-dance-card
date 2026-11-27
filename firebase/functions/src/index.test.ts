@@ -7,8 +7,9 @@ import { describe, expect, it } from 'vitest';
  */
 describe('functions ↔ shared wiring', () => {
   it('imports @obc/shared and runs a validator', async () => {
-    const { parseWeekday, paths } = await import('@obc/shared');
+    const { parseWeekday, clubPaths, DEFAULT_CLUB_ID } = await import('@obc/shared');
     expect(parseWeekday('Monday')).toBe('monday');
-    expect(paths.member('abc')).toBe('members/abc');
+    // Stage 1a (plan §21 B14.8): the club is threaded through, the data has not moved.
+    expect(clubPaths(DEFAULT_CLUB_ID).member('abc')).toBe('members/abc');
   });
 });

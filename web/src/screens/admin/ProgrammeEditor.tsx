@@ -18,7 +18,7 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import { collection, onSnapshot, orderBy, query, where } from 'firebase/firestore';
-import { paths, type Entry, type Programme, type Series, type Session, type WeekdayProgramme } from '@obc/shared';
+import { type Entry, type Programme, type Series, type Session, type WeekdayProgramme } from '@obc/shared';
 import { db } from '../../firebase';
 import { formatDateNZ, formatTimeOfDay } from '../../lib/format';
 import { formatSignupSummary, seriesSignupRange, sessionSignupCounts, type SignupCounts } from '../../lib/signupCounts';
@@ -27,6 +27,7 @@ import { useMembersDirectory } from '../../members/useMembersDirectory';
 import { SeriesEditDialog } from './SeriesEditDialog';
 import { SessionEditDialog } from './SessionEditDialog';
 import { WeekdayEditDialog } from './WeekdayEditDialog';
+import { useClub } from '../../club/useClub';
 
 type EditorDialog =
   | { kind: 'series'; series: Series }
@@ -36,6 +37,7 @@ type EditorDialog =
 const EMPTY_SIGNUP_COUNTS: SignupCounts = { pairs: 0, teams: 0, looking: 0, available: 0, unavailable: 0, total: 0 };
 
 export function ProgrammeEditor() {
+  const cp = useClub();
   const { nameOf } = useMembersDirectory();
   const [programmes, setProgrammes] = useState<Programme[]>([]);
   const [year, setYear] = useState<number | null>(null);
@@ -50,7 +52,7 @@ export function ProgrammeEditor() {
 
   useEffect(() => {
     return onSnapshot(
-      query(collection(db, paths.programmes()), orderBy('year', 'desc')),
+      query(collection(db, cp.programmes()), orderBy('year', 'desc')),
       (snap) => {
         const rows = snap.docs.map((d) => d.data() as Programme);
         setProgrammes(rows);
@@ -61,7 +63,7 @@ export function ProgrammeEditor() {
         setError({ code: err.code });
       },
     );
-  }, []);
+  }, [cp]);
 
   useEffect(() => {
     if (year == null) {
@@ -72,7 +74,7 @@ export function ProgrammeEditor() {
       return;
     }
     const unsubWeekdays = onSnapshot(
-      collection(db, paths.weekdays(year)),
+      collection(db, cp.weekdays(year)),
       (snap) => setWeekdays(snap.docs.map((d) => d.data() as WeekdayProgramme)),
       (err) => {
         console.error('subscription_failed', 'admin_programme_editor_weekdays', err.code);
@@ -80,7 +82,7 @@ export function ProgrammeEditor() {
       },
     );
     const unsubSeries = onSnapshot(
-      collection(db, paths.series(year)),
+      collection(db, cp.series(year)),
       (snap) => setSeries(snap.docs.map((d) => d.data() as Series)),
       (err) => {
         console.error('subscription_failed', 'admin_programme_editor_series', err.code);
@@ -88,7 +90,7 @@ export function ProgrammeEditor() {
       },
     );
     const unsubSessions = onSnapshot(
-      collection(db, paths.sessions(year)),
+      collection(db, cp.sessions(year)),
       (snap) => setSessions(snap.docs.map((d) => d.data() as Session)),
       (err) => {
         console.error('subscription_failed', 'admin_programme_editor_sessions', err.code);
@@ -96,7 +98,7 @@ export function ProgrammeEditor() {
       },
     );
     const unsubEntries = onSnapshot(
-      query(collection(db, paths.entries()), where('date', '>=', `${year}-01-01`), where('date', '<=', `${year}-12-31`)),
+      query(collection(db, cp.entries()), where('date', '>=', `${year}-01-01`), where('date', '<=', `${year}-12-31`)),
       (snap) => setEntries(snap.docs.map((d) => d.data() as Entry)),
       (err) => {
         console.error('subscription_failed', 'admin_programme_editor_entries', err.code);
@@ -109,7 +111,7 @@ export function ProgrammeEditor() {
       unsubSessions();
       unsubEntries();
     };
-  }, [year]);
+  }, [year, cp]);
 
   // One grouping pass over the year's entries, then one aggregation per
   // session — avoids an O(sessions × entries) scan. `total` here is the

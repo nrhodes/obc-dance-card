@@ -13,17 +13,18 @@ import {
   isValidEmail,
   normaliseEmail,
   parseGrade,
-  paths,
   type CsvRowError,
   type ImportMembersInput,
   type Member,
   type MemberGrade,
   type MemberImportReport,
   type MemberPrivate,
+  paths,
 } from '@obc/shared';
 import { auth, db } from '../lib/admin.js';
 import { callableOptions } from '../lib/callable.js';
 import { requireAdmin } from '../lib/context.js';
+import { clubOf } from '../lib/clubs.js';
 import { audit } from '../lib/audit.js';
 import { BatchWriter } from '../lib/batchWriter.js';
 import { provisionMember } from './provisionMember.js';
@@ -155,7 +156,8 @@ function parseAndValidateCsv(csv: string): {
 
 export async function importMembersHandler(req: CallableRequest<ImportMembersInput>): Promise<MemberImportReport> {
   const input = parseInput(ImportMembersInputSchema, req.data);
-  const caller = await requireAdmin(req);
+  const cp = clubOf(input);
+  const caller = await requireAdmin(req, cp);
 
   const { rows, errors, mentionedEmails } = parseAndValidateCsv(input.csv);
   // Deactivation is keyed on "absent from the file", and must never be
@@ -175,7 +177,7 @@ export async function importMembersHandler(req: CallableRequest<ImportMembersInp
 
   for (const row of rows) {
     try {
-      const result = await provisionMember(
+      const result = await provisionMember(cp,
         { firstName: row.firstName, lastName: row.lastName, emailLower: row.emailLower, phone: row.phone, grade: row.grade },
         { dryRun: !!input.dryRun, writer },
       );
@@ -185,7 +187,7 @@ export async function importMembersHandler(req: CallableRequest<ImportMembersInp
         // member. Never during a dry run (no member was actually created —
         // `result.memberId` is null in that case too).
         if (!input.dryRun && result.memberId) {
-          await promoteVisitorsForNewMember(result.memberId, row.emailLower, caller.uid);
+          await promoteVisitorsForNewMember(cp, result.memberId, row.emailLower, caller.uid);
         }
       } else if (result.outcome === 'updated') updated++;
       else unchanged++;
@@ -201,13 +203,13 @@ export async function importMembersHandler(req: CallableRequest<ImportMembersInp
   // Members present in Firestore but absent from the file: deactivate
   // (never delete, never an admin). Two passes: first collect candidates, then
   // apply — so a wrong/partial file cannot wipe out the club in one click.
-  const allPrivateSnap = await db.collection('memberPrivate').get();
+  const allPrivateSnap = await db.collection(paths.memberPrivates()).get();
   const toDeactivate: Array<{ uid: string; memberRef: FirebaseFirestore.DocumentReference }> = [];
   let activeCount = 0;
   for (const privateDoc of allPrivateSnap.docs) {
     const emailLower = (privateDoc.data() as MemberPrivate).emailLower;
     const uid = privateDoc.id;
-    const memberRef = db.doc(paths.member(uid));
+    const memberRef = db.doc(cp.member(uid));
     const memberSnap = await memberRef.get();
     const member = memberSnap.data() as Member | undefined;
     if (!member || member.active !== true) continue; // already inactive: no-op
@@ -252,7 +254,7 @@ export async function importMembersHandler(req: CallableRequest<ImportMembersInp
   const report: MemberImportReport = { importId, added, updated, deactivated, unchanged, errors, warnings };
 
   if (!input.dryRun) {
-    await db.doc(paths.import(importId)).set({
+    await db.doc(cp.import(importId)).set({
       id: importId,
       kind: 'members',
       actorMemberId: caller.uid,
@@ -261,10 +263,10 @@ export async function importMembersHandler(req: CallableRequest<ImportMembersInp
       report: redactImportReport(report),
     });
 
-    await audit({
+    await audit(cp, {
       actorMemberId: caller.uid,
       action: 'member_import',
-      entityRef: paths.import(importId),
+      entityRef: cp.import(importId),
       detail: { added, updated, deactivated, unchanged, errorCount: errors.length, warningCount: warnings.length },
     });
   }

@@ -90,7 +90,7 @@ final class AuthModel: ObservableObject {
         memberDocState = .pending
         recomputeStatus()
 
-        memberListener = FirebaseService.db.document(Paths.member(uid))
+        memberListener = FirebaseService.db.document(Club.current.member(uid))
             .addSnapshotListener { [weak self] snapshot, error in
                 Task { @MainActor in
                     guard let self else { return }

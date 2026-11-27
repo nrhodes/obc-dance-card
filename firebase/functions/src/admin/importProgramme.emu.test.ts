@@ -1,8 +1,7 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import type { Entry, ImportProgrammeInput } from '@obc/shared';
-import { paths } from '@obc/shared';
 import { db } from '../lib/admin.js';
-import { fakeCallableRequest, makeMember } from '../testing/fixtures.js';
+import { fakeCallableRequest, makeMember, cp } from '../testing/fixtures.js';
 import { importProgrammeHandler } from './importProgramme.js';
 
 function weekdaysCsv(rows: string[][]): string {
@@ -43,7 +42,7 @@ async function adminReq(input: ImportProgrammeInput) {
 }
 
 async function programmeExists(year: number): Promise<boolean> {
-  const snap = await db.doc(paths.programme(year)).get();
+  const snap = await db.doc(cp.programme(year)).get();
   return snap.exists;
 }
 
@@ -90,14 +89,14 @@ describe('importProgramme', () => {
     expect(report.series).toBe(1);
     expect(report.sessions).toBe(2);
 
-    const programmeSnap = await db.doc(paths.programme(year)).get();
+    const programmeSnap = await db.doc(cp.programme(year)).get();
     expect(programmeSnap.data()).toMatchObject({ status: 'draft', year });
 
-    const weekdaySnap = await db.doc(paths.weekday(year, 'monday')).get();
+    const weekdaySnap = await db.doc(cp.weekday(year, 'monday')).get();
     expect(weekdaySnap.data()).toMatchObject({ id: 'monday', startTime: '13:00', seatedByTime: '12:45' });
 
     const seriesId = 'monday-marion-taylor-pairs';
-    const seriesSnap = await db.doc(paths.seriesDoc(year, seriesId)).get();
+    const seriesSnap = await db.doc(cp.seriesDoc(year, seriesId)).get();
     const seriesData = seriesSnap.data();
     expect(seriesData).toMatchObject({
       id: seriesId,
@@ -111,7 +110,7 @@ describe('importProgramme', () => {
     // sorted ascending by date, regardless of CSV order.
     expect(seriesData?.sessionIds).toEqual([`${seriesId}-${mondayDates[0]}`, `${seriesId}-${mondayDates[1]}`]);
 
-    const sessionSnap = await db.doc(paths.session(year, `${seriesId}-${mondayDates[0]}`)).get();
+    const sessionSnap = await db.doc(cp.session(year, `${seriesId}-${mondayDates[0]}`)).get();
     expect(sessionSnap.data()).toMatchObject({
       date: mondayDates[0],
       weekday: 'monday',
@@ -206,7 +205,7 @@ describe('importProgramme', () => {
 
   it('refuses to overwrite an already-published year without replace: true', async () => {
     const year = freshYear();
-    await db.doc(paths.programme(year)).set({ id: String(year), year, status: 'published', createdAt: 'now', updatedAt: 'now' });
+    await db.doc(cp.programme(year)).set({ id: String(year), year, status: 'published', createdAt: 'now', updatedAt: 'now' });
 
     await expect(
       importProgrammeHandler(
@@ -235,7 +234,7 @@ describe('importProgramme', () => {
       }),
     );
     expect(initial.errors).toEqual([]);
-    await db.doc(paths.programme(year)).update({ status: 'published', publishedAt: 'now' });
+    await db.doc(cp.programme(year)).update({ status: 'published', publishedAt: 'now' });
 
     const removedSessionId = `${seriesId}-${d2}`;
     const entry: Entry = {
@@ -257,7 +256,7 @@ describe('importProgramme', () => {
       createdAt: 'now',
       updatedAt: 'now',
     };
-    await db.doc(paths.entry(entry.id)).set(entry);
+    await db.doc(cp.entry(entry.id)).set(entry);
 
     await expect(
       importProgrammeHandler(
@@ -272,7 +271,7 @@ describe('importProgramme', () => {
     ).rejects.toMatchObject({ code: 'failed-precondition' });
 
     // Nothing was touched: the removed session doc is still there.
-    const stillThere = await db.doc(paths.session(year, removedSessionId)).get();
+    const stillThere = await db.doc(cp.session(year, removedSessionId)).get();
     expect(stillThere.exists).toBe(true);
   });
 
@@ -290,7 +289,7 @@ describe('importProgramme', () => {
       }),
     );
     expect(initial.errors).toEqual([]);
-    await db.doc(paths.programme(year)).update({ status: 'published', publishedAt: 'now' });
+    await db.doc(cp.programme(year)).update({ status: 'published', publishedAt: 'now' });
 
     const removedSessionId = `${seriesId}-${d2}`;
     const entry: Entry = {
@@ -312,7 +311,7 @@ describe('importProgramme', () => {
       createdAt: 'now',
       updatedAt: 'now',
     };
-    await db.doc(paths.entry(entry.id)).set(entry);
+    await db.doc(cp.entry(entry.id)).set(entry);
 
     const report = await importProgrammeHandler(
       await adminReq({
@@ -327,12 +326,12 @@ describe('importProgramme', () => {
     expect(report.wouldRemoveSessions).toBe(1);
     expect(report.sessions).toBe(1);
 
-    const gone = await db.doc(paths.session(year, removedSessionId)).get();
+    const gone = await db.doc(cp.session(year, removedSessionId)).get();
     expect(gone.exists).toBe(false);
-    const kept = await db.doc(paths.session(year, `${seriesId}-${d1}`)).get();
+    const kept = await db.doc(cp.session(year, `${seriesId}-${d1}`)).get();
     expect(kept.exists).toBe(true);
 
-    const programmeSnap = await db.doc(paths.programme(year)).get();
+    const programmeSnap = await db.doc(cp.programme(year)).get();
     expect(programmeSnap.data()?.status).toBe('published'); // replace keeps the prior status
   });
 
@@ -378,7 +377,7 @@ describe('importProgramme', () => {
       expect(first.series).toBe(10);
       expect(first.sessions).toBe(200);
 
-      const firstStored = await db.collection(paths.sessions(year)).get();
+      const firstStored = await db.collection(cp.sessions(year)).get();
       expect(firstStored.size).toBe(first.sessions);
 
       // Re-import the identical programme over the draft it just created.
@@ -390,7 +389,7 @@ describe('importProgramme', () => {
       expect(second.wouldRemoveSessions).toBe(0);
       expect(second.sessions).toBe(200);
 
-      const secondStored = await db.collection(paths.sessions(year)).get();
+      const secondStored = await db.collection(cp.sessions(year)).get();
       expect(secondStored.size).toBe(second.sessions); // <- this is the invariant the bug broke
     },
   );
