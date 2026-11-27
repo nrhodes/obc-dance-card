@@ -1686,6 +1686,380 @@ tested reference in two languages.
 offline persistence (same decision as web/iOS), widgets, Wear OS, and any
 admin surface.
 
+### B14. Multiple bridge clubs (multi-tenancy) — designed 2026-11-27, not yet implemented
+
+**Intent (Neil).** Extend the app from Orewa only to several bridge clubs. Most people
+belong to one club and should see something very like today. Some belong to more than
+one and need an integrated personal calendar. Each club has its own independent
+administrators; Neil is additionally a platform ("master") administrator.
+
+**Status.** Design only. Nothing below is built. The sketches are SHOULD; the items
+under "Decisions to confirm" (B14.10) are open and must be settled before building. This
+supersedes, for a multi-club build, the single-club assumptions in §2 (Membership),
+§5, §8.2, §9 and §10.
+
+#### B14.1 Shape of the solution
+
+- **One Firebase project, many clubs.** A person is one Auth user (one email, one
+  sign-in) however many clubs they belong to. That is what makes an integrated
+  calendar, one notification inbox and one iCal feed possible. A project per club was
+  rejected: it would mean a sign-in per club and no merged view.
+- **Split "person" from "membership".** Today's `members/{uid}` conflates the two.
+  The person keeps the uid and the login email; everything a club knows about them
+  moves to a per-club membership doc.
+- **Club-owned data nests under the club** (`clubs/{clubId}/…`) rather than staying
+  top-level with a `clubId` field. Reasons: rules become path-based ("is the caller a
+  member of the club in this path"), so query provability is free and no query needs a
+  club filter (contrast the `cohort` audit in §10); session/entry/team ids need no
+  change, because they are unique within a club by construction; and one club can be
+  exported, suspended or removed as a unit. The rejected alternative (keep top-level
+  collections, backfill `clubId` as `backfill-cohort.ts` did for `cohort`) is cheaper
+  to migrate, but `members/{uid}` must be restructured either way and single-session
+  ids (`sessionIdForSingle`) would collide across clubs.
+
+#### B14.2 Data model
+
+```
+clubs/{clubId}                     name, shortName, colour, timezone, status ('active'|'suspended'),
+                                   emailFromName, emailReplyTo, + Timestamps
+clubs/{clubId}/members/{uid}       today's Member doc, unchanged in shape:
+                                   firstName, lastName, phone, email, grade, role, active,
+                                   cohort?, lastImportId?, deactivatedAt?, erasedAt?
+clubs/{clubId}/programmes/{year}   + weekdays / series / sessions sub-collections, unchanged
+clubs/{clubId}/entries/{entryId}   unchanged
+clubs/{clubId}/invites/{id}        unchanged
+clubs/{clubId}/teams/{teamId}      unchanged
+clubs/{clubId}/visitors/{id}       unchanged
+clubs/{clubId}/auditLog/{id}       server-only
+clubs/{clubId}/imports/{id}        server-only
+clubs/{clubId}/integrity/{id}      server-only
+
+users/{uid}                        clubIds: string[] (clubs with an ACTIVE membership), + Timestamps
+userPrivate/{uid}                  today's memberPrivate: emailLower, notificationPrefs, devices,
+                                   hasPassword, icalToken
+notifications/{id}                 unchanged, + clubId? (absent for account-level notices)
+platformAdmins/{uid}               server-only; existence = platform admin
+platformAuditLog/{id}              server-only; club created/suspended, admin appointed, platform
+                                   admin acting inside a club
+icalTokens, emailCodes, rateLimits unchanged (per person, not per club)
+```
+
+- **`clubId`** is a short, stable, URL-safe slug (`orewa`), chosen at club creation
+  and never renamed. `shared/src/paths.ts` builders all gain a leading `clubId`
+  argument; that file stays the single place paths are spelled.
+- **The membership doc is the club's own record of the person.** Each club keeps its
+  own copy of name, phone and grade, so two clubs' CSV imports never fight over one
+  record, a member can give different clubs different phone numbers, and
+  `importMembers` / `addMember` / `updateMember` / `provisionMember` carry over with
+  only a `clubId` added.
+- **Email is the join key.** Provisioning an email that already has an Auth user
+  attaches a membership to that uid instead of creating a second account. The person
+  simply sees a second club appear.
+- **`users/{uid}.clubIds`** is a server-maintained index so a client knows which clubs
+  to subscribe to. It is a convenience, never an authority: rules and callables always
+  check the membership doc itself.
+- **Timezone** is a per-club field defaulting to `Pacific/Auckland`. `shared/src/time.ts`
+  helpers take the club's zone instead of assuming one.
+- **Review cohort (§8.1).** A demo club (`clubId: 'review'`) containing only the fake
+  reviewer accounts gives the same isolation as the `cohort` partition, enforced by the
+  ordinary club boundary. Recommended: migrate the review accounts into such a club
+  and delete `cohort`, its rules disjuncts and its per-callable checks. Until that is
+  done, `cohort` stays on the membership doc and keeps working unchanged.
+
+#### B14.3 Roles and administration
+
+| Role | Stored as | Scope |
+|---|---|---|
+| Member | `clubs/{clubId}/members/{uid}` with `active: true` | That club |
+| Club admin | same doc, `role: 'admin'` (today's field, now per club) | Everything an admin can do today, in that club only |
+| Platform admin | `platformAdmins/{uid}` exists | Create / suspend clubs; appoint or remove a club's admins; act as admin in any club |
+
+- `requireAdmin(req, clubId)` passes for an active admin of that club or a platform
+  admin. `requireMember(req, clubId)` requires an active membership of that club.
+  Every club-scoped callable takes `clubId` in its input (strict schemas reject its
+  absence); none infer it.
+- The **last-admin guard** is per club. A platform admin is not counted as a club's
+  admin, and needs no membership to administer a club.
+- A platform admin acting inside a club is audited in both that club's `auditLog`
+  and `platformAuditLog`. Platform-admin status is granted only by script (as
+  `make-admin.ts` does today), never by a callable.
+- **Act-on-behalf** stays club-scoped: an admin of club A can act for a member only
+  within club A.
+- **Sign-in email.** `updateMember` (added 2026-11-27) lets a club admin change the
+  address a member signs in with. With several clubs that address is shared, so a
+  club admin may change it only when the person belongs to no other club; otherwise
+  it is self-service (with verification) or platform-admin only. A club admin can
+  still change that club's *contact* email on the membership doc.
+- **Deactivation and erasure are per membership.** The Auth user is disabled and its
+  tokens revoked only when no active membership remains anywhere; `beforeSignIn`
+  requires at least one active membership. `eraseMember` scrubs one club's membership
+  and that club's references; the Auth user and `userPrivate` go when the last
+  membership is erased.
+
+#### B14.4 Rules (spec delta to §10)
+
+```
+helpers:
+  membership(clubId) = get(/databases/$(db)/documents/clubs/$(clubId)/members/$(request.auth.uid)).data
+  isMemberOf(clubId) = request.auth != null && membership(clubId).active == true
+  isClubAdmin(clubId)= isMemberOf(clubId) && membership(clubId).role == 'admin'
+  isPlatformAdmin()  = request.auth != null && exists(/databases/$(db)/documents/platformAdmins/$(request.auth.uid))
+  canAdmin(clubId)   = isClubAdmin(clubId) || isPlatformAdmin()
+
+clubs/{clubId}                     read: isMemberOf(clubId) || isPlatformAdmin()
+clubs/{clubId}/members/{id}        read: canAdmin(clubId) || (isMemberOf(clubId) && (resource.data.active == true || isSelf(id)))
+clubs/{clubId}/programmes/…        as §10, with isMemberOf(clubId) / canAdmin(clubId)
+clubs/{clubId}/entries/{id}        read: canAdmin(clubId) || isMemberOf(clubId)
+clubs/{clubId}/teams/{id}          read: canAdmin(clubId) || isMemberOf(clubId)
+clubs/{clubId}/invites/{id}        read: canAdmin(clubId) || (isMemberOf(clubId) && uid in [from, to])
+clubs/{clubId}/visitors/{id}       read: canAdmin(clubId) || (isMemberOf(clubId) && createdByMemberId == uid)
+/{path=**}/entries/{id}            read: resource.data.memberId == request.auth.uid      // collection group: "my entries, all clubs"
+/{path=**}/invites/{id}            read: request.auth.uid in [resource.data.fromMemberId, resource.data.toMemberId]
+users/{id}, userPrivate/{id}       read: isSelf(id)
+notifications/{id}                 unchanged
+platformAdmins, platformAuditLog, clubs/*/auditLog|imports|integrity: read/write false
+all writes: false, except notifications read/readAt as today
+```
+
+Rules tests gain a club matrix per collection: member of A reads A, cannot read B;
+admin of A cannot read or administer B; platform admin reads both; a person in A and
+B reads both; the collection-group "my entries" query succeeds with no club filter
+and returns nothing belonging to anyone else. A suspended club reads as empty to
+members (decide in build: a `status` check in `isMemberOf`, at one extra `get()`).
+
+#### B14.5 Callables and server behaviour
+
+- Every callable in §9.2 that touches club data gains `clubId`. Person-level
+  callables do not: `requestLoginCode`, `verifyLoginCode`, password callables,
+  `updateMyPrefs`, `registerDevice` / `unregisterDevice`, the iCal token callables.
+  `updateMyContact` becomes per club (it edits a membership's phone).
+- New, platform admin only: `createClub`, `updateClub` (name, colour, email
+  settings, status), `setClubAdmin` (appoint or remove, bypassing the per-club
+  last-admin guard only when appointing). Club admins get `updateClubSettings` for
+  the display fields of their own club.
+- **Invariants (§7) are per club**, unchanged in substance: `validatePairingGroup` /
+  `validateTeamGroup` run over one club's entries.
+- **Cross-club clashes are warned, not blocked.** A person booked at two clubs at
+  overlapping times is shown the clash (B14.6); neither club's callable refuses,
+  because one club must not be able to read or depend on another's bookings.
+- **Cross-club partners.** Bringing someone who is not a member of the hosting club
+  uses the existing visitor mechanism (§12), even if they are a member elsewhere.
+  §12.5 visitor promotion stays per club.
+- **Notifications** stay per person and carry `clubId`; titles name the club when
+  the recipient belongs to more than one. Preferences stay per person, with an
+  optional per-club mute. Partner Steward alerts (B11) and broadcasts are per club.
+- **iCal feed (B1)** stays one token per person and merges all clubs, with the club
+  short name in each event summary; an optional `club=` parameter filters.
+- **Scheduled jobs** (`purgeExpired`, digests, the integrity sweep) iterate clubs.
+  Rate limits stay per person / per IP.
+
+#### B14.6 UI (web, iOS, and Android per B13)
+
+Recommended: integrated where the screen is about the person, club-scoped where it
+is about a club. A club picker as the first screen was considered and rejected as the
+default: the main value to a two-club member is seeing their week and any clashes in
+one place, and a picker makes them look twice.
+
+- **One-club member.** Identical to today. The club's name shows in the header;
+  there is no switcher, no badges, no extra step.
+- **Person-centric screens merge all clubs:** Home ("my card"), Calendar, Invites,
+  Notifications. Each item carries a club badge (short name + the club's colour),
+  filter chips select clubs, and overlapping sessions at different clubs are marked
+  as a clash.
+- **Club-centric screens show one club:** Programme, Members directory, Visitors,
+  Teams, and all Admin screens. A header switcher picks the current club and
+  remembers the last choice per device. Opening a session from the merged calendar
+  sets the current club to that session's club.
+- **Admin** appears only for clubs the person administers and is always scoped to
+  the current club, with the club named in the admin header so it is never
+  ambiguous whose members are being edited. Platform admins get a further
+  **Platform** area: clubs list, create / suspend, appoint admins, and can switch
+  into any club.
+- **Routes.** Personal: `/`, `/calendar`, `/invites`, `/notifications`, `/profile`.
+  Club: `/c/{clubId}/programme`, `/c/{clubId}/session/{id}`, `/c/{clubId}/members`,
+  `/c/{clubId}/admin/…`. Pre-existing links (`/session/{id}`, emailed deep links)
+  redirect to the person's only club, or to a chooser if they have several.
+- **Profile** shows each membership separately (the name, phone and grade that club
+  holds), since those are per club.
+- **Sign-in** is unchanged: an email identifies the person, not a club.
+
+#### B14.7 Email senders
+
+Per-club SMTP credentials are **not** required to make mail look like it comes from
+the right club, and are not recommended.
+
+- **Today.** Production sends through `smtp.gmail.com` as one consumer Gmail
+  account (a personal mailbox; its login is the `SMTP_USER` secret), with the display
+  name "Orewa Bridge Club". This is not a Google Workspace relay, despite §19's
+  "prefer the Workspace SMTP route". It is adequate for one club.
+- **Why it does not stretch to several clubs.** Gmail accepts any display name, so a
+  per-club name works, but every club's mail would still come from that one address.
+  A consumer account is capped at roughly 500 recipients a day and can be throttled
+  or locked when Google judges it to be sending automated mail; several clubs'
+  digests and login codes share that one allowance. And it ties every club's
+  sign-in to one personal account: if it is locked or its app password revoked,
+  nobody at any club receives a login code.
+- **Recommended: move to a transactional provider when the second club is
+  onboarded** (stage 3 of B14.8), rather than waiting for a club to ask for its own
+  domain. Implement one of the stubbed providers in `email/provider.ts` (Postmark
+  preferred: transactional-only and fast, which suits time-sensitive login codes;
+  Amazon SES is the cheapest alternative). One platform API key (`EMAIL_PROVIDER_KEY`,
+  already defined in `lib/secrets.ts`) covers every club. It also gives delivery,
+  bounce and complaint visibility, which the Gmail relay does not: today a login
+  code that never arrives is invisible.
+- **Sender identity per club**, on `clubs/{clubId}` — non-secret strings only:
+  - `emailFromName` (display name) and `emailReplyTo`: always. Recipients see the
+    club's name and replies reach the club.
+  - `emailFromAddress`: optional, only for a club with its own domain
+    (`noreply@theirclub.org.nz`). The club adds the provider's DNS records (SPF/DKIM)
+    once and the platform admin marks the domain verified; until then, and for a
+    club with no domain, mail goes from the platform's own verified address under
+    the club's display name.
+- **Per-club SMTP credentials** (each club supplies its own relay login) are the
+  last resort. If ever needed, the password goes in Secret Manager under a
+  per-club name and `clubs/{clubId}` holds only the secret's name, never the
+  secret; Firestore is not a credential store. This also multiplies deliverability
+  and support problems by the number of clubs.
+- **Account-level mail has no club.** Login codes and password notices are about
+  the person, and `requestLoginCode` must not reveal membership, so they are sent
+  under the platform's name (or, for a one-club person, optionally that club's
+  name once the code path already knows the address is valid; decide in build).
+- **Build notes.** `EmailMessage` gains optional `fromName`, `fromAddress` and
+  `replyTo`; templates take the club's name instead of the hard-coded "Orewa Bridge
+  Club". The login-code timing safeguard from the 2026-11-16 review (`warm()`,
+  uniform response time for known and unknown addresses) must be re-established
+  against the new provider's API. The provider becomes another processor of member
+  email addresses and must be named in the privacy policy (§8.1 "Privacy law").
+
+#### B14.8 Staging
+
+Each stage ships on its own. The order puts the data model first with no visible
+change, gets a second club live before any multi-club UI exists, and leaves the
+largest UI work until someone actually belongs to two clubs (staging agreed with
+Neil 2026-11-27).
+
+**Stage 1 — new data model, identical UI.** The web code changes; nothing a member
+sees does. The client resolves "the current club" as the member's only club
+(`users/{uid}.clubIds[0]`) and passes it everywhere.
+
+- **1a. Thread the club through the code; data untouched.** Every `paths` builder,
+  callable schema and client hook takes a `clubId`, but the builders still return
+  today's paths and callables default a missing `clubId` to `orewa`. A pure
+  refactor: deployed like any other change, no data risk, full test suite green.
+- **1b. Move the data and flip.** A script copies every club-owned collection under
+  `clubs/orewa`, splits `members` into `users` + membership, renames
+  `memberPrivate` → `userPrivate`, and the `paths` builders and `firestore.rules`
+  switch to the new layout in the same deploy. Rehearsed on the emulator against a
+  production export; run in a short maintenance window at a quiet time. Old
+  collections are left in place, unwritten.
+  - *Stale tabs:* a browser tab still running the pre-flip bundle gets
+    permission-denied until it reloads (`PwaUpdater` handles this); expect a brief
+    blip, hence the quiet time.
+  - *Rollback* is clean only until members write to the new layout, so the
+    verify-and-decide window is minutes: a scripted check (document counts per
+    collection, `runPairingSweep` clean, sign-in + one booking by hand) immediately
+    after the flip, then either proceed or flip back.
+- **1c. Clean up.** Delete the old collections, make `clubId` required in every
+  schema, remove the `orewa` default.
+
+**Stage 2 — platform admin and club management.** `platformAdmins`,
+`platformAuditLog`, `createClub`, `updateClub`, `setClubAdmin`, and the Platform
+admin area. The first visible change, and visible only to a platform admin.
+
+**Stage 3 — a second club goes live, still no multi-club UI.** Possible as long as
+nobody belongs to both clubs yet: the new club's members see exactly what Orewa's
+see, under their own club's name. Needs:
+
+- every hard-coded "Orewa"/"OBC" string (web screens, email templates, the iCal
+  feed, the iOS app) replaced by the club's name or the platform's name;
+- the transactional email provider and per-club sender identity (B14.7);
+- a decision on what a person who is in both clubs sees before stage 4. Provisioning
+  must not silently create that state: either `addMember`/`importMembers` refuse (or
+  warn on) an email that already has a membership elsewhere until stage 4 ships, or
+  the stopgap below is built first.
+
+**Stage 4 — multi-club UI** (B14.6): header switcher, club badges, merged Home and
+Calendar, clash marker, merged iCal feed, routes under `/c/{clubId}`. Needed only
+once the first person belongs to two clubs. Stopgap if one appears earlier: the
+header switcher alone, with every screen scoped to the chosen club.
+
+**Stage 5 — tidy-up.** Convert the review cohort into a demo club and delete
+`cohort`, its rules disjuncts and its per-callable checks (B14.2).
+
+- **No backward compatibility is needed for installed clients** (Neil, 2026-11-27):
+  the iOS app is not yet released, and the web app updates itself on deploy. Stage 1
+  can therefore change paths and callable inputs outright, with no compatibility
+  window and no forced-update gate. Revisit only if an iOS or Android build ships
+  to members before stage 1b runs.
+- B13 (Android) should be built against the multi-club shape if B14 is scheduled
+  first, rather than ported twice. The same goes for the iOS app: once stage 1b has
+  run, it must use the new paths before it is released.
+
+#### B14.9 Hosting and URLs (Neil, 2026-11-27)
+
+**Intent.** The shared app moves to a club-neutral address, `dance-card.web.app`.
+`obc-dance-card.web.app` stays as Orewa's own front door: for someone who is not
+signed in, a sign-in page skinned for Orewa Bridge Club.
+
+**Sketch.** One web build, served from several Firebase Hosting sites in the one
+project: the neutral site plus one site per club that wants its own address.
+
+- **The host selects the club, not the data.** A small host → `clubId` map (in
+  `clubs/{clubId}.hostnames`, readable before sign-in, or baked into the build)
+  lets a club host show that club's name and colours on the sign-in screen and
+  preselect it as the current club. Membership still decides what a person can
+  see; the host is presentation only and grants nothing.
+- **Sign-in does not carry across hosts.** Firebase Auth keeps its session per
+  origin, so a person signed in at `obc-dance-card.web.app` is not signed in at
+  `dance-card.web.app`. Two workable shapes, to be chosen:
+  - *Club host is the whole app* (recommended): the same app runs on both hosts.
+    A one-club member can live entirely on their club's address; the neutral
+    address is for multi-club members and for clubs without their own.
+  - *Club host is only a front door*: it shows the skinned sign-in page and then
+    sends the person to the neutral address, where they must sign in (again).
+    Simpler to reason about, but a login page that cannot log you in to itself
+    is a poor experience; it only works well if the sign-in itself happens on
+    the neutral host after the redirect.
+- **A site id is not guaranteed.** Hosting site ids are global across all Firebase
+  users; `dance-card` must be checked for availability and reserved early. A
+  custom domain avoids the question and is the better long-term address.
+- **Everything that names the host must follow:** Firebase Auth authorised
+  domains, the App Check (reCAPTCHA) site key's allowed domains, the CSP,
+  `WEB_APP_BASE_URL` (links in emails), the hard-coded host in
+  `MembershipUnavailableScreen`, the post-deploy smoke test, and the deploy job
+  (one deploy, several hosting targets).
+- **Things tied to the old address must keep working:** iCal subscriptions already
+  handed out point at `…/ical/{token}.ics` on the current host, so the `/ical/**`
+  rewrite stays on `obc-dance-card.web.app` indefinitely; a home-screen install
+  of the web app is bound to the origin it was installed from, so members who
+  installed from the old address stay there unless told to reinstall — another
+  reason to prefer "club host is the whole app".
+- **Staging.** Independent of the data model. Adding the neutral site alongside
+  the existing one can happen any time; the skinned sign-in page needs the club
+  record (stage 2); it must be in place by stage 3, when a second club's members
+  need an address that is not Orewa's.
+
+#### B14.10 Decisions to confirm (Neil)
+
+- **Contact details per club (recommended) or one shared profile.** Per club avoids
+  import conflicts and matches each club's own records; shared is simpler for the
+  member to keep current.
+- **Cross-club visibility.** Recommended: none. A club's directory and rosters are
+  visible only to its members, and nothing reveals to club A that a person also
+  belongs to club B.
+- **Platform admin's view of personal data** across all clubs needs each club's
+  agreement and a line in the privacy policy (§8.1 "Privacy law").
+- **Branding.** The app, emails and App Store listing are named for Orewa Bridge
+  Club. A neutral product name with the club shown inside is a product decision
+  with App Store consequences (rename vs new listing).
+- **Hosts** (B14.9): whether a club's own address runs the whole app (recommended)
+  or is only a sign-in front door; and whether to use `dance-card.web.app` (if the
+  site id is free) or a custom domain.
+- **Email sender** (B14.7): confirm the move off the personal Gmail relay to a
+  transactional provider at the second club, which provider, and whether any club
+  needs its own from-domain.
+- **Review cohort → demo club** (recommended) or keep `cohort` alongside clubs.
+
 ### Cross-cutting notes for the backlog
 
 - **B3 is a prerequisite** for B1, B4, and the value of B2 (bulk-setting across the
@@ -1696,3 +2070,7 @@ admin surface.
   token-authenticated unauthenticated read endpoint; give it its own threat-model row
   (token entropy, rotation, rate-limiting, minimal payload, no enumeration) before it
   ships.
+- **B14 (multiple clubs) changes the data model, the rules and every club-scoped
+  callable.** Anything else in this backlog that adds a collection, a callable or a
+  client (notably B13, Android) should be checked against B14 before it is built, so
+  it is not written for a single-club shape that is about to change.
