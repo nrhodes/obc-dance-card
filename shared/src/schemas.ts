@@ -7,7 +7,7 @@
  */
 
 import { z } from 'zod';
-import { AUDIT_ACTIONS, MEMBER_GRADES, MEMBER_ROLES, SCORING_TYPES, SERIES_FORMATS, SESSION_KINDS, WEEKDAYS } from './enums.js';
+import { AUDIT_ACTIONS, CLUB_STATUSES, MEMBER_GRADES, MEMBER_ROLES, SCORING_TYPES, SERIES_FORMATS, SESSION_KINDS, WEEKDAYS } from './enums.js';
 
 /* ------------------------------- primitives ------------------------------ */
 
@@ -559,6 +559,65 @@ export const ListAuditLogInputSchema = z.object({
   targetMemberId: id.optional(),
 });
 export type ListAuditLogInput = z.infer<typeof ListAuditLogInputSchema>;
+
+/* ----------------------- platform admin: clubs (plan §21 B14.3) ----------------------- */
+
+/*
+ * These are NOT club-scoped callables: the caller is a platform administrator
+ * acting ON a club, not a member acting IN one, so `clubId` here names the
+ * target and a client never fills it in from "the current club".
+ */
+
+const clubName = z.string().trim().min(1).max(80);
+const clubShortName = z.string().trim().min(1).max(20);
+
+export const ListClubsInputSchema = z.object({}).strict();
+export type ListClubsInput = z.infer<typeof ListClubsInputSchema>;
+
+export const CreateClubInputSchema = z
+  .object({
+    /** The new club's permanent id: a slug, 2–40 characters. It can never be renamed. */
+    clubId: clubId.min(2),
+    name: clubName,
+    shortName: clubShortName,
+  })
+  .strict();
+export type CreateClubInput = z.infer<typeof CreateClubInputSchema>;
+
+export const UpdateClubPatchSchema = z
+  .object({
+    name: clubName.optional(),
+    shortName: clubShortName.optional(),
+    /** `#rrggbb`; `null` clears it. */
+    colour: z
+      .string()
+      .regex(/^#[0-9a-fA-F]{6}$/, 'expected #rrggbb')
+      .nullable()
+      .optional(),
+    status: z.enum(CLUB_STATUSES).optional(),
+  })
+  .strict();
+export type UpdateClubPatch = z.infer<typeof UpdateClubPatchSchema>;
+
+export const UpdateClubInputSchema = z.object({ clubId, patch: UpdateClubPatchSchema }).strict();
+export type UpdateClubInput = z.infer<typeof UpdateClubInputSchema>;
+
+export const SetClubAdminInputSchema = z
+  .object({
+    clubId,
+    /** The person's sign-in email. They need not exist yet, nor be a member of this club. */
+    email,
+    /** `true` appoints, `false` removes admin rights (they stay a member). */
+    admin: z.boolean(),
+    /**
+     * Needed only when appointing someone who is not yet a member of ANY
+     * club; otherwise the name comes from a membership they already hold.
+     */
+    firstName: memberName.optional(),
+    lastName: memberName.optional(),
+  })
+  .strict();
+export type SetClubAdminInput = z.infer<typeof SetClubAdminInputSchema>;
 
 export const PingInputSchema = z.object({}).strict();
 export type PingInput = z.infer<typeof PingInputSchema>;

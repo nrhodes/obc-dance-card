@@ -10,6 +10,7 @@ import { useIdleSignOut } from '../session/useIdleSignOut';
 import { OfflineBanner } from './OfflineBanner';
 import { isWideRoute } from './wideRoute';
 import { useClubs } from '../club/useClub';
+import { usePlatformAdmin } from '../platform/usePlatformAdmin';
 
 export function AppShell() {
   const { member, signOut } = useAuth();
@@ -77,6 +78,7 @@ export function AppShell() {
   // Clubs (plan §21 B14): a person in one club sees only its name; a person
   // in several also gets a switcher. Each screen shows one club at a time.
   const { clubs, currentClubId, selectClub } = useClubs();
+  const { isPlatformAdmin } = usePlatformAdmin();
   const currentClubName = clubs.find((c) => c.id === currentClubId)?.name;
 
   return (
@@ -131,6 +133,10 @@ export function AppShell() {
               <div className="more-menu-list">
                 <NavLink to="/profile">Profile</NavLink>
                 <NavLink to="/help">Help</NavLink>
+                {/* Platform administrators only (plan §21 B14.3): clubs and
+                    who administers them. Not under "Admin", which means
+                    admin of the club being shown. */}
+                {isPlatformAdmin && <NavLink to="/platform">Platform</NavLink>}
                 {/* Sign out lives here now, not as a separate header link —
                     plan §8.1's "sign out should be prominent" is satisfied
                     by this disclosure being one tap away from any screen,

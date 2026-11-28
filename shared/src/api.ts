@@ -10,7 +10,7 @@
 
 import type { MemberImportReport, ProgrammeImportReport } from './csv.js';
 import type { Weekday } from './enums.js';
-import type { AuditLogEntry, Entry, IntegrityViolation, Invite, Member, Notification, Series, Session, Team, Visitor, WeekdayProgramme } from './models.js';
+import type { Club, AuditLogEntry, Entry, IntegrityViolation, Invite, Member, Notification, Series, Session, Team, Visitor, WeekdayProgramme } from './models.js';
 import type { Id, IsoDate } from './primitives.js';
 
 export type {
@@ -326,3 +326,34 @@ export interface NoticeboardItem {
 }
 
 export type { Notification };
+
+/* --------------------------- platform admin: clubs --------------------------- */
+
+/** One club as the Platform area shows it. */
+export interface ClubSummary {
+  club: Club;
+  /** Active members, admins included. */
+  activeMembers: number;
+  /** Active admins of this club. */
+  admins: Array<{ memberId: Id; name: string; email?: string }>;
+}
+
+export interface ListClubsResult {
+  clubs: ClubSummary[];
+}
+
+export interface CreateClubResult {
+  club: Club;
+}
+
+export interface UpdateClubResult {
+  club: Club;
+  /** False when the patch matched what was already stored. */
+  changed: boolean;
+}
+
+export interface SetClubAdminResult {
+  member: Member;
+  /** True when this created the person's membership of the club (or the person themself). */
+  membershipCreated: boolean;
+}

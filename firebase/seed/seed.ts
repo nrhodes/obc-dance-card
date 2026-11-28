@@ -387,6 +387,7 @@ async function main(): Promise<void> {
   const importReport = await runProgrammeImport(
     cp,
     {
+      clubId: cp.clubId,
       year: PROGRAMME_YEAR,
       weekdaysCsv: weekdaysCsv(),
       seriesCsv: seriesCsv(),
@@ -405,8 +406,14 @@ async function main(): Promise<void> {
     `Imported ${PROGRAMME_YEAR} programme: ${importReport.weekdays} weekday(s), ${importReport.series} series, ${importReport.sessions} session(s).`,
   );
 
-  const publishResult = await runPublishProgramme(cp, { year: PROGRAMME_YEAR }, adminUid);
+  const publishResult = await runPublishProgramme(cp, { clubId: cp.clubId, year: PROGRAMME_YEAR }, adminUid);
   console.log(`Published ${PROGRAMME_YEAR} programme at ${publishResult.publishedAt}.`);
+
+  // ---- Platform admin (plan §21 B14.3): the seed admin, so the Platform area can be exercised locally ----
+  await db
+    .doc(paths.platformAdmin(adminUid))
+    .set({ id: adminUid, grantedAt: new Date().toISOString(), grantedBy: 'seed' });
+  console.log('Seeded the admin as a platform admin.');
 
   // ---- A second club (plan §21 B14) ----
   const { provisionTestClub } = await import('../functions/src/clubs/testClub.js');
@@ -454,6 +461,7 @@ async function main(): Promise<void> {
   const currentYearImportReport = await runProgrammeImport(
     cp,
     {
+      clubId: cp.clubId,
       year: currentYear,
       weekdaysCsv: currentYearWeekdaysCsv(),
       seriesCsv: currentYearSeriesCsv(futureMondays),
@@ -472,7 +480,7 @@ async function main(): Promise<void> {
     `Imported ${currentYear} programme: ${currentYearImportReport.weekdays} weekday(s), ${currentYearImportReport.series} series, ${currentYearImportReport.sessions} session(s) (past Mondays: ${pastMondays.join(', ') || 'none'}; future Mondays: ${futureMondays.join(', ') || 'none'}).`,
   );
 
-  const currentYearPublishResult = await runPublishProgramme(cp, { year: currentYear }, adminUid);
+  const currentYearPublishResult = await runPublishProgramme(cp, { clubId: cp.clubId, year: currentYear }, adminUid);
   console.log(`Published ${currentYear} programme at ${currentYearPublishResult.publishedAt}.`);
 }
 

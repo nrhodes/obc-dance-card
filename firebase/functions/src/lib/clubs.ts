@@ -60,6 +60,11 @@ export async function clubOf(input: { clubId: ClubId }): Promise<ClubPaths> {
   return clubPaths(clubId);
 }
 
+/** Forget the cached list of clubs — call after creating a club or changing a club's status. */
+export function forgetClubCache(): void {
+  activeClubsCache = undefined;
+}
+
 /** Every active club, for jobs that sweep all of them (reminders, digests, purge, integrity). */
 export async function allClubs(): Promise<ClubPaths[]> {
   return (await activeClubIds()).map((id) => clubPaths(id));

@@ -5,6 +5,14 @@
  * contract can never drift.
  */
 import type {
+  CreateClubInput,
+  CreateClubResult,
+  ListClubsInput,
+  ListClubsResult,
+  SetClubAdminInput,
+  SetClubAdminResult,
+  UpdateClubInput,
+  UpdateClubResult,
   AddTeamSessionSubstituteInput,
   AddTeamSessionSubstituteResult,
   AddVisitorToTeamInput,
@@ -198,3 +206,12 @@ export const updateWeekday = clubCallable<UpdateWeekdayInput, UpdateWeekdayResul
 export const broadcast = clubCallable<BroadcastInput, BroadcastResult>('broadcast');
 export const listAuditLog = clubCallable<ListAuditLogInput, ListAuditLogResult>('listAuditLog');
 export const runPairingSweep = clubCallable<RunPairingSweepInput, RunPairingSweepResult>('runPairingSweep');
+
+// Platform administration (plan §21 B14.3). Deliberately plain `callable`,
+// not `clubCallable`: these act ON a club the caller names, never "in the
+// current club", so the current club must not be filled in.
+export const listClubs = callable<ListClubsInput, ListClubsResult>('listClubs');
+export const createClub = callable<CreateClubInput, CreateClubResult>('createClub');
+export const updateClub = callable<UpdateClubInput, UpdateClubResult>('updateClub');
+export const setClubAdmin = callable<SetClubAdminInput, SetClubAdminResult>('setClubAdmin');
+

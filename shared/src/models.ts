@@ -27,6 +27,8 @@ import type {
   SessionKind,
   TeamStatus,
   Weekday,
+  ClubStatus,
+  PlatformAuditAction,
 } from './enums.js';
 import type { EmailLower, Id, IsoDate, IsoDateTime, Timestamps, TimeOfDay } from './primitives.js';
 
@@ -109,13 +111,40 @@ export interface Club extends Timestamps {
   shortName: string;
   /** IANA zone the club's dates and cutoffs are reckoned in. */
   timezone: string;
-  status: 'active' | 'suspended';
+  status: ClubStatus;
+  /** Accent colour for this club's badge, `#rrggbb`. Optional. */
+  colour?: string;
   /**
    * Set once, when the stage-1b copy of this club's pre-club data was
    * declared finished (plan §21 B14.8). The migration refuses to copy again
    * after this. Absent on a club created natively.
    */
   migratedFromLegacyAt?: IsoDateTime;
+}
+
+/**
+ * `platformAdmins/{uid}` — its existence is the grant (plan §21 B14.3).
+ * A platform admin creates and suspends clubs and appoints their admins;
+ * inside a club they have no rights beyond their own membership of it.
+ */
+export interface PlatformAdmin {
+  id: Id;
+  grantedAt: IsoDateTime;
+  /** `'bootstrap-script'`, or the uid of whoever ran the grant. */
+  grantedBy: string;
+}
+
+/** `platformAuditLog/{id}` — server-only. */
+export interface PlatformAuditEntry {
+  id: Id;
+  at: IsoDateTime;
+  actorUid: Id;
+  action: PlatformAuditAction;
+  clubId?: Id;
+  /** The person an appointment or removal concerned. */
+  targetUid?: Id;
+  /** Field names and non-personal values only — never a name, email or phone. */
+  detail?: Record<string, unknown>;
 }
 
 /**

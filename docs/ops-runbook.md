@@ -284,6 +284,45 @@ $D --execute --confirm obc-dance-card     # deletes
 `backfill-cohort.ts` and `backfill-member-emails.ts` targeted the old one and
 refuse to run.
 
+## Platform admin and club management (plan §21 B14.3)
+
+A **platform admin** creates and suspends clubs and decides who administers them,
+from the **Platform** area of the web app (More → Platform). It is a separate thing
+from being a club's admin, and it gives no access inside a club: to manage a
+club's members or programme, a platform admin appoints themselves one of its
+admins there, after which the club appears in their club switcher.
+
+**Granting it** is done only by script. No callable can create a platform admin.
+
+```sh
+export GOOGLE_APPLICATION_CREDENTIALS=/path/to/key.json   # Cloud Datastore User
+npx tsx firebase/scripts/make-platform-admin.ts --project obc-dance-card --email <sign-in email>
+npx tsx firebase/scripts/make-platform-admin.ts --project obc-dance-card --email <sign-in email> --revoke
+```
+
+The person must already be an active member of some club (that is what lets them
+sign in). They see the Platform link after refreshing.
+
+**What the Platform area does** (callables `listClubs`, `createClub`, `updateClub`,
+`setClubAdmin`; each is recorded in the server-only `platformAuditLog`):
+
+- **Create a club.** Name, short name, and an id. The id is a lower-case slug,
+  appears in paths and web addresses, and can never be changed.
+- **Add an admin** by sign-in email. If the person already uses the system that is
+  enough: a membership of the club is created for them, named from one they already
+  hold. For someone new, give their name and an account is created. They are
+  notified. A new club has no members until its first admin is added.
+- **Remove an admin.** They stay a member. A club is never left with no active
+  admin, so appoint the replacement first.
+- **Rename** a club (name and short name; not the id).
+- **Suspend / reactivate.** A suspended club is refused by every callable and its
+  memberships stop counting towards sign-in, so members who belong to no other club
+  cannot sign in. Nothing is deleted. You cannot suspend the only club you yourself
+  are active in — that would lock you out of the screen that undoes it.
+
+Setting up a real second club is then: create it, add its admin, and they import
+their members and programme from Admin as Orewa's admins do.
+
 ## Test club (plan §21 B14)
 
 A second club with fake data, for exercising the multi-club work before a real

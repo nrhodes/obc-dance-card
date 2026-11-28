@@ -160,6 +160,19 @@ service cloud.firestore {
 
     /* ============================ people ============================ */
 
+    /* ------------------------- platformAdmins ------------------------- */
+
+    match /platformAdmins/{id} {
+      // The existence of this document IS the platform-admin grant (plan §21
+      // B14.3). A person may see whether they hold it — that is all the web
+      // app needs to decide whether to show the Platform area — and nobody
+      // can see anyone else's. Never client-writable: it is granted only by
+      // `make-platform-admin.ts`. The server re-checks it on every platform
+      // callable; this read is cosmetic.
+      allow read: if isSelf(id);
+      allow write: if false;
+    }
+
     /* ---------------------------- users ------------------------------ */
 
     match /users/{id} {
@@ -210,6 +223,8 @@ service cloud.firestore {
 
     /* ------------------- server-only collections ---------------- */
 
+    // What platform admins did (plan §21 B14.3). Server-only.
+    match /platformAuditLog/{id} { allow read, write: if false; }
     match /emailCodes/{id} { allow read, write: if false; }
     match /rateLimits/{id} { allow read, write: if false; }
     // iCal feed token lookup (plan §21 B1) — read only by the `icalFeed`

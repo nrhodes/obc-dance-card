@@ -222,3 +222,23 @@ export function isOneOf<T extends readonly string[]>(
 ): value is T[number] {
   return typeof value === 'string' && (vocab as readonly string[]).includes(value);
 }
+
+/**
+ * Actions recorded in `platformAuditLog` (plan §21 B14.3): what a platform
+ * administrator did to the set of clubs, as opposed to what an admin did
+ * inside one club (`AUDIT_ACTIONS`).
+ */
+export const PLATFORM_AUDIT_ACTIONS = [
+  'platform_admin_granted',
+  'club_created',
+  'club_updated',
+  'club_suspended',
+  'club_reactivated',
+  'club_admin_appointed',
+  'club_admin_removed',
+] as const;
+export type PlatformAuditAction = (typeof PLATFORM_AUDIT_ACTIONS)[number];
+
+/** The states a club can be in. A suspended club is refused by every callable. */
+export const CLUB_STATUSES = ['active', 'suspended'] as const;
+export type ClubStatus = (typeof CLUB_STATUSES)[number];
