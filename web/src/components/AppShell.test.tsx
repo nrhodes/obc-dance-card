@@ -9,6 +9,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 import type { Member } from '@obc/shared';
 import { AppShell } from './AppShell';
+import { ClubsContext, type ClubsState } from '../club/ClubContext';
 
 let memberFixture: Member | null = null;
 let actingAsFixture: { memberId: string; name: string } | null = null;
@@ -179,5 +180,41 @@ describe('AppShell', () => {
     await user.click(screen.getByRole('button', { name: /reload/i }));
     expect(reloadMock).toHaveBeenCalled();
     needsRefreshFixture = false;
+  });
+
+  it('names the one original club and offers no switcher to a one-club member', () => {
+    memberFixture = member();
+    renderShell();
+    expect(screen.getByText('Orewa Bridge Club')).toBeTruthy();
+    expect(screen.queryByRole('combobox', { name: 'Club' })).toBeNull();
+  });
+
+  it('offers a club switcher to a member of several clubs and shows the current club’s name', async () => {
+    memberFixture = member();
+    const selectClub = vi.fn();
+    const clubs: ClubsState = {
+      clubs: [
+        { id: 'orewa', name: 'Orewa Bridge Club' },
+        { id: 'testclub', name: 'TestClub' },
+      ],
+      currentClubId: 'testclub',
+      selectClub,
+    };
+    const user = userEvent.setup();
+    render(
+      <ClubsContext.Provider value={clubs}>
+        <MemoryRouter initialEntries={['/']}>
+          <Routes>
+            <Route path="/" element={<AppShell />} />
+          </Routes>
+        </MemoryRouter>
+      </ClubsContext.Provider>,
+    );
+
+    expect(document.querySelector('.app-header .title')?.textContent).toBe('TestClub');
+    const switcher = screen.getByRole('combobox', { name: 'Club' }) as HTMLSelectElement;
+    expect(switcher.value).toBe('testclub');
+    await user.selectOptions(switcher, 'orewa');
+    expect(selectClub).toHaveBeenCalledWith('orewa');
   });
 });

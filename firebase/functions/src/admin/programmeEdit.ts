@@ -42,7 +42,7 @@ import { sessionIdForSeries, sessionIdForSingle } from './programmeIds.js'; // s
 
 export async function updateSeriesHandler(req: CallableRequest<UpdateSeriesInput>): Promise<UpdateSeriesResult> {
   const input = parseInput(UpdateSeriesInputSchema, req.data);
-  const cp = clubOf(input);
+  const cp = await clubOf(input);
   const caller = await requireAdmin(req, cp);
   const patch = input.patch;
 
@@ -140,7 +140,7 @@ export const updateSeries = onCall(callableOptions, updateSeriesHandler);
 
 export async function updateSessionHandler(req: CallableRequest<UpdateSessionInput>): Promise<UpdateSessionResult> {
   const input = parseInput(UpdateSessionInputSchema, req.data);
-  const cp = clubOf(input);
+  const cp = await clubOf(input);
   const caller = await requireAdmin(req, cp);
   const patch = input.patch;
 
@@ -375,7 +375,7 @@ export const updateSession = onCall(callableOptions, updateSessionHandler);
  */
 export async function updateWeekdayHandler(req: CallableRequest<UpdateWeekdayInput>): Promise<UpdateWeekdayResult> {
   const input = parseInput(UpdateWeekdayInputSchema, req.data);
-  const cp = clubOf(input);
+  const cp = await clubOf(input);
   const caller = await requireAdmin(req, cp);
   const patch = input.patch;
 

@@ -4,8 +4,8 @@
  * server decides WHICH club a request, a scheduled job or a person-level
  * lookup is about.
  *
- * Stage 1: exactly one club exists, `DEFAULT_CLUB_ID`. Stage 2 replaces the
- * constants below with lookups of `clubs/{clubId}` — callers do not change.
+ * The registry of clubs is the `clubs` collection: a club exists when
+ * `clubs/{clubId}` does, and takes part when its `status` is `'active'`.
  */
 import { FieldValue } from 'firebase-admin/firestore';
 import { HttpsError } from 'firebase-functions/v2/https';
@@ -22,23 +22,47 @@ import {
 import { db } from './admin.js';
 
 /**
+ * How long a club record is trusted without re-reading it. Clubs are created
+ * and suspended rarely, and every callable and every sign-in asks which exist,
+ * so a short cache saves a read per request. Disabled against the emulator,
+ * where tests create a club and use it in the next statement.
+ */
+const CLUB_CACHE_MS = process.env.FIRESTORE_EMULATOR_HOST ? 0 : 60_000;
+
+let activeClubsCache: { at: number; ids: ClubId[] } | undefined;
+
+/** The ids of every club with `status: 'active'` — the registry is the `clubs` collection itself. */
+async function activeClubIds(): Promise<ClubId[]> {
+  const now = Date.now();
+  if (activeClubsCache && now - activeClubsCache.at < CLUB_CACHE_MS) return activeClubsCache.ids;
+  const snap = await db.collection(paths.clubs()).get();
+  const ids = snap.docs.filter((d) => (d.data() as Club).status === 'active').map((d) => d.id);
+  activeClubsCache = { at: now, ids };
+  return ids;
+}
+
+/**
  * The club a club-scoped callable acts in: its input's `clubId`, or the
  * default club while that field is still optional (until stage 1c).
  *
- * An unknown club is refused here, before any read: only clubs that exist may
- * be named (stage 2 replaces this check with a lookup of `clubs/{clubId}`).
+ * Only a club that exists and is active may be named. An unknown or suspended
+ * club is refused here, before the handler reads or writes anything.
  */
-export function clubOf(input: { clubId?: ClubId | undefined }): ClubPaths {
+export async function clubOf(input: { clubId?: ClubId | undefined }): Promise<ClubPaths> {
   const clubId = input.clubId ?? DEFAULT_CLUB_ID;
-  if (clubId !== DEFAULT_CLUB_ID) {
-    throw new HttpsError('not-found', 'Unknown club.');
+  if (!(await activeClubIds()).includes(clubId)) {
+    // Not cached as a miss: a club created a moment ago must be usable at once.
+    const club = (await db.doc(paths.club(clubId)).get()).data() as Club | undefined;
+    if (!club) throw new HttpsError('not-found', 'Unknown club.');
+    if (club.status !== 'active') throw new HttpsError('failed-precondition', 'This club is not available.');
+    activeClubsCache = undefined;
   }
   return clubPaths(clubId);
 }
 
-/** Every club, for jobs that sweep all of them (reminders, digests, purge, integrity). */
+/** Every active club, for jobs that sweep all of them (reminders, digests, purge, integrity). */
 export async function allClubs(): Promise<ClubPaths[]> {
-  return [clubPaths(DEFAULT_CLUB_ID)];
+  return (await activeClubIds()).map((id) => clubPaths(id));
 }
 
 /** The clubs a person may belong to — the candidates for a membership lookup by uid. */

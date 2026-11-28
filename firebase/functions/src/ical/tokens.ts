@@ -60,7 +60,7 @@ export function icalFeedUrls(token: string): { url: string; webcalUrl: string } 
 
 export async function getIcalFeedHandler(req: CallableRequest<GetIcalFeedInput>): Promise<GetIcalFeedResult> {
   const input = parseInput(GetIcalFeedInputSchema, req.data);
-  const cp = clubOf(input);
+  const cp = await clubOf(input);
   const caller = await requireMember(req, cp);
   const actor = await resolveActingMember(caller, input.onBehalfOfMemberId);
 
@@ -98,7 +98,7 @@ export async function createIcalFeedHandler(
   req: CallableRequest<CreateIcalFeedInput>,
 ): Promise<CreateIcalFeedResult> {
   const input = parseInput(CreateIcalFeedInputSchema, req.data);
-  const cp = clubOf(input);
+  const cp = await clubOf(input);
   const caller = await requireMember(req, cp);
   const actor = await resolveActingMember(caller, input.onBehalfOfMemberId);
 
@@ -155,7 +155,7 @@ export async function rotateIcalFeedHandler(
   req: CallableRequest<RotateIcalFeedInput>,
 ): Promise<RotateIcalFeedResult> {
   const input = parseInput(RotateIcalFeedInputSchema, req.data);
-  const cp = clubOf(input);
+  const cp = await clubOf(input);
   const caller = await requireMember(req, cp);
   const actor = await resolveActingMember(caller, input.onBehalfOfMemberId);
 
@@ -211,7 +211,7 @@ export async function removeIcalFeedHandler(
   req: CallableRequest<RemoveIcalFeedInput>,
 ): Promise<RemoveIcalFeedResult> {
   const input = parseInput(RemoveIcalFeedInputSchema, req.data);
-  const cp = clubOf(input);
+  const cp = await clubOf(input);
   const caller = await requireMember(req, cp);
   const actor = await resolveActingMember(caller, input.onBehalfOfMemberId);
 

@@ -15,7 +15,7 @@ export async function importProgrammeHandler(
   req: CallableRequest<ImportProgrammeInput>,
 ): Promise<ProgrammeImportReport> {
   const input = parseInput(ImportProgrammeInputSchema, req.data);
-  const cp = clubOf(input);
+  const cp = await clubOf(input);
   const caller = await requireAdmin(req, cp);
   return runProgrammeImport(cp, input, caller.uid);
 }

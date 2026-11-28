@@ -1965,6 +1965,16 @@ sees does. The client resolves "the current club" as the member's only club
 - **1c. Clean up.** Delete the old collections, make `clubId` required in every
   schema, remove the `orewa` default.
 
+**Brought forward (2026-11-28, Neil: a test club).** Three pieces from later stages
+were built early so a second, fake club could exist alongside Orewa:
+(a) the server's registry of clubs is now the `clubs` collection (`clubOf`,
+`allClubs` in `lib/clubs.ts`) rather than a constant, with `status: 'suspended'`
+honoured; (b) the stage-4 stopgap — a header club switcher shown only to a person
+in more than one club, each screen still showing one club at a time
+(`web/src/club/`); (c) `provision-test-club.ts`, which creates a club by script
+(there is still no `createClub` callable and no platform admin). iOS still shows
+only the default club. See `docs/ops-runbook.md` "Test club".
+
 **Stage 2 — platform admin and club management.** `platformAdmins`,
 `platformAuditLog`, `createClub`, `updateClub`, `setClubAdmin`, and the Platform
 admin area. The first visible change, and visible only to a platform admin.

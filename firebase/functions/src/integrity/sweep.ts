@@ -368,7 +368,7 @@ export async function runPairingSweepCallableHandler(
   req: CallableRequest<RunPairingSweepInput>,
 ): Promise<RunPairingSweepResult> {
   const input = parseInput(RunPairingSweepInputSchema, req.data);
-  const cp = clubOf(input);
+  const cp = await clubOf(input);
   const caller = await requireAdmin(req, cp);
   return runPairingSweep(cp, { repair: input.repair, actorMemberId: caller.uid });
 }

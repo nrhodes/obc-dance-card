@@ -9,6 +9,7 @@ import { usePwaUpdate } from '../pwa/usePwaUpdate';
 import { useIdleSignOut } from '../session/useIdleSignOut';
 import { OfflineBanner } from './OfflineBanner';
 import { isWideRoute } from './wideRoute';
+import { useClubs } from '../club/useClub';
 
 export function AppShell() {
   const { member, signOut } = useAuth();
@@ -73,6 +74,11 @@ export function AppShell() {
   // no activity on this device (task deliverable C).
   useIdleSignOut(signOut);
 
+  // Clubs (plan §21 B14): a person in one club sees only its name; a person
+  // in several also gets a switcher. Each screen shows one club at a time.
+  const { clubs, currentClubId, selectClub } = useClubs();
+  const currentClubName = clubs.find((c) => c.id === currentClubId)?.name;
+
   return (
     <>
       <a href="#content" className="skip-link">
@@ -80,7 +86,21 @@ export function AppShell() {
       </a>
       <header className="app-header">
         <div className="app-header-top">
-          <p className="title">Orewa Bridge Club</p>
+          <p className="title">{currentClubName ?? 'Orewa Bridge Club'}</p>
+          {clubs.length > 1 && (
+            <select
+              className="club-switcher"
+              aria-label="Club"
+              value={currentClubId}
+              onChange={(e) => selectClub(e.target.value)}
+            >
+              {clubs.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          )}
         </div>
         <nav className="app-nav" aria-label="Main">
           <NavLink to="/" end>

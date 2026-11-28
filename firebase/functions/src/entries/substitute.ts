@@ -78,7 +78,7 @@ async function resolvePairForSubstitute(
 
 export async function setSubstituteHandler(req: CallableRequest<SetSubstituteInput>): Promise<SetSubstituteResult> {
   const input = parseInput(SetSubstituteInputSchema, req.data);
-  const cp = clubOf(input);
+  const cp = await clubOf(input);
   const caller = await requireMember(req, cp);
   assertForceAllowed(caller, input.force);
   const actor = await resolveActingMember(caller, input.onBehalfOfMemberId);
@@ -223,7 +223,7 @@ export const setSubstitute = onCall(callableOptions, setSubstituteHandler);
 
 export async function clearSubstituteHandler(req: CallableRequest<ClearSubstituteInput>): Promise<ClearSubstituteResult> {
   const input = parseInput(ClearSubstituteInputSchema, req.data);
-  const cp = clubOf(input);
+  const cp = await clubOf(input);
   const caller = await requireMember(req, cp);
   const actor = await resolveActingMember(caller, input.onBehalfOfMemberId);
 

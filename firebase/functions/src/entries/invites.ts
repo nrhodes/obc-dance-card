@@ -74,7 +74,7 @@ async function pendingInvitesInvolving(cp: ClubPaths, tx: Transaction, memberIds
 
 export async function sendInviteHandler(req: CallableRequest<SendInviteInput>): Promise<SendInviteResult> {
   const input = parseInput(SendInviteInputSchema, req.data);
-  const cp = clubOf(input);
+  const cp = await clubOf(input);
   const caller = await requireMember(req, cp);
   assertForceAllowed(caller, input.force);
   const actor = await resolveActingMember(caller, input.onBehalfOfMemberId);
@@ -228,7 +228,7 @@ export async function respondToInviteHandler(
   req: CallableRequest<RespondToInviteInput>,
 ): Promise<RespondToInviteResult> {
   const input = parseInput(RespondToInviteInputSchema, req.data);
-  const cp = clubOf(input);
+  const cp = await clubOf(input);
   const caller = await requireMember(req, cp);
   assertForceAllowed(caller, input.force);
   const actor = await resolveActingMember(caller, input.onBehalfOfMemberId);
@@ -690,7 +690,7 @@ async function respondToTeamInviteHandler(
 
 export async function cancelInviteHandler(req: CallableRequest<CancelInviteInput>): Promise<CancelInviteResult> {
   const input = parseInput(CancelInviteInputSchema, req.data);
-  const cp = clubOf(input);
+  const cp = await clubOf(input);
   const caller = await requireMember(req, cp);
   const actor = await resolveActingMember(caller, input.onBehalfOfMemberId);
   const actorName = `${actor.member.firstName} ${actor.member.lastName}`;

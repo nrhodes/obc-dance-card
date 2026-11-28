@@ -30,7 +30,7 @@ export async function updateMyContactHandler(
   req: CallableRequest<UpdateMyContactInput>,
 ): Promise<{ ok: true }> {
   const input = parseInput(UpdateMyContactInputSchema, req.data);
-  const cp = clubOf(input);
+  const cp = await clubOf(input);
   const caller = await requireMember(req, cp);
 
   if (input.phone !== undefined) {

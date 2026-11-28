@@ -80,7 +80,7 @@ export async function publishProgrammeHandler(
   req: CallableRequest<PublishProgrammeInput>,
 ): Promise<PublishProgrammeResult> {
   const input = parseInput(PublishProgrammeInputSchema, req.data);
-  const cp = clubOf(input);
+  const cp = await clubOf(input);
   const caller = await requireAdmin(req, cp);
   return runPublishProgramme(cp, input, caller.uid);
 }
