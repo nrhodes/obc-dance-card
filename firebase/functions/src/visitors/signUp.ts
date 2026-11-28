@@ -35,7 +35,7 @@ export async function signUpWithVisitorHandler(
   req: CallableRequest<SignUpWithVisitorInput>,
 ): Promise<SignUpWithVisitorResult> {
   const input = parseInput(SignUpWithVisitorInputSchema, req.data);
-  const cp = clubOf(input);
+  const cp = await clubOf(input);
   const caller = await requireMember(req, cp);
   assertForceAllowed(caller, input.force);
   const actor = await resolveActingMember(caller, input.onBehalfOfMemberId);

@@ -66,7 +66,7 @@ import {
 
 export async function setSoloStatusHandler(req: CallableRequest<SetSoloStatusInput>): Promise<SetSoloStatusResult> {
   const input = parseInput(SetSoloStatusInputSchema, req.data);
-  const cp = clubOf(input);
+  const cp = await clubOf(input);
   const caller = await requireMember(req, cp);
   assertForceAllowed(caller, input.force);
   const actor = await resolveActingMember(caller, input.onBehalfOfMemberId);
@@ -157,7 +157,7 @@ export async function clearSoloStatusHandler(
   req: CallableRequest<ClearSoloStatusInput>,
 ): Promise<ClearSoloStatusResult> {
   const input = parseInput(ClearSoloStatusInputSchema, req.data);
-  const cp = clubOf(input);
+  const cp = await clubOf(input);
   const caller = await requireMember(req, cp);
   assertForceAllowed(caller, input.force);
 
@@ -187,7 +187,7 @@ export async function claimLookingForPartnerHandler(
   req: CallableRequest<ClaimLookingForPartnerInput>,
 ): Promise<ClaimLookingForPartnerResult> {
   const input = parseInput(ClaimLookingForPartnerInputSchema, req.data);
-  const cp = clubOf(input);
+  const cp = await clubOf(input);
   const caller = await requireMember(req, cp);
   assertForceAllowed(caller, input.force);
   const actor = await resolveActingMember(caller, input.onBehalfOfMemberId);
@@ -348,7 +348,7 @@ export const claimLookingForPartner = onCall(callableOptions, claimLookingForPar
 
 export async function cancelEntryHandler(req: CallableRequest<CancelEntryInput>): Promise<CancelEntryResult> {
   const input = parseInput(CancelEntryInputSchema, req.data);
-  const cp = clubOf(input);
+  const cp = await clubOf(input);
   const caller = await requireMember(req, cp);
   assertForceAllowed(caller, input.force);
   const actor = await resolveActingMember(caller, input.onBehalfOfMemberId);

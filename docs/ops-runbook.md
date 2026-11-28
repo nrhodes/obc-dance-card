@@ -268,6 +268,39 @@ export GOOGLE_APPLICATION_CREDENTIALS=/path/to/key.json
   new layout. `backfill-cohort.ts` and `backfill-member-emails.ts` targeted the
   old one and now refuse to run.
 
+## Test club (plan §21 B14)
+
+A second club with fake data, for exercising the multi-club work before a real
+second club exists. `firebase/scripts/provision-test-club.ts` creates
+`clubs/testclub` ("TestClub"), copies Orewa's programme for one year into it,
+makes one existing person its admin, and creates fake members
+(`test01@testclub.example.test` …, named "Alice TEST01" …) who sign in with a
+shared password. It is an ordinary club: nothing in the app special-cases it.
+
+```sh
+export GOOGLE_APPLICATION_CREDENTIALS=/path/to/key.json   # Cloud Datastore User + Firebase Authentication Admin
+export TEST_CLUB_PASSWORD='…'                             # at least 8 characters
+T="npx tsx firebase/scripts/provision-test-club.ts --project obc-dance-card --admin-email <your login email>"
+$T              # prints what it would do; writes nothing
+$T --execute    # creates it
+```
+
+- **The build that understands a second club must be deployed first.** Before it,
+  the server refuses any club but Orewa and the web app has no club switcher.
+- **The password is shared, and this repository is public.** It comes from the
+  environment so it is never committed or left in shell history. Anyone who
+  learns it can sign in as a fake member and read the test club, including its
+  member directory, which lists the admin's name and login email (never a
+  phone number). Nothing outside the test club is readable that way.
+- Fake members cannot receive email (the domain does not exist) and have every
+  notification channel off. They can only sign in with the password.
+- Re-running is safe: nothing is duplicated, an existing programme is not
+  overwritten, and every fake member's password is reset to the one given.
+- **To switch it off:** set `status: 'suspended'` on `clubs/testclub` in the
+  console. The server then refuses it and its memberships stop counting towards
+  sign-in, so the fake accounts cannot get in. There is no delete script yet.
+- The admin belongs to both clubs, so they get the club switcher in the header.
+
 ## App-Store-review cohort partition (decided 2026-09-05, plan §2/§8.1)
 
 **Deployment order — read this before deploying the cohort partition to an

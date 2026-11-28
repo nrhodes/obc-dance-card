@@ -73,7 +73,7 @@ async function activeMemberNameCollision(cp: ClubPaths, displayName: string): Pr
 
 export async function createVisitorHandler(req: CallableRequest<CreateVisitorInput>): Promise<CreateVisitorResult> {
   const input = parseInput(CreateVisitorInputSchema, req.data);
-  const cp = clubOf(input);
+  const cp = await clubOf(input);
   const caller = await requireMember(req, cp);
   const actor = await resolveActingMember(caller, input.onBehalfOfMemberId);
 
@@ -144,7 +144,7 @@ export const createVisitor = onCall(callableOptions, createVisitorHandler);
 
 export async function updateVisitorHandler(req: CallableRequest<UpdateVisitorInput>): Promise<UpdateVisitorResult> {
   const input = parseInput(UpdateVisitorInputSchema, req.data);
-  const cp = clubOf(input);
+  const cp = await clubOf(input);
   const caller = await requireMember(req, cp);
   const ref = db.doc(cp.visitor(input.visitorId));
 
@@ -223,7 +223,7 @@ async function renameVisitorOnFutureEntries(cp: ClubPaths, visitorId: string, di
 
 export async function deleteVisitorHandler(req: CallableRequest<DeleteVisitorInput>): Promise<DeleteVisitorResult> {
   const input = parseInput(DeleteVisitorInputSchema, req.data);
-  const cp = clubOf(input);
+  const cp = await clubOf(input);
   const caller = await requireMember(req, cp);
   const ref = db.doc(cp.visitor(input.visitorId));
 

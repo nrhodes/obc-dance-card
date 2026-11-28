@@ -149,7 +149,7 @@ export async function setBulkSoloStatusHandler(
   req: CallableRequest<SetBulkSoloStatusInput>,
 ): Promise<SetBulkSoloStatusResult> {
   const input = parseInput(SetBulkSoloStatusInputSchema, req.data);
-  const cp = clubOf(input);
+  const cp = await clubOf(input);
   const caller = await requireMember(req, cp);
   const actor = await resolveActingMember(caller, input.onBehalfOfMemberId);
 

@@ -36,7 +36,7 @@ const NOTIFY_CHUNK_SIZE = 50;
 
 export async function broadcastHandler(req: CallableRequest<BroadcastInput>): Promise<BroadcastResult> {
   const input = parseInput(BroadcastInputSchema, req.data);
-  const cp = clubOf(input);
+  const cp = await clubOf(input);
   const caller = await requireAdmin(req, cp);
 
   await assertRateLimit('broadcast', caller.uid, BROADCAST_DAILY_LIMIT, BROADCAST_WINDOW_SEC);
@@ -90,7 +90,7 @@ const DEFAULT_LIMIT = 50;
 
 export async function listAuditLogHandler(req: CallableRequest<ListAuditLogInput>): Promise<ListAuditLogResult> {
   const input = parseInput(ListAuditLogInputSchema, req.data);
-  const cp = clubOf(input);
+  const cp = await clubOf(input);
   await requireAdmin(req, cp);
 
   const limit = input.limit ?? DEFAULT_LIMIT;

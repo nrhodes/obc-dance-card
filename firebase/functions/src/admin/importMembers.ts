@@ -157,7 +157,7 @@ function parseAndValidateCsv(csv: string): {
 
 export async function importMembersHandler(req: CallableRequest<ImportMembersInput>): Promise<MemberImportReport> {
   const input = parseInput(ImportMembersInputSchema, req.data);
-  const cp = clubOf(input);
+  const cp = await clubOf(input);
   const caller = await requireAdmin(req, cp);
 
   const { rows, errors, mentionedEmails } = parseAndValidateCsv(input.csv);

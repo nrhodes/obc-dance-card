@@ -121,7 +121,7 @@ function authErrorCode(err: unknown): string | undefined {
  */
 export async function addMemberHandler(req: CallableRequest<AddMemberInput>): Promise<AddMemberResult> {
   const input = parseInput(AddMemberInputSchema, req.data);
-  const cp = clubOf(input);
+  const cp = await clubOf(input);
   const caller = await requireAdmin(req, cp);
 
   const existing = await db.collection(paths.userPrivates()).where('emailLower', '==', input.email).limit(1).get();
@@ -179,7 +179,7 @@ export const addMember = onCall(callableOptions, addMemberHandler);
  */
 export async function updateMemberHandler(req: CallableRequest<UpdateMemberInput>): Promise<UpdateMemberResult> {
   const input = parseInput(UpdateMemberInputSchema, req.data);
-  const cp = clubOf(input);
+  const cp = await clubOf(input);
   const caller = await requireAdmin(req, cp);
 
   const memberRef = db.doc(cp.member(input.memberId));
@@ -300,7 +300,7 @@ export const updateMember = onCall(callableOptions, updateMemberHandler);
 
 export async function setMemberRoleHandler(req: CallableRequest<SetMemberRoleInput>): Promise<SetMemberRoleResult> {
   const input = parseInput(SetMemberRoleInputSchema, req.data);
-  const cp = clubOf(input);
+  const cp = await clubOf(input);
   const caller = await requireAdmin(req, cp);
 
   const memberRef = db.doc(cp.member(input.memberId));
@@ -364,7 +364,7 @@ export async function deactivateMemberHandler(
   req: CallableRequest<DeactivateMemberInput>,
 ): Promise<DeactivateMemberResult> {
   const input = parseInput(DeactivateMemberInputSchema, req.data);
-  const cp = clubOf(input);
+  const cp = await clubOf(input);
   const caller = await requireAdmin(req, cp);
 
   const memberRef = db.doc(cp.member(input.memberId));
@@ -501,7 +501,7 @@ export async function reactivateMemberHandler(
   req: CallableRequest<ReactivateMemberInput>,
 ): Promise<ReactivateMemberResult> {
   const input = parseInput(ReactivateMemberInputSchema, req.data);
-  const cp = clubOf(input);
+  const cp = await clubOf(input);
   const caller = await requireAdmin(req, cp);
 
   const memberRef = db.doc(cp.member(input.memberId));
@@ -550,7 +550,7 @@ export const reactivateMember = onCall(callableOptions, reactivateMemberHandler)
 
 export async function eraseMemberHandler(req: CallableRequest<EraseMemberInput>): Promise<EraseMemberResult> {
   const input = parseInput(EraseMemberInputSchema, req.data);
-  const cp = clubOf(input);
+  const cp = await clubOf(input);
   const caller = await requireAdmin(req, cp);
 
   const memberRef = db.doc(cp.member(input.memberId));

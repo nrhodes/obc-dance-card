@@ -315,6 +315,21 @@ textarea {
   margin: 0 0 var(--space-1) 0;
 }
 
+/* Shown only to a member of more than one club (plan §21 B14). */
+.app-header .club-switcher {
+  font: inherit;
+  min-height: var(--tap-target);
+  /* A long club name must never widen the page: at 320px and 200% text the
+     select shrinks and truncates instead (WCAG 1.4.10 reflow). */
+  max-width: 100%;
+  min-width: 0;
+  padding: 0 var(--space-2);
+  border-radius: 6px;
+  border: 1px solid var(--color-primary-contrast);
+  background: var(--color-primary-contrast);
+  color: var(--color-primary);
+}
+
 .app-nav {
   display: flex;
   flex-wrap: wrap;

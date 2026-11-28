@@ -32,9 +32,15 @@ import {
 import { expect } from 'vitest';
 import { auth, db } from '../lib/admin.js';
 import { sessionIdForSeries, slugify } from '../admin/programmeIds.js';
+import { defaultClubRecord } from '../lib/clubs.js';
 
 /** Tests run against the one club that exists (plan §21 B14, stage 1a). */
 export const cp = clubPaths(DEFAULT_CLUB_ID);
+
+// The registry of clubs is the `clubs` collection (lib/clubs.ts), so the club
+// the suites act in has to exist. Written on import: every emulator suite
+// imports this module before it calls a handler.
+await db.doc(paths.club(DEFAULT_CLUB_ID)).set(defaultClubRecord(new Date().toISOString()), { merge: true });
 
 export interface MakeMemberOptions {
   role?: MemberRole;

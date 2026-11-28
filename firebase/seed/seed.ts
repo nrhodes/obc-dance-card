@@ -69,6 +69,16 @@ export const SEED_REVIEW_COUNT = 2;
 export const SEED_REVIEW_DOMAIN = 'reviewer.example.test';
 export const SEED_REVIEW_PASSWORD = 'ci-dev-reviewer-pw-1';
 
+/**
+ * A second club in the emulator (plan §21 B14), so the club switcher and the
+ * club boundary can be exercised locally: the seed admin is its admin too,
+ * and these fake members belong to it alone. Emulator-only credentials.
+ */
+export const SEED_TEST_CLUB_ID = 'testclub';
+export const SEED_TEST_CLUB_COUNT = 3;
+export const SEED_TEST_CLUB_DOMAIN = 'testclub.example.test';
+export const SEED_TEST_CLUB_PASSWORD = 'ci-dev-testclub-pw-1';
+
 function buildSeedMembers(): SeedMemberSpec[] {
   const members: SeedMemberSpec[] = [];
   for (let i = 0; i < FIRST_NAMES.length; i++) {
@@ -397,6 +407,26 @@ async function main(): Promise<void> {
 
   const publishResult = await runPublishProgramme(cp, { year: PROGRAMME_YEAR }, adminUid);
   console.log(`Published ${PROGRAMME_YEAR} programme at ${publishResult.publishedAt}.`);
+
+  // ---- A second club (plan §21 B14) ----
+  const { provisionTestClub } = await import('../functions/src/clubs/testClub.js');
+  const adminSpec = members.find((m) => m.role === 'admin')!;
+  const testClub = await provisionTestClub(db, auth, {
+    clubId: SEED_TEST_CLUB_ID,
+    name: 'TestClub',
+    shortName: 'Test',
+    timezone: 'Pacific/Auckland',
+    sourceClubId: DEFAULT_CLUB_ID,
+    year: PROGRAMME_YEAR,
+    adminEmail: adminSpec.email,
+    memberCount: SEED_TEST_CLUB_COUNT,
+    emailDomain: SEED_TEST_CLUB_DOMAIN,
+    password: SEED_TEST_CLUB_PASSWORD,
+  });
+  console.log(
+    `Seeded TestClub (clubs/${SEED_TEST_CLUB_ID}): ${testClub.programmeDocsCopied} programme doc(s), ` +
+      `${testClub.members.length} fake member(s): ${testClub.members.map((m) => m.email).join(', ')} (password: ${SEED_TEST_CLUB_PASSWORD}).`,
+  );
 
   // ---- second, current-dated programme (plan §21 B3 "two-year horizon") ----
   const currentYear = Number(todayNZ().slice(0, 4));

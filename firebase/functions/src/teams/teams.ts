@@ -89,7 +89,7 @@ function memberRefsOf(team: Team): MemberTeamEntry[] {
 
 export async function createTeamHandler(req: CallableRequest<CreateTeamInput>): Promise<CreateTeamResult> {
   const input = parseInput(CreateTeamInputSchema, req.data);
-  const cp = clubOf(input);
+  const cp = await clubOf(input);
   const caller = await requireMember(req, cp);
   assertForceAllowed(caller, input.force);
   const actor = await resolveActingMember(caller, input.onBehalfOfMemberId);
@@ -173,7 +173,7 @@ export const createTeam = onCall(callableOptions, createTeamHandler);
 
 export async function inviteToTeamHandler(req: CallableRequest<InviteToTeamInput>): Promise<InviteToTeamResult> {
   const input = parseInput(InviteToTeamInputSchema, req.data);
-  const cp = clubOf(input);
+  const cp = await clubOf(input);
   const caller = await requireMember(req, cp);
   assertForceAllowed(caller, input.force);
   const actor = await resolveActingMember(caller, input.onBehalfOfMemberId);
@@ -298,7 +298,7 @@ export async function addVisitorToTeamHandler(
   req: CallableRequest<AddVisitorToTeamInput>,
 ): Promise<AddVisitorToTeamResult> {
   const input = parseInput(AddVisitorToTeamInputSchema, req.data);
-  const cp = clubOf(input);
+  const cp = await clubOf(input);
   const caller = await requireMember(req, cp);
   const actor = await resolveActingMember(caller, input.onBehalfOfMemberId);
 
@@ -364,7 +364,7 @@ export async function removeVisitorFromTeamHandler(
   req: CallableRequest<RemoveVisitorFromTeamInput>,
 ): Promise<RemoveVisitorFromTeamResult> {
   const input = parseInput(RemoveVisitorFromTeamInputSchema, req.data);
-  const cp = clubOf(input);
+  const cp = await clubOf(input);
   const caller = await requireMember(req, cp);
   const actor = await resolveActingMember(caller, input.onBehalfOfMemberId);
 
@@ -414,7 +414,7 @@ export const removeVisitorFromTeam = onCall(callableOptions, removeVisitorFromTe
 
 export async function leaveTeamHandler(req: CallableRequest<LeaveTeamInput>): Promise<LeaveTeamResult> {
   const input = parseInput(LeaveTeamInputSchema, req.data);
-  const cp = clubOf(input);
+  const cp = await clubOf(input);
   const caller = await requireMember(req, cp);
   assertForceAllowed(caller, input.force);
   const actor = await resolveActingMember(caller, input.onBehalfOfMemberId);
@@ -485,7 +485,7 @@ export const leaveTeam = onCall(callableOptions, leaveTeamHandler);
 
 export async function removeFromTeamHandler(req: CallableRequest<RemoveFromTeamInput>): Promise<RemoveFromTeamResult> {
   const input = parseInput(RemoveFromTeamInputSchema, req.data);
-  const cp = clubOf(input);
+  const cp = await clubOf(input);
   const caller = await requireMember(req, cp);
   assertForceAllowed(caller, input.force);
   const actor = await resolveActingMember(caller, input.onBehalfOfMemberId);
@@ -570,7 +570,7 @@ export async function transferCaptaincyHandler(
   req: CallableRequest<TransferCaptaincyInput>,
 ): Promise<TransferCaptaincyResult> {
   const input = parseInput(TransferCaptaincyInputSchema, req.data);
-  const cp = clubOf(input);
+  const cp = await clubOf(input);
   const caller = await requireMember(req, cp);
   const actor = await resolveActingMember(caller, input.onBehalfOfMemberId);
 
@@ -664,7 +664,7 @@ export const transferCaptaincy = onCall(callableOptions, transferCaptaincyHandle
 
 export async function disbandTeamHandler(req: CallableRequest<DisbandTeamInput>): Promise<DisbandTeamResult> {
   const input = parseInput(DisbandTeamInputSchema, req.data);
-  const cp = clubOf(input);
+  const cp = await clubOf(input);
   const caller = await requireMember(req, cp);
   assertForceAllowed(caller, input.force);
   const actor = await resolveActingMember(caller, input.onBehalfOfMemberId);
@@ -747,7 +747,7 @@ export async function addTeamSessionSubstituteHandler(
   req: CallableRequest<AddTeamSessionSubstituteInput>,
 ): Promise<AddTeamSessionSubstituteResult> {
   const input = parseInput(AddTeamSessionSubstituteInputSchema, req.data);
-  const cp = clubOf(input);
+  const cp = await clubOf(input);
   const caller = await requireMember(req, cp);
   assertForceAllowed(caller, input.force);
   const actor = await resolveActingMember(caller, input.onBehalfOfMemberId);
@@ -881,7 +881,7 @@ export async function clearTeamSessionSubstituteHandler(
   req: CallableRequest<ClearTeamSessionSubstituteInput>,
 ): Promise<ClearTeamSessionSubstituteResult> {
   const input = parseInput(ClearTeamSessionSubstituteInputSchema, req.data);
-  const cp = clubOf(input);
+  const cp = await clubOf(input);
   const caller = await requireMember(req, cp);
   assertForceAllowed(caller, input.force);
   const actor = await resolveActingMember(caller, input.onBehalfOfMemberId);
