@@ -583,14 +583,19 @@ describe('updateMember', () => {
 });
 
 describe('club scoping (plan §21 B14, stage 1a)', () => {
-  it('acts in the default club when clubId is absent or names it, and refuses an unknown club', async () => {
+  it('requires clubId, acts in the club it names, and refuses an unknown club', async () => {
     const admin = await makeMember('club-scope-admin@example.org', { role: 'admin' });
     const target = await makeMember('club-scope-target@example.org');
 
-    const implicit = await updateMemberHandler(
-      fakeCallableRequest<UpdateMemberInput>({ memberId: target, patch: { phone: '09 111 1111' } }, { uid: admin }),
-    );
-    expect(implicit.member.phone).toBe('09 111 1111');
+    // Stage 1c: there is no default club on the server.
+    await expect(
+      updateMemberHandler(
+        fakeCallableRequest<UpdateMemberInput>(
+          { memberId: target, patch: { phone: '09 111 1111' } },
+          { uid: admin, club: false },
+        ),
+      ),
+    ).rejects.toMatchObject({ code: 'invalid-argument' });
 
     const explicit = await updateMemberHandler(
       fakeCallableRequest<UpdateMemberInput>(

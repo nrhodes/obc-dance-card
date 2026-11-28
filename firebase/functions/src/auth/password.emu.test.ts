@@ -8,7 +8,7 @@ import { setPasswordHandler } from './password.js';
 describe('setPassword', () => {
   it('sets a password server-side, links the password provider, and flags hasPassword', async () => {
     const uid = await makeMember('setpw@example.org');
-    await setPasswordHandler(fakeCallableRequest<SetPasswordInput>({ password: 'goodpass1' }, { uid }));
+    await setPasswordHandler(fakeCallableRequest<SetPasswordInput>({ password: 'goodpass1' }, { club: false, uid }));
 
     const user = await auth.getUser(uid);
     expect(user.providerData.some((p) => p.providerId === 'password')).toBe(true);
@@ -20,7 +20,7 @@ describe('setPassword', () => {
     const uid = await makeMember('freshpw@example.org');
     const authTimeSeconds = Math.floor(Date.now() / 1000); // just now
     await setPasswordHandler(
-      fakeCallableRequest<SetPasswordInput>({ password: 'goodpass1' }, { uid, authTimeSeconds }),
+      fakeCallableRequest<SetPasswordInput>({ password: 'goodpass1' }, { club: false, uid, authTimeSeconds }),
     );
     const user = await auth.getUser(uid);
     expect(user.providerData.some((p) => p.providerId === 'password')).toBe(true);
@@ -31,7 +31,7 @@ describe('setPassword', () => {
     const staleAuthTimeSeconds = Math.floor(Date.now() / 1000) - 11 * 60; // 11 minutes ago
     await expect(
       setPasswordHandler(
-        fakeCallableRequest<SetPasswordInput>({ password: 'goodpass1' }, { uid, authTimeSeconds: staleAuthTimeSeconds }),
+        fakeCallableRequest<SetPasswordInput>({ password: 'goodpass1' }, { club: false, uid, authTimeSeconds: staleAuthTimeSeconds }),
       ),
     ).rejects.toMatchObject({
       code: 'failed-precondition',
@@ -46,7 +46,7 @@ describe('setPassword', () => {
     const staleAuthTimeSeconds = Math.floor(Date.now() / 1000) - 15 * 60;
     await expect(
       setPasswordHandler(
-        fakeCallableRequest<SetPasswordInput>({ password: 'goodpass1' }, { uid, authTimeSeconds: staleAuthTimeSeconds }),
+        fakeCallableRequest<SetPasswordInput>({ password: 'goodpass1' }, { club: false, uid, authTimeSeconds: staleAuthTimeSeconds }),
       ),
     ).rejects.toMatchObject({ code: 'failed-precondition' });
 
@@ -55,7 +55,7 @@ describe('setPassword', () => {
     // new session's auth_time is fresh.
     const freshAuthTimeSeconds = Math.floor(Date.now() / 1000);
     await setPasswordHandler(
-      fakeCallableRequest<SetPasswordInput>({ password: 'goodpass1' }, { uid, authTimeSeconds: freshAuthTimeSeconds }),
+      fakeCallableRequest<SetPasswordInput>({ password: 'goodpass1' }, { club: false, uid, authTimeSeconds: freshAuthTimeSeconds }),
     );
     const user = await auth.getUser(uid);
     expect(user.providerData.some((p) => p.providerId === 'password')).toBe(true);
@@ -64,7 +64,7 @@ describe('setPassword', () => {
   it('rejects a weak password with invalid-argument and does not set it', async () => {
     const uid = await makeMember('weakpw@example.org');
     await expect(
-      setPasswordHandler(fakeCallableRequest<SetPasswordInput>({ password: 'short' }, { uid })),
+      setPasswordHandler(fakeCallableRequest<SetPasswordInput>({ password: 'short' }, { club: false, uid })),
     ).rejects.toMatchObject({ code: 'invalid-argument' });
     const user = await auth.getUser(uid);
     expect(user.providerData.some((p) => p.providerId === 'password')).toBe(false);
@@ -72,7 +72,7 @@ describe('setPassword', () => {
 
   it('requires a signed-in member', async () => {
     await expect(
-      setPasswordHandler(fakeCallableRequest<SetPasswordInput>({ password: 'goodpass1' }, {})),
+      setPasswordHandler(fakeCallableRequest<SetPasswordInput>({ password: 'goodpass1' }, { club: false })),
     ).rejects.toMatchObject({ code: 'unauthenticated' });
   });
 });

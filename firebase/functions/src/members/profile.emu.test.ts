@@ -50,7 +50,7 @@ describe('removePassword', () => {
   it('sets hasPassword=false while the Auth user still exists', async () => {
     const uid = await makeMember('removepw@example.org', { hasPassword: true });
 
-    await removePasswordHandler(fakeCallableRequest({}, { uid }));
+    await removePasswordHandler(fakeCallableRequest({}, { club: false, uid }));
 
     const snap = await db.doc(paths.userPrivate(uid)).get();
     expect((snap.data() as MemberPrivate).hasPassword).toBe(false);

@@ -25,14 +25,11 @@ const displayName = z.string().trim().min(1).max(80);
 const weekday = z.enum(WEEKDAYS);
 const onBehalfOfMemberId = id.optional();
 /**
- * Which club a club-scoped callable acts in (plan §21 B14). Optional during
- * stage 1a/1b — the server falls back to `DEFAULT_CLUB_ID` — and required
- * from stage 1c. A slug, never free text: it ends up in a document path.
+ * Which club a club-scoped callable acts in (plan §21 B14). Required since
+ * stage 1c: the server never guesses a club. A slug, never free text: it ends
+ * up in a document path.
  */
-const clubId = z
-  .string()
-  .regex(/^[a-z0-9][a-z0-9-]{0,39}$/, 'expected a club id')
-  .optional();
+const clubId = z.string().regex(/^[a-z0-9][a-z0-9-]{0,39}$/, 'expected a club id');
 const year = z.number().int().min(2000).max(2100);
 /** Admin-only override of a locked session's cutoff (plan §6); enforced server-side. */
 const force = z.boolean().optional();
