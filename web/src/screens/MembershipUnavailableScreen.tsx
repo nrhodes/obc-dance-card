@@ -34,7 +34,7 @@ export function MembershipUnavailableScreen({
               load your dance card.
             </p>
             <p>
-              Allow <strong>obc-dance-card.web.app</strong> in your blocker (or turn it off for this site) and try
+              Allow <strong>{window.location.host}</strong> in your blocker (or turn it off for this site) and try
               again. A private window, where extensions are off, is a quick way to check.
             </p>
           </>

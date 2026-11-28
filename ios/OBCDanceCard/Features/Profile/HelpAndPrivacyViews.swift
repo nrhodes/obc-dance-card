@@ -56,7 +56,9 @@ struct PrivacyView: View {
     var body: some View {
         List {
             Section {
-                Text("This app is run by Orewa Bridge Club to organise dance-card partners for club sessions. This page explains, in plain language, what we store and who can see it.")
+                // No club is named: the app does not load the club record yet (plan §21
+                // B14.8 stage 3). Same wording as the web page shows signed out.
+                Text("This app is used by your bridge club to organise dance-card partners for club sessions. This page explains, in plain language, what we store and who can see it.")
             }
 
             Section("What we store") {

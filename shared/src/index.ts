@@ -8,3 +8,4 @@ export * from './paths.js';
 export * from './validate.js';
 export * from './pairing.js';
 export * from './time.js';
+export * from './brand.js';

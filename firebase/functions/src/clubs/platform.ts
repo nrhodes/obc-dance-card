@@ -139,6 +139,10 @@ export async function updateClubHandler(req: CallableRequest<UpdateClubInput>): 
     changes.colour = patch.colour === null ? FieldValue.delete() : patch.colour;
     fields.push('colour');
   }
+  if (patch.contactEmail !== undefined && (patch.contactEmail ?? undefined) !== current.contactEmail) {
+    changes.contactEmail = patch.contactEmail === null ? FieldValue.delete() : patch.contactEmail;
+    fields.push('contactEmail');
+  }
   const statusChanged = patch.status !== undefined && patch.status !== current.status;
   if (statusChanged) {
     if (patch.status === 'suspended') {

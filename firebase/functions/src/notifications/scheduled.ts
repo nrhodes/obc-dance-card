@@ -23,7 +23,7 @@ import {
   type ClubPaths,
 } from '@obc/shared';
 import { db } from '../lib/admin.js';
-import { activePersonIds, allClubs } from '../lib/clubs.js';
+import { activePersonIds, allClubs, brandNameFor } from '../lib/clubs.js';
 import { audit } from '../lib/audit.js';
 import { BatchWriter } from '../lib/batchWriter.js';
 import { logger } from '../lib/logger.js';
@@ -163,7 +163,10 @@ export async function runSendDailyDigest(now: Date = new Date()): Promise<Digest
       .filter((n) => !n.channelsSent.includes('email') && !ALWAYS_IMMEDIATE_EMAIL_TYPES.includes(n.type));
     if (pending.length === 0) continue;
 
-    const content = digestEmail(pending.map((n) => ({ title: n.title, body: n.body })));
+    const content = digestEmail(
+      pending.map((n) => ({ title: n.title, body: n.body })),
+      await brandNameFor(memberId),
+    );
     await getEmailProvider().send({ to: mp.emailLower, subject: content.subject, text: content.text, html: content.html });
     emailsSent += 1;
 

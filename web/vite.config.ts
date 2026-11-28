@@ -77,9 +77,12 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,svg,png,ico,webmanifest}'],
       },
       manifest: {
-        name: 'Orewa Bridge Club Dance Card',
-        short_name: 'Dance Card',
-        description: "Orewa Bridge Club's electronic dance card",
+        // The product's name, not a club's (`PRODUCT_NAME` /
+        // `PRODUCT_SHORT_NAME`, shared/src/brand.ts — `brand.test.ts` keeps
+        // these in step): one install serves every club a person is in.
+        name: 'Bridge Programme',
+        short_name: 'Programme',
+        description: "Your bridge club's programme and partners",
         theme_color: '#1b3a57',
         background_color: '#ffffff',
         display: 'standalone',

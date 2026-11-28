@@ -21,6 +21,7 @@
 import { todayNZ, type Entry, type Visitor, type ClubPaths } from '@obc/shared';
 import { db } from '../lib/admin.js';
 import { audit } from '../lib/audit.js';
+import { clubName } from '../lib/clubs.js';
 import { createNotification } from '../notifications/create.js';
 
 function refIsVisitor(ref: Entry['partner'], visitorId: string): boolean {
@@ -45,6 +46,7 @@ export async function promoteVisitorsForNewMember(
   const futureEntriesSnap = await db.collection(cp.entries()).where('date', '>=', today).get();
   const futureEntries = futureEntriesSnap.docs.map((d) => d.data() as Entry);
 
+  const joinedClubName = await clubName(cp);
   for (const visitorDoc of visitorsSnap.docs) {
     const visitor = visitorDoc.data() as Visitor;
     const hasFutureEntry = futureEntries.some(
@@ -57,7 +59,7 @@ export async function promoteVisitorsForNewMember(
       visitor.createdByMemberId,
       'visitor_promoted',
       `${visitor.displayName} is now a member`,
-      `${visitor.displayName} has joined Orewa Bridge Club as a member — invite them so it appears on their card.`,
+      `${visitor.displayName} has joined ${joinedClubName} as a member — invite them so it appears on their card.`,
       { visitorId: visitor.id, memberId: newMemberId },
     );
 

@@ -22,7 +22,7 @@ import { callableOptions } from '../lib/callable.js';
 import { logger } from '../lib/logger.js';
 import { SMTP_SECRETS } from '../lib/secrets.js';
 import { requireMember, resolveActingMember } from '../lib/context.js';
-import { clubOf } from '../lib/clubs.js';
+import { clubContactEmail, clubOf, clubRecord } from '../lib/clubs.js';
 import { getEmailProvider } from '../email/provider.js';
 import { visitorCourtesyEmail } from '../email/templates/visitorCourtesy.js';
 import { parseInput } from '../lib/parseInput.js';
@@ -147,7 +147,10 @@ export async function signUpWithVisitorHandler(
 
   if (visitor.courtesyEmails && visitor.email) {
     const sponsorName = `${actor.member.firstName} ${actor.member.lastName}`;
+    const club = await clubRecord(cp);
     const content = visitorCourtesyEmail({
+      clubName: club.name,
+      contactEmail: clubContactEmail(club),
       sponsorName,
       sponsorPhone: actor.member.phone || undefined,
       dates: result.entries.map((e) => e.date),

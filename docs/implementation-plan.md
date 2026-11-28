@@ -1996,6 +1996,21 @@ see, under their own club's name. Needs:
 
 - every hard-coded "Orewa"/"OBC" string (web screens, email templates, the iCal
   feed, the iOS app) replaced by the club's name or the platform's name;
+  *(Built 2026-11-29. The product is **Bridge Programme** (`PRODUCT_NAME`,
+  `shared/src/brand.ts`; Neil, to match the planned `bridgeprogramme.nz`). The rule:
+  where one club is in view its `Club.name` is shown; something addressed to a
+  person (sign-in code, digest, password notice, the calendar feed's name) names
+  their club when they are active in exactly one and the product otherwise
+  (`brandNameFor`), which also avoids revealing which clubs a two-club person is
+  in. The page title and PWA manifest are the product's name; the tab title adds
+  the club once signed in. Each calendar event's location is its club's name.
+  `Club.contactEmail` (optional, set from the Platform area) replaces the single
+  `CLUB_CONTACT_EMAIL` setting for visitor removal requests; the original club
+  falls back to the old setting until its record carries one. Left alone on
+  purpose: the feature name "dance card"; the iCal UID suffix `@obc-dance-card`
+  (changing it would duplicate every subscribed event); the iOS app's display
+  name, bundle and the Firebase project id (B14.10 "Branding"); the email
+  From name, which is part of B14.7.)*
 - the transactional email provider and per-club sender identity (B14.7);
 - a decision on what a person who is in both clubs sees before stage 4. Provisioning
   must not silently create that state: either `addMember`/`importMembers` refuse (or
@@ -2083,6 +2098,71 @@ project: the neutral site plus one site per club that wants its own address.
   transactional provider at the second club, which provider, and whether any club
   needs its own from-domain.
 - **Review cohort → demo club** (recommended) or keep `cohort` alongside clubs.
+
+### B15. Grass-roots onboarding: a club that starts with one member (captured 2026-11-29, not designed in detail, not scheduled)
+
+**The idea (Neil).** B14 assumes a club arrives through its committee: the committee
+agrees, supplies the roster, and an admin imports it ("committee-first"). The other
+way in is one member who starts using the app on their own; when they invite a
+partner who is not on it, that person gets an email inviting them to accept and
+register ("grass-roots").
+
+**Recommendation: committee-first is the main path; grass-roots is a later, limited
+mode** that converts to a normal club when the committee signs on.
+
+**Why it is a different product, not just a different sign-up.**
+
+- *Who is responsible for the data.* Committee-first, the club holds the roster and
+  the app is its tool. Grass-roots there is no club behind it, so the platform
+  operator is the agency holding people's details (§8.1 "Privacy law"); the privacy
+  page and policy must say so.
+- *Who supplies the programme.* The app is built on a club's published sessions.
+  With no committee, the first member types it in and nobody can vouch for it.
+
+**What it collides with today.**
+
+- *No links in email* (§8.1 "Phishing conditioning"). An "accept and register"
+  email is exactly what that rule forbids. The invitation must be link-free too:
+  "go to the site and enter this code", using the existing email-code sign-in.
+- *The directory.* Members see every member's name and phone. In an unverified
+  club anyone could claim membership to read it, so an unofficial club's directory
+  holds only people who registered themselves, with what they chose to share.
+- *Unsolicited email.* Invitations go to people who never agreed to hear from the
+  app (NZ Unsolicited Electronic Messages Act 2007). Needs: one invitation per
+  address per inviter, a per-inviter daily cap, a "do not email me again" that is
+  honoured platform-wide, and no reminders. It also puts the sending domain's
+  reputation (B14.7) in the hands of members.
+- *Sign-in requires an active membership* and accounts are created only by an
+  admin. Grass-roots needs self-registration: prove the email with a code, then
+  give a name.
+
+**What already exists.** Most of the flow: a member adds a non-member partner as a
+visitor with an email (§12), the visitor gets a courtesy email, and
+`promoteVisitorsForNewMember` links them when that person becomes a member.
+Grass-roots is that plus self-registration and an invitation in the courtesy email.
+
+**Sketch.**
+
+1. `Club.kind: 'official' | 'unofficial'` (absent = official). An unofficial club is
+   created by a member, who becomes its admin; it is labelled everywhere as not run
+   by the club's committee.
+2. Self-registration into an unofficial club, only by invitation from a member of
+   it (the visitor record is the invitation). No open sign-up, no club search.
+3. Unofficial clubs: directory limited to registered people; no roster import; no
+   Partner Steward; programme entered by its admin (copying a previous year or
+   another club's as a template is the obvious help).
+4. *Conversion.* When the committee signs on, a platform admin flips the club to
+   official and the roster import matches existing accounts by email, as it
+   already does for a person who belongs to another club.
+
+**Open questions.** Whether two members can each start an unofficial club for the
+same real club, and how they are merged; whether a committee can object to an
+unofficial club using its name; what an invited person sees of the inviter before
+registering; cost of abuse handling for a one-person operation.
+
+**Constraint on earlier work.** Nothing in B14 stages 3 and 4 should assume every
+membership was created by an admin or that every club has a verified roster; both
+stay true until this is built, but should not be baked into rules or schemas.
 
 ### Cross-cutting notes for the backlog
 

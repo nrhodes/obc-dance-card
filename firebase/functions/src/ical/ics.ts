@@ -99,6 +99,8 @@ export interface IcsEvent {
 
 export interface BuildCalendarOptions {
   prodId: string;
+  /** What calendar apps list the subscription as. */
+  calendarName: string;
 }
 
 /**
@@ -136,7 +138,7 @@ export function buildCalendar(events: IcsEvent[], opts: BuildCalendarOptions): s
     'VERSION:2.0',
     `PRODID:${opts.prodId}`,
     'CALSCALE:GREGORIAN',
-    'X-WR-CALNAME:Orewa Bridge Club',
+    `X-WR-CALNAME:${escapeIcsText(opts.calendarName)}`,
     'X-WR-TIMEZONE:Pacific/Auckland',
   ].map(foldIcsLine);
 

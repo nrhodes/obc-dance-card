@@ -12,12 +12,14 @@ import { HttpsError } from 'firebase-functions/v2/https';
 import {
   DEFAULT_CLUB_ID,
   NZ_TIME_ZONE,
+  PRODUCT_NAME,
   clubPaths,
   paths,
   type Club,
   type ClubId,
   type ClubPaths,
   type Member,
+  type UserDoc,
 } from '@obc/shared';
 import { db } from './admin.js';
 
@@ -29,16 +31,75 @@ import { db } from './admin.js';
  */
 const CLUB_CACHE_MS = process.env.FIRESTORE_EMULATOR_HOST ? 0 : 60_000;
 
-let activeClubsCache: { at: number; ids: ClubId[] } | undefined;
+let clubsCache: { at: number; clubs: Club[] } | undefined;
 
-/** The ids of every club with `status: 'active'` — the registry is the `clubs` collection itself. */
-async function activeClubIds(): Promise<ClubId[]> {
+/** Every club record — the registry is the `clubs` collection itself. */
+async function loadClubs(): Promise<Club[]> {
   const now = Date.now();
-  if (activeClubsCache && now - activeClubsCache.at < CLUB_CACHE_MS) return activeClubsCache.ids;
+  if (clubsCache && now - clubsCache.at < CLUB_CACHE_MS) return clubsCache.clubs;
   const snap = await db.collection(paths.clubs()).get();
-  const ids = snap.docs.filter((d) => (d.data() as Club).status === 'active').map((d) => d.id);
-  activeClubsCache = { at: now, ids };
-  return ids;
+  const clubs = snap.docs.map((d) => ({ ...(d.data() as Club), id: d.id }));
+  clubsCache = { at: now, clubs };
+  return clubs;
+}
+
+/** The ids of every club with `status: 'active'`. */
+async function activeClubIds(): Promise<ClubId[]> {
+  return (await loadClubs()).filter((c) => c.status === 'active').map((c) => c.id);
+}
+
+/**
+ * A club's own record — for its name in anything a person reads (emails,
+ * notifications, the calendar feed). Never spell a club's name in code.
+ */
+export async function clubRecord(club: ClubPaths | ClubId): Promise<Club> {
+  const clubId = typeof club === 'string' ? club : club.clubId;
+  const cached = (await loadClubs()).find((c) => c.id === clubId);
+  if (cached) return cached;
+  // Not cached as a miss: a club created a moment ago must be usable at once.
+  const fresh = (await db.doc(paths.club(clubId)).get()).data() as Club | undefined;
+  if (!fresh) throw new HttpsError('not-found', 'Unknown club.');
+  clubsCache = undefined;
+  return { ...fresh, id: clubId };
+}
+
+/** A club's name, as its members know it. */
+export async function clubName(club: ClubPaths | ClubId): Promise<string> {
+  return (await clubRecord(club)).name;
+}
+
+/**
+ * What to call "us" in something addressed to a PERSON rather than sent on
+ * behalf of one club (the sign-in code, the daily digest, a password notice):
+ * their club's name when they are active in exactly one, otherwise the
+ * product's name. Says nothing about which clubs a multi-club person is in.
+ */
+export async function brandNameForClubs(clubIds: ClubId[]): Promise<string> {
+  if (clubIds.length !== 1) return PRODUCT_NAME;
+  try {
+    return await clubName(clubIds[0]!);
+  } catch {
+    return PRODUCT_NAME;
+  }
+}
+
+/** `brandNameForClubs` for a person, from `users/{uid}.clubIds`. */
+export async function brandNameFor(uid: string): Promise<string> {
+  const user = (await db.doc(paths.user(uid)).get()).data() as UserDoc | undefined;
+  return brandNameForClubs(user?.clubIds ?? []);
+}
+
+/**
+ * The orewa club's contact address before `Club.contactEmail` existed: an
+ * environment setting with a built-in default. Used only for the original
+ * club, and only until its record carries `contactEmail`.
+ */
+const LEGACY_DEFAULT_CLUB_CONTACT_EMAIL = process.env.CLUB_CONTACT_EMAIL || 'info@orewabridgeclub.org.nz';
+
+/** Where a club's visitors write to have their details removed, if the club has said. */
+export function clubContactEmail(club: Club): string | undefined {
+  if (club.contactEmail) return club.contactEmail;
+  return club.id === DEFAULT_CLUB_ID ? LEGACY_DEFAULT_CLUB_CONTACT_EMAIL : undefined;
 }
 
 /**
@@ -55,14 +116,14 @@ export async function clubOf(input: { clubId: ClubId }): Promise<ClubPaths> {
     const club = (await db.doc(paths.club(clubId)).get()).data() as Club | undefined;
     if (!club) throw new HttpsError('not-found', 'Unknown club.');
     if (club.status !== 'active') throw new HttpsError('failed-precondition', 'This club is not available.');
-    activeClubsCache = undefined;
+    clubsCache = undefined;
   }
   return clubPaths(clubId);
 }
 
 /** Forget the cached list of clubs — call after creating a club or changing a club's status. */
 export function forgetClubCache(): void {
-  activeClubsCache = undefined;
+  clubsCache = undefined;
 }
 
 /** Every active club, for jobs that sweep all of them (reminders, digests, purge, integrity). */
