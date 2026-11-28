@@ -1962,8 +1962,10 @@ sees does. The client resolves "the current club" as the member's only club
     verify-and-decide window is minutes: a scripted check (document counts per
     collection, `runPairingSweep` clean, sign-in + one booking by hand) immediately
     after the flip, then either proceed or flip back.
-- **1c. Clean up.** Delete the old collections, make `clubId` required in every
-  schema, remove the `orewa` default.
+- **1c. Clean up.** *(Built 2026-11-28: `clubId` is required on every club-scoped
+  callable and the server default is gone; `delete-legacy-collections.ts` removes the
+  old collections — see `docs/ops-runbook.md`.)* Delete the old collections, make
+  `clubId` required in every schema, remove the `orewa` default.
 
 **Brought forward (2026-11-28, Neil: a test club).** Three pieces from later stages
 were built early so a second, fake club could exist alongside Orewa:

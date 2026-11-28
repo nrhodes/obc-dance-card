@@ -23,9 +23,9 @@ import type { Weekday } from './enums.js';
 export type ClubId = string;
 
 /**
- * The one club that exists today. Server callables fall back to it when a
- * request carries no `clubId`; stage 1c removes that fallback and makes
- * `clubId` required.
+ * The original club. No longer a server-side fallback (stage 1c made `clubId`
+ * required on every club-scoped callable): it is what a client shows before
+ * it knows the person's clubs, and what seeds, scripts and tests act in.
  */
 export const DEFAULT_CLUB_ID: ClubId = 'orewa';
 

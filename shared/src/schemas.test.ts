@@ -13,6 +13,8 @@ import {
   SetSoloStatusInputSchema,
   SetSubstituteInputSchema,
   VerifyLoginCodeInputSchema,
+  CancelEntryInputSchema,
+  SetPasswordInputSchema,
 } from './schemas.js';
 
 describe('RequestLoginCodeInputSchema', () => {
@@ -38,26 +40,25 @@ describe('VerifyLoginCodeInputSchema', () => {
 describe('SendInviteInputSchema', () => {
   it('accepts a session-scoped invite', () => {
     expect(() =>
-      SendInviteInputSchema.parse({ scope: 'session', year: 2027, sessionId: 's1', toMemberId: 'bob' }),
+      SendInviteInputSchema.parse({ clubId: 'orewa', scope: 'session', year: 2027, sessionId: 's1', toMemberId: 'bob' }),
     ).not.toThrow();
   });
   it('accepts a series-scoped invite', () => {
     expect(() =>
-      SendInviteInputSchema.parse({ scope: 'series', year: 2027, seriesId: 'ser1', toMemberId: 'bob' }),
+      SendInviteInputSchema.parse({ clubId: 'orewa', scope: 'series', year: 2027, seriesId: 'ser1', toMemberId: 'bob' }),
     ).not.toThrow();
   });
   it('rejects a session scope with no sessionId', () => {
-    expect(() => SendInviteInputSchema.parse({ scope: 'session', year: 2027, toMemberId: 'bob' })).toThrow();
+    expect(() => SendInviteInputSchema.parse({ clubId: 'orewa', scope: 'session', year: 2027, toMemberId: 'bob' })).toThrow();
   });
   it('rejects a missing year', () => {
     expect(() =>
-      SendInviteInputSchema.parse({ scope: 'session', sessionId: 's1', toMemberId: 'bob' }),
+      SendInviteInputSchema.parse({ clubId: 'orewa', scope: 'session', sessionId: 's1', toMemberId: 'bob' }),
     ).toThrow();
   });
   it('rejects a message over 200 chars', () => {
     expect(() =>
-      SendInviteInputSchema.parse({
-        scope: 'session',
+      SendInviteInputSchema.parse({ clubId: 'orewa',         scope: 'session',
         year: 2027,
         sessionId: 's1',
         toMemberId: 'bob',
@@ -67,12 +68,12 @@ describe('SendInviteInputSchema', () => {
   });
   it('rejects a team scope (not accepted by sendInvite)', () => {
     expect(() =>
-      SendInviteInputSchema.parse({ scope: 'team', year: 2027, sessionId: 's1', toMemberId: 'bob' }),
+      SendInviteInputSchema.parse({ clubId: 'orewa', scope: 'team', year: 2027, sessionId: 's1', toMemberId: 'bob' }),
     ).toThrow();
   });
   it('accepts an admin force override', () => {
     expect(() =>
-      SendInviteInputSchema.parse({ scope: 'session', year: 2027, sessionId: 's1', toMemberId: 'bob', force: true }),
+      SendInviteInputSchema.parse({ clubId: 'orewa', scope: 'session', year: 2027, sessionId: 's1', toMemberId: 'bob', force: true }),
     ).not.toThrow();
   });
 });
@@ -80,42 +81,41 @@ describe('SendInviteInputSchema', () => {
 describe('SetSoloStatusInputSchema', () => {
   it('accepts looking_for_partner, available, and unavailable', () => {
     expect(() =>
-      SetSoloStatusInputSchema.parse({ year: 2027, sessionId: 's1', status: 'looking_for_partner' }),
+      SetSoloStatusInputSchema.parse({ clubId: 'orewa', year: 2027, sessionId: 's1', status: 'looking_for_partner' }),
     ).not.toThrow();
     expect(() =>
-      SetSoloStatusInputSchema.parse({ year: 2027, sessionId: 's1', status: 'available' }),
+      SetSoloStatusInputSchema.parse({ clubId: 'orewa', year: 2027, sessionId: 's1', status: 'available' }),
     ).not.toThrow();
     expect(() =>
-      SetSoloStatusInputSchema.parse({ year: 2027, sessionId: 's1', status: 'unavailable' }),
+      SetSoloStatusInputSchema.parse({ clubId: 'orewa', year: 2027, sessionId: 's1', status: 'unavailable' }),
     ).not.toThrow();
   });
   it('rejects other statuses', () => {
     expect(() =>
-      SetSoloStatusInputSchema.parse({ year: 2027, sessionId: 's1', status: 'confirmed' }),
+      SetSoloStatusInputSchema.parse({ clubId: 'orewa', year: 2027, sessionId: 's1', status: 'confirmed' }),
     ).toThrow();
   });
   it('rejects a missing year', () => {
-    expect(() => SetSoloStatusInputSchema.parse({ sessionId: 's1', status: 'available' })).toThrow();
+    expect(() => SetSoloStatusInputSchema.parse({ clubId: 'orewa', sessionId: 's1', status: 'available' })).toThrow();
   });
 });
 
 describe('SetBulkSoloStatusInputSchema', () => {
   it('accepts a minimal filter with just weekdays', () => {
     expect(() =>
-      SetBulkSoloStatusInputSchema.parse({ status: 'unavailable', filter: { weekdays: ['monday'] } }),
+      SetBulkSoloStatusInputSchema.parse({ clubId: 'orewa', status: 'unavailable', filter: { weekdays: ['monday'] } }),
     ).not.toThrow();
   });
   it('accepts available, unavailable, and clear', () => {
     for (const status of ['available', 'unavailable', 'clear']) {
       expect(() =>
-        SetBulkSoloStatusInputSchema.parse({ status, filter: { weekdays: ['monday'] } }),
+        SetBulkSoloStatusInputSchema.parse({ clubId: 'orewa', status, filter: { weekdays: ['monday'] } }),
       ).not.toThrow();
     }
   });
   it('accepts fromDate/toDate and onBehalfOfMemberId', () => {
     expect(() =>
-      SetBulkSoloStatusInputSchema.parse({
-        status: 'unavailable',
+      SetBulkSoloStatusInputSchema.parse({ clubId: 'orewa',         status: 'unavailable',
         filter: { weekdays: ['monday', 'wednesday'], fromDate: '2027-01-01', toDate: '2027-12-31' },
         onBehalfOfMemberId: 'admin1',
       }),
@@ -123,72 +123,70 @@ describe('SetBulkSoloStatusInputSchema', () => {
   });
   it('rejects more than five weekdays (security review H1 — no unbounded arrays)', () => {
     expect(() =>
-      SetBulkSoloStatusInputSchema.parse({ status: 'unavailable', filter: { weekdays: Array(6).fill('monday') } }),
+      SetBulkSoloStatusInputSchema.parse({ clubId: 'orewa', status: 'unavailable', filter: { weekdays: Array(6).fill('monday') } }),
     ).toThrow();
     expect(() =>
-      SetBulkSoloStatusInputSchema.parse({ status: 'unavailable', filter: { weekdays: Array(100_000).fill('monday') } }),
+      SetBulkSoloStatusInputSchema.parse({ clubId: 'orewa', status: 'unavailable', filter: { weekdays: Array(100_000).fill('monday') } }),
     ).toThrow();
   });
 
   it('rejects an empty weekdays array', () => {
     expect(() =>
-      SetBulkSoloStatusInputSchema.parse({ status: 'unavailable', filter: { weekdays: [] } }),
+      SetBulkSoloStatusInputSchema.parse({ clubId: 'orewa', status: 'unavailable', filter: { weekdays: [] } }),
     ).toThrow();
   });
   it('rejects an unknown status', () => {
     expect(() =>
-      SetBulkSoloStatusInputSchema.parse({ status: 'looking_for_partner', filter: { weekdays: ['monday'] } }),
+      SetBulkSoloStatusInputSchema.parse({ clubId: 'orewa', status: 'looking_for_partner', filter: { weekdays: ['monday'] } }),
     ).toThrow();
   });
   it('rejects a malformed date', () => {
     expect(() =>
-      SetBulkSoloStatusInputSchema.parse({
-        status: 'available',
+      SetBulkSoloStatusInputSchema.parse({ clubId: 'orewa',         status: 'available',
         filter: { weekdays: ['monday'], fromDate: '01/01/2027' },
       }),
     ).toThrow();
   });
   it('rejects fromDate after toDate', () => {
     expect(() =>
-      SetBulkSoloStatusInputSchema.parse({
-        status: 'available',
+      SetBulkSoloStatusInputSchema.parse({ clubId: 'orewa',         status: 'available',
         filter: { weekdays: ['monday'], fromDate: '2027-06-01', toDate: '2027-01-01' },
       }),
     ).toThrow();
   });
   it('rejects an unknown weekday', () => {
     expect(() =>
-      SetBulkSoloStatusInputSchema.parse({ status: 'available', filter: { weekdays: ['sunday'] } }),
+      SetBulkSoloStatusInputSchema.parse({ clubId: 'orewa', status: 'available', filter: { weekdays: ['sunday'] } }),
     ).toThrow();
   });
 });
 
 describe('ClearSoloStatusInputSchema', () => {
   it('accepts year + sessionId with no onBehalfOfMemberId field', () => {
-    expect(() => ClearSoloStatusInputSchema.parse({ year: 2027, sessionId: 's1' })).not.toThrow();
+    expect(() => ClearSoloStatusInputSchema.parse({ clubId: 'orewa', year: 2027, sessionId: 's1' })).not.toThrow();
   });
   it('accepts an admin force override', () => {
-    expect(() => ClearSoloStatusInputSchema.parse({ year: 2027, sessionId: 's1', force: true })).not.toThrow();
+    expect(() => ClearSoloStatusInputSchema.parse({ clubId: 'orewa', year: 2027, sessionId: 's1', force: true })).not.toThrow();
   });
   it('rejects a missing sessionId', () => {
-    expect(() => ClearSoloStatusInputSchema.parse({ year: 2027 })).toThrow();
+    expect(() => ClearSoloStatusInputSchema.parse({ clubId: 'orewa', year: 2027 })).toThrow();
   });
 });
 
 describe('SetSubstituteInputSchema', () => {
   it('accepts a member substitute', () => {
     expect(() =>
-      SetSubstituteInputSchema.parse({ entryId: 'e1', substitute: { kind: 'member', memberId: 'x' } }),
+      SetSubstituteInputSchema.parse({ clubId: 'orewa', entryId: 'e1', substitute: { kind: 'member', memberId: 'x' } }),
     ).not.toThrow();
   });
   it('accepts a visitor substitute', () => {
     expect(() =>
-      SetSubstituteInputSchema.parse({ entryId: 'e1', substitute: { kind: 'visitor', visitorId: 'v1' } }),
+      SetSubstituteInputSchema.parse({ clubId: 'orewa', entryId: 'e1', substitute: { kind: 'visitor', visitorId: 'v1' } }),
     ).not.toThrow();
   });
   it('rejects a substitute missing its id field', () => {
     expect(() =>
-      SetSubstituteInputSchema.parse({ entryId: 'e1', substitute: { kind: 'member' } }),
+      SetSubstituteInputSchema.parse({ clubId: 'orewa', entryId: 'e1', substitute: { kind: 'member' } }),
     ).toThrow();
   });
 });
@@ -196,35 +194,35 @@ describe('SetSubstituteInputSchema', () => {
 describe('RemoveFromTeamInputSchema', () => {
   it('accepts a member ref', () => {
     expect(() =>
-      RemoveFromTeamInputSchema.parse({ teamId: 't1', ref: { kind: 'member', memberId: 'x' } }),
+      RemoveFromTeamInputSchema.parse({ clubId: 'orewa', teamId: 't1', ref: { kind: 'member', memberId: 'x' } }),
     ).not.toThrow();
   });
   it('rejects an unknown kind', () => {
     expect(() =>
-      RemoveFromTeamInputSchema.parse({ teamId: 't1', ref: { kind: 'robot', memberId: 'x' } }),
+      RemoveFromTeamInputSchema.parse({ clubId: 'orewa', teamId: 't1', ref: { kind: 'robot', memberId: 'x' } }),
     ).toThrow();
   });
 });
 
 describe('CreateVisitorInputSchema', () => {
   it('accepts a name-only visitor', () => {
-    expect(() => CreateVisitorInputSchema.parse({ displayName: 'Jane Visitor' })).not.toThrow();
+    expect(() => CreateVisitorInputSchema.parse({ clubId: 'orewa', displayName: 'Jane Visitor' })).not.toThrow();
   });
   it('rejects an empty displayName', () => {
-    expect(() => CreateVisitorInputSchema.parse({ displayName: '' })).toThrow();
+    expect(() => CreateVisitorInputSchema.parse({ clubId: 'orewa', displayName: '' })).toThrow();
   });
   it('rejects an invalid email', () => {
-    expect(() => CreateVisitorInputSchema.parse({ displayName: 'Jane', email: 'nope' })).toThrow();
+    expect(() => CreateVisitorInputSchema.parse({ clubId: 'orewa', displayName: 'Jane', email: 'nope' })).toThrow();
   });
 });
 
 describe('BroadcastInputSchema', () => {
   it('accepts a title/body with no weekdays filter', () => {
-    expect(() => BroadcastInputSchema.parse({ title: 'Hi', body: 'Hello all' })).not.toThrow();
+    expect(() => BroadcastInputSchema.parse({ clubId: 'orewa', title: 'Hi', body: 'Hello all' })).not.toThrow();
   });
   it('rejects an unknown weekday', () => {
     expect(() =>
-      BroadcastInputSchema.parse({ title: 'Hi', body: 'Hello', weekdays: ['someday'] }),
+      BroadcastInputSchema.parse({ clubId: 'orewa', title: 'Hi', body: 'Hello', weekdays: ['someday'] }),
     ).toThrow();
   });
 });
@@ -241,8 +239,7 @@ describe('MarkNotificationsReadInputSchema', () => {
 describe('ImportProgrammeInputSchema', () => {
   it('accepts a well-formed request', () => {
     expect(() =>
-      ImportProgrammeInputSchema.parse({
-        year: 2027,
+      ImportProgrammeInputSchema.parse({ clubId: 'orewa',         year: 2027,
         weekdaysCsv: 'a',
         seriesCsv: 'b',
         singlesCsv: 'c',
@@ -251,8 +248,7 @@ describe('ImportProgrammeInputSchema', () => {
   });
   it('rejects an out-of-range year', () => {
     expect(() =>
-      ImportProgrammeInputSchema.parse({
-        year: 1900,
+      ImportProgrammeInputSchema.parse({ clubId: 'orewa',         year: 1900,
         weekdaysCsv: 'a',
         seriesCsv: 'b',
         singlesCsv: 'c',
@@ -295,5 +291,23 @@ describe('SeriesCsvRowSchema', () => {
         teamMax: '6',
       }),
     ).not.toThrow();
+  });
+});
+
+describe('clubId on club-scoped callables (plan §21 B14, stage 1c)', () => {
+  it('is required', () => {
+    expect(() => CancelEntryInputSchema.parse({ entryId: 'e1' })).toThrow();
+    expect(() => CancelEntryInputSchema.parse({ clubId: 'orewa', entryId: 'e1' })).not.toThrow();
+  });
+
+  it('must be a slug — it ends up in a document path', () => {
+    for (const bad of ['', '../members', 'Orewa', 'a/b', 'x'.repeat(41), '-leading']) {
+      expect(() => CancelEntryInputSchema.parse({ clubId: bad, entryId: 'e1' }), bad).toThrow();
+    }
+    expect(() => CancelEntryInputSchema.parse({ clubId: 'test-club-2', entryId: 'e1' })).not.toThrow();
+  });
+
+  it('is not accepted by person-level callables with strict schemas', () => {
+    expect(() => SetPasswordInputSchema.parse({ clubId: 'orewa', password: 'goodpass1' })).toThrow();
   });
 });

@@ -302,3 +302,79 @@ export async function verifyClubsMigration(db: Firestore, clubId: ClubId): Promi
 
   return report;
 }
+
+/* -------------------------------------------------------------------------- */
+/* Stage 1c: deleting the pre-club collections                                */
+/* -------------------------------------------------------------------------- */
+
+export interface LegacyDeletionReport {
+  execute: boolean;
+  /** Each pre-club collection and how many documents it holds (or held). */
+  collections: Array<{ path: string; documents: number }>;
+  totalDocuments: number;
+}
+
+/** Every pre-club collection, including each programme year's sub-collections. */
+async function legacyCollections(db: Firestore): Promise<string[]> {
+  const out: string[] = [...LEGACY_PATHS.clubCollections, LEGACY_PATHS.memberPrivate];
+  for (const yearRef of await db.collection(LEGACY_PATHS.programmes).listDocuments()) {
+    for (const sub of LEGACY_PATHS.programmeSubcollections) {
+      out.push(`${LEGACY_PATHS.programmes}/${yearRef.id}/${sub}`);
+    }
+  }
+  // Last, so a year's sub-collections are counted and removed before the year itself.
+  out.push(LEGACY_PATHS.programmes);
+  return out;
+}
+
+/**
+ * Deletes the pre-club top-level collections (stage 1c of plan §21 B14.8).
+ * They have been unread and unwritten since the stage-1b cutover; this
+ * removes the stale second copy of members' personal data.
+ *
+ * Refuses unless the migration into `clubId` has been CLOSED — the only
+ * evidence that the per-club copy is the live one. It deletes exactly the
+ * collections named in `LEGACY_PATHS` and nothing under `clubs/`, `users`,
+ * `userPrivate` or any other live collection. With `execute: false` it only
+ * counts.
+ */
+export async function deleteLegacyData(
+  db: Firestore,
+  clubId: ClubId,
+  opts: { execute: boolean },
+): Promise<LegacyDeletionReport> {
+  const closedAt = (await db.doc(paths.club(clubId)).get()).data()?.[CLOSED_FIELD] as string | undefined;
+  if (!closedAt) {
+    throw new Error(
+      `The migration into "${clubId}" has not been closed, so the pre-club collections may still be the only ` +
+        'complete copy. Refusing to delete them.',
+    );
+  }
+
+  const report: LegacyDeletionReport = { execute: opts.execute, collections: [], totalDocuments: 0 };
+  for (const path of await legacyCollections(db)) {
+    const ref = db.collection(path);
+    const documents = (await ref.count().get()).data().count;
+    report.collections.push({ path, documents });
+    report.totalDocuments += documents;
+    if (opts.execute && documents > 0) {
+      // Document by document rather than `recursiveDelete`: every
+      // sub-collection is already listed explicitly above, and this can never
+      // reach beyond the collection it was given.
+      const snap = await ref.get();
+      let batch = db.batch();
+      let pending = 0;
+      for (const doc of snap.docs) {
+        batch.delete(doc.ref);
+        pending += 1;
+        if (pending === BATCH_LIMIT) {
+          await batch.commit();
+          batch = db.batch();
+          pending = 0;
+        }
+      }
+      if (pending > 0) await batch.commit();
+    }
+  }
+  return report;
+}

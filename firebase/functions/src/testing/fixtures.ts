@@ -89,13 +89,25 @@ export async function makeMember(email: string, opts: MakeMemberOptions = {}): P
   return user.uid;
 }
 
-/** A minimal fake `CallableRequest` for calling an exported `xxxHandler` directly. */
+/**
+ * A minimal fake `CallableRequest` for calling an exported `xxxHandler` directly.
+ *
+ * Every club-scoped callable requires `clubId` (stage 1c of plan §21 B14), and
+ * almost every test acts in the default club, so it is filled in here when the
+ * input does not name one — exactly as the web client's `clubCallable` does.
+ * Pass `club: false` for a person-level callable (its strict schema would
+ * reject the extra key) or to exercise a request that omits it.
+ */
 export function fakeCallableRequest<T>(
-  data: T,
-  opts: { uid?: string; ip?: string; authTimeSeconds?: number; forwardedFor?: string } = {},
+  data: Omit<T, 'clubId'> & { clubId?: string },
+  opts: { uid?: string; ip?: string; authTimeSeconds?: number; forwardedFor?: string; club?: false } = {},
 ): CallableRequest<T> {
+  const withClub =
+    opts.club !== false && data !== null && typeof data === 'object' && !Array.isArray(data) && !('clubId' in data)
+      ? { ...data, clubId: cp.clubId }
+      : data;
   return {
-    data,
+    data: withClub,
     auth: opts.uid
       ? {
           uid: opts.uid,

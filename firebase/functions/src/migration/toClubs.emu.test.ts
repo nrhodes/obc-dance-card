@@ -8,7 +8,13 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { clubPaths, paths, type Club } from '@obc/shared';
 import { db } from '../lib/admin.js';
-import { MigrationClosedError, closeClubsMigration, migrateToClubs, verifyClubsMigration } from './toClubs.js';
+import {
+  MigrationClosedError,
+  closeClubsMigration,
+  deleteLegacyData,
+  migrateToClubs,
+  verifyClubsMigration,
+} from './toClubs.js';
 
 const CLUB_ID = 'migration-rehearsal';
 const cp = clubPaths(CLUB_ID);
@@ -158,5 +164,48 @@ describe('migrateToClubs', () => {
     const dry = await migrateToClubs(db, { clubId: CLUB_ID, club, execute: false });
     expect(dry.execute).toBe(false);
     await verifyClubsMigration(db, CLUB_ID);
+  });
+});
+
+describe('deleteLegacyData (stage 1c)', () => {
+  it('refuses while the migration is still open', async () => {
+    await expect(deleteLegacyData(db, 'never-migrated-club', { execute: true })).rejects.toThrow(/not been closed/);
+    expect(await read(`members/${activeUid}`)).toBeDefined();
+  });
+
+  it('a dry run counts and deletes nothing', async () => {
+    const report = await deleteLegacyData(db, CLUB_ID, { execute: false });
+    expect(report.execute).toBe(false);
+    expect(report.totalDocuments).toBeGreaterThanOrEqual(Object.keys(legacy).length);
+    expect(report.collections.map((c) => c.path)).toEqual(
+      expect.arrayContaining(['members', 'memberPrivate', 'entries', 'programmes', `programmes/${year}/sessions`]),
+    );
+    for (const oldPath of Object.keys(legacy)) expect(await read(oldPath), oldPath).toBeDefined();
+  });
+
+  it('deletes every pre-club document and nothing in the live layout', async () => {
+    const liveBefore = {
+      member: await read(cp.member(activeUid)),
+      session: await read(cp.session(year, `${run}-s1-2031-03-03`)),
+      userPrivate: await read(paths.userPrivate(activeUid)),
+      user: await read(paths.user(activeUid)),
+      club: await read(paths.club(CLUB_ID)),
+    };
+
+    await deleteLegacyData(db, CLUB_ID, { execute: true });
+
+    for (const oldPath of Object.keys(legacy)) expect(await read(oldPath), oldPath).toBeUndefined();
+    expect((await db.collection('members').get()).size).toBe(0);
+    expect((await db.collection('memberPrivate').get()).size).toBe(0);
+    expect((await db.collection(`programmes/${year}/sessions`).get()).size).toBe(0);
+
+    expect(await read(cp.member(activeUid))).toEqual(liveBefore.member);
+    expect(await read(cp.session(year, `${run}-s1-2031-03-03`))).toEqual(liveBefore.session);
+    expect(await read(paths.userPrivate(activeUid))).toEqual(liveBefore.userPrivate);
+    expect(await read(paths.user(activeUid))).toEqual(liveBefore.user);
+    expect(await read(paths.club(CLUB_ID))).toEqual(liveBefore.club);
+
+    // Running it again finds nothing left.
+    expect((await deleteLegacyData(db, CLUB_ID, { execute: true })).totalDocuments).toBe(0);
   });
 });

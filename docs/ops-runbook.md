@@ -258,15 +258,31 @@ export GOOGLE_APPLICATION_CREDENTIALS=/path/to/key.json
   the new build is live it also deletes documents (a removed visitor, a purged
   invite), and a later copy would bring them back from the old side.
 
-### Afterwards
+### Afterwards: stage 1c, deleting the old collections
 
-- The old top-level collections (`members`, `memberPrivate`, `entries`, `invites`,
-  `teams`, `visitors`, `programmes`, `auditLog`, `imports`, `integrity`) stay in
-  place, unread and unwritten, as the rollback copy. They are deleted in stage 1c,
-  once the new layout has been in use long enough to trust.
-- `make-admin.ts` and `provision-review-cohort.ts` in this build already use the
-  new layout. `backfill-cohort.ts` and `backfill-member-emails.ts` targeted the
-  old one and now refuse to run.
+The old top-level collections (`members`, `memberPrivate`, `entries`, `invites`,
+`teams`, `visitors`, `programmes`, `auditLog`, `imports`, `integrity`) have been
+unread and unwritten since the cutover. They are no use for rollback once members
+have used the new build, and they are a stale second copy of members' personal
+data, so they are deleted:
+
+```sh
+D="npx tsx firebase/scripts/delete-legacy-collections.ts --project obc-dance-card"
+$D                                        # counts only; deletes nothing
+$D --execute --confirm obc-dance-card     # deletes
+```
+
+- It refuses unless the migration was closed (`migrate-to-clubs.ts --close`).
+- It deletes exactly those collections and nothing under `clubs/`, `users` or
+  `userPrivate`.
+- It cannot be undone except from a Firestore backup. Confirm a recent scheduled
+  backup exists first ("Backups and disaster recovery").
+- Afterwards `migrate-to-clubs.ts --verify` has nothing to compare and is no
+  longer meaningful.
+
+`make-admin.ts` and `provision-review-cohort.ts` use the new layout.
+`backfill-cohort.ts` and `backfill-member-emails.ts` targeted the old one and
+refuse to run.
 
 ## Test club (plan §21 B14)
 

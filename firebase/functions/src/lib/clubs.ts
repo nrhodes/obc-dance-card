@@ -42,14 +42,14 @@ async function activeClubIds(): Promise<ClubId[]> {
 }
 
 /**
- * The club a club-scoped callable acts in: its input's `clubId`, or the
- * default club while that field is still optional (until stage 1c).
+ * The club a club-scoped callable acts in: its input's `clubId` (required by
+ * every club-scoped schema since stage 1c).
  *
  * Only a club that exists and is active may be named. An unknown or suspended
  * club is refused here, before the handler reads or writes anything.
  */
-export async function clubOf(input: { clubId?: ClubId | undefined }): Promise<ClubPaths> {
-  const clubId = input.clubId ?? DEFAULT_CLUB_ID;
+export async function clubOf(input: { clubId: ClubId }): Promise<ClubPaths> {
+  const { clubId } = input;
   if (!(await activeClubIds()).includes(clubId)) {
     // Not cached as a miss: a club created a moment ago must be usable at once.
     const club = (await db.doc(paths.club(clubId)).get()).data() as Club | undefined;

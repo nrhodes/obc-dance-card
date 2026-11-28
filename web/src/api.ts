@@ -117,10 +117,14 @@ export function setCurrentClubId(clubId: ClubId): void {
   currentClubId = clubId;
 }
 
-/** A callable whose input carries `clubId`; fills it in from the current club when absent. */
-function clubCallable<I extends { clubId?: ClubId | undefined }, O>(name: string) {
+/**
+ * A callable whose input requires `clubId`. Callers leave it out and it is
+ * filled in from the current club; one acting in another club passes it.
+ */
+function clubCallable<I extends { clubId: ClubId }, O>(name: string) {
   const call = callable<I, O>(name);
-  return (input: I): Promise<O> => call({ ...input, clubId: input.clubId ?? currentClubId });
+  return (input: Omit<I, 'clubId'> & { clubId?: ClubId }): Promise<O> =>
+    call({ ...input, clubId: input.clubId ?? currentClubId } as I);
 }
 
 
