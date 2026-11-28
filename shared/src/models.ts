@@ -115,6 +115,12 @@ export interface Club extends Timestamps {
   /** Accent colour for this club's badge, `#rrggbb`. Optional. */
   colour?: string;
   /**
+   * The address a visitor is told to write to if they want their details
+   * removed (plan §12, visitor courtesy emails). Optional; without it the
+   * email says to ask the member who signed them up.
+   */
+  contactEmail?: string;
+  /**
    * Set once, when the stage-1b copy of this club's pre-club data was
    * declared finished (plan §21 B14.8). The migration refuses to copy again
    * after this. Absent on a club created natively.

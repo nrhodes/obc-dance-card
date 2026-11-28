@@ -11,6 +11,7 @@ import { createHash, createHmac, randomInt, timingSafeEqual } from 'node:crypto'
 import { onCall, HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
 import {
   RequestLoginCodeInputSchema,
+  PRODUCT_NAME,
   VerifyLoginCodeInputSchema,
   paths,
   type EmailLoginCode,
@@ -20,7 +21,7 @@ import {
   type VerifyLoginCodeResult,
 } from '@obc/shared';
 import { auth, db } from '../lib/admin.js';
-import { activeMembershipsOf } from '../lib/clubs.js';
+import { activeMembershipsOf, brandNameForClubs } from '../lib/clubs.js';
 import { callableOptions } from '../lib/callable.js';
 import { assertRateLimit } from '../lib/rateLimit.js';
 import { clientIpFromForwardedFor, trustedHopsFromEnv } from '../lib/clientIp.js';
@@ -109,9 +110,12 @@ export async function requestLoginCodeHandler(
   }
 
   let isActiveMember = false;
+  let brand = PRODUCT_NAME;
   if (uid) {
     // Sign-in is about the person, not a club: any active membership will do.
-    isActiveMember = (await activeMembershipsOf(uid)).length > 0;
+    const memberships = await activeMembershipsOf(uid);
+    isActiveMember = memberships.length > 0;
+    brand = await brandNameForClubs(memberships.map((m) => m.cp.clubId));
   }
 
   const provider = getEmailProvider();
@@ -130,7 +134,7 @@ export async function requestLoginCodeHandler(
     // invalidates old").
     await db.collection('emailCodes').doc(doc.id).set(doc);
 
-    const email = loginCodeEmail(code);
+    const email = loginCodeEmail(code, brand);
     await provider.send({ to: emailLower, subject: email.subject, text: email.text, html: email.html });
   } else {
     // Equal work for the "no" path — see UNIFORM_RESPONSE_TARGET_MS. A warm

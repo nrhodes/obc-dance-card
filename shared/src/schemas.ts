@@ -594,6 +594,8 @@ export const UpdateClubPatchSchema = z
       .regex(/^#[0-9a-fA-F]{6}$/, 'expected #rrggbb')
       .nullable()
       .optional(),
+    /** Where visitors write to have their details removed; `null` clears it. */
+    contactEmail: email.nullable().optional(),
     status: z.enum(CLUB_STATUSES).optional(),
   })
   .strict();

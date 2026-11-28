@@ -45,7 +45,7 @@ import { audit } from '../lib/audit.js';
 import { BatchWriter } from '../lib/batchWriter.js';
 import { callableOptions } from '../lib/callable.js';
 import { requireAdmin } from '../lib/context.js';
-import { clubOf, hasOtherActiveMembership, userClubsWrite } from '../lib/clubs.js';
+import { clubName, clubOf, hasOtherActiveMembership, userClubsWrite } from '../lib/clubs.js';
 import { logger } from '../lib/logger.js';
 import { parseInput } from '../lib/parseInput.js';
 import { cancelEntryInTx, type CancelEntryNotification } from '../entries/lib.js';
@@ -537,7 +537,7 @@ export async function reactivateMemberHandler(
     input.memberId,
     'security',
     'Your membership has been reactivated',
-    'Your Orewa Bridge Club membership has been reactivated — welcome back.',
+    `Your ${await clubName(cp)} membership has been reactivated — welcome back.`,
     {},
   );
 

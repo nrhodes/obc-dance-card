@@ -36,6 +36,9 @@ import {
 import { registerRoute, NavigationRoute } from 'workbox-routing';
 import { initializeApp } from 'firebase/app';
 import { getMessaging, onBackgroundMessage } from 'firebase/messaging/sw';
+// The `/brand` entry point, not the whole package: the worker must stay small
+// and `@obc/shared` drags in every schema.
+import { PRODUCT_NAME } from '@obc/shared/brand';
 import { resolveDeepLink, type DeepLinkData } from './deepLink';
 
 /** The handful of ServiceWorkerGlobalScope members this file actually uses. */
@@ -142,7 +145,7 @@ const messaging = getMessaging(app);
 // old/mixed payload (e.g. during a rolling deploy) still degrades gracefully.
 onBackgroundMessage(messaging, (payload) => {
   const data = (payload.data ?? {}) as DeepLinkData & { title?: string; body?: string };
-  const title = payload.notification?.title ?? data.title ?? 'Orewa Bridge Club';
+  const title = payload.notification?.title ?? data.title ?? PRODUCT_NAME;
   const body = payload.notification?.body ?? data.body ?? '';
   void worker.registration.showNotification(title, { body, data });
 });

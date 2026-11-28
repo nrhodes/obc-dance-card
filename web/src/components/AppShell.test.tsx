@@ -187,10 +187,10 @@ describe('AppShell', () => {
     needsRefreshFixture = false;
   });
 
-  it('names the one original club and offers no switcher to a one-club member', () => {
+  it('names the product, not a club, until the club is known, and offers no switcher', () => {
     memberFixture = member();
     renderShell();
-    expect(screen.getByText('Orewa Bridge Club')).toBeTruthy();
+    expect(screen.getByText('Bridge Programme')).toBeTruthy();
     expect(screen.queryByRole('combobox', { name: 'Club' })).toBeNull();
   });
 

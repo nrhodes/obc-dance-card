@@ -153,7 +153,7 @@ describe('icalFeed HTTP endpoint (plan §21 B1)', () => {
     await icalFeedHandler(fakeRequest({ path: `/ical/${token1}.ics` }), res1 as unknown as Response);
     expect(res1.statusCode).toBe(200);
     expect(res1.headers['Content-Type']).toBe('text/calendar; charset=utf-8');
-    expect(res1.headers['Content-Disposition']).toContain('obc-bridge.ics');
+    expect(res1.headers['Content-Disposition']).toContain('bridge.ics');
     const body1 = res1.body!;
     expect(body1).toContain('BEGIN:VCALENDAR');
     expect(body1).toContain('END:VCALENDAR');

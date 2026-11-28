@@ -15,7 +15,7 @@ export interface EmailContent {
 }
 
 export const NOTIFICATION_EMAIL_FOOTER =
-  'Open the OBC Dance Card app to respond. We never include sign-in links in email.';
+  'Open the app to respond. We never include sign-in links in email.';
 
 export function notificationEmail(title: string, body: string): EmailContent {
   // Email subject headers cannot contain a literal newline; strip any before

@@ -9,6 +9,7 @@ import { usePwaUpdate } from '../pwa/usePwaUpdate';
 import { useIdleSignOut } from '../session/useIdleSignOut';
 import { OfflineBanner } from './OfflineBanner';
 import { isWideRoute } from './wideRoute';
+import { PRODUCT_NAME } from '@obc/shared';
 import { useClubs } from '../club/useClub';
 import { usePlatformAdmin } from '../platform/usePlatformAdmin';
 
@@ -81,6 +82,14 @@ export function AppShell() {
   const { isPlatformAdmin } = usePlatformAdmin();
   const currentClubName = clubs.find((c) => c.id === currentClubId)?.name;
 
+  // The tab's title names the club being shown, then the product.
+  useEffect(() => {
+    document.title = currentClubName ? `${currentClubName} — ${PRODUCT_NAME}` : PRODUCT_NAME;
+    return () => {
+      document.title = PRODUCT_NAME;
+    };
+  }, [currentClubName]);
+
   return (
     <>
       <a href="#content" className="skip-link">
@@ -88,7 +97,7 @@ export function AppShell() {
       </a>
       <header className="app-header">
         <div className="app-header-top">
-          <p className="title">{currentClubName ?? 'Orewa Bridge Club'}</p>
+          <p className="title">{currentClubName ?? PRODUCT_NAME}</p>
           {clubs.length > 1 && (
             <select
               className="club-switcher"

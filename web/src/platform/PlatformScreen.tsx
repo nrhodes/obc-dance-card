@@ -103,6 +103,7 @@ export function PlatformScreen() {
             <p className="muted">
               Id <code>{club.id}</code> · short name {club.shortName} · {activeMembers} active member
               {activeMembers === 1 ? '' : 's'}
+              {club.contactEmail ? ` · contact ${club.contactEmail}` : ''}
             </p>
 
             <h3>Admins</h3>
@@ -285,12 +286,14 @@ function RenameClubDialog({ summary, busy, error, onClose, onRun }: DialogProps 
   const { club } = summary;
   const [name, setName] = useState(club.name);
   const [shortName, setShortName] = useState(club.shortName);
+  const [contactEmail, setContactEmail] = useState(club.contactEmail ?? '');
   const [localError, setLocalError] = useState<string | null>(null);
 
   function submit(e: FormEvent) {
     e.preventDefault();
     const nextName = name.trim();
     const nextShort = shortName.trim();
+    const nextContact = contactEmail.trim().toLowerCase();
     if (!nextName || !nextShort) {
       setLocalError('Give the club a name and a short name.');
       return;
@@ -299,6 +302,7 @@ function RenameClubDialog({ summary, busy, error, onClose, onRun }: DialogProps 
     const patch = {
       ...(nextName !== club.name ? { name: nextName } : {}),
       ...(nextShort !== club.shortName ? { shortName: nextShort } : {}),
+      ...(nextContact !== (club.contactEmail ?? '') ? { contactEmail: nextContact || null } : {}),
     };
     if (Object.keys(patch).length === 0) {
       onClose();
@@ -324,6 +328,21 @@ function RenameClubDialog({ summary, busy, error, onClose, onRun }: DialogProps 
             value={shortName}
             onChange={(e) => setShortName(e.target.value)}
           />
+        </div>
+        <div className="field">
+          <label htmlFor="club-rename-contact">Contact email (optional)</label>
+          <input
+            id="club-rename-contact"
+            type="email"
+            maxLength={320}
+            autoComplete="off"
+            aria-describedby="club-rename-contact-hint"
+            value={contactEmail}
+            onChange={(e) => setContactEmail(e.target.value)}
+          />
+          <p className="muted" id="club-rename-contact-hint">
+            Visitors are told to write here if they want their details removed.
+          </p>
         </div>
         <p className="muted">
           The id <code>{club.id}</code> cannot be changed.

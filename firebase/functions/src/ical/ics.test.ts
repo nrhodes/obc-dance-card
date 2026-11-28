@@ -76,11 +76,11 @@ describe('localDateTime', () => {
   });
 });
 
-const PROD_ID = '-//Orewa Bridge Club//OBC Dance Card//EN';
+const PROD_ID = '-//Bridge Programme//EN';
 
 describe('buildCalendar', () => {
   it('renders the exact static VTIMEZONE block and VCALENDAR wrapper', () => {
-    const ics = buildCalendar([], { prodId: PROD_ID });
+    const ics = buildCalendar([], { prodId: PROD_ID, calendarName: 'Orewa Bridge Club' });
     expect(ics).toBe(
       [
         'BEGIN:VCALENDAR',
@@ -137,7 +137,7 @@ describe('buildCalendar', () => {
       },
     ];
 
-    const ics = buildCalendar(events, { prodId: PROD_ID });
+    const ics = buildCalendar(events, { prodId: PROD_ID, calendarName: 'Orewa Bridge Club' });
     const eventBlocks = ics.split('BEGIN:VEVENT').slice(1);
     expect(eventBlocks).toHaveLength(2);
 
@@ -164,7 +164,7 @@ describe('buildCalendar', () => {
       dtstamp: '2027-02-01T00:00:00.000Z',
       lastModified: '2027-02-01T00:00:00.000Z',
     };
-    const ics = buildCalendar([event], { prodId: PROD_ID });
+    const ics = buildCalendar([event], { prodId: PROD_ID, calendarName: 'Orewa Bridge Club' });
     expect(ics).toContain('STATUS:TENTATIVE');
     expect(ics).not.toContain('STATUS:CONFIRMED');
   });
@@ -181,7 +181,7 @@ describe('buildCalendar', () => {
       dtstamp: '2027-01-01T00:00:00.000Z',
       lastModified: '2027-01-01T00:00:00.000Z',
     };
-    const ics = buildCalendar([event], { prodId: PROD_ID });
+    const ics = buildCalendar([event], { prodId: PROD_ID, calendarName: 'Orewa Bridge Club' });
     expect(ics).toContain('\\;');
     expect(ics).toContain('\\,');
     // The folded SUMMARY spans more than one physical line.

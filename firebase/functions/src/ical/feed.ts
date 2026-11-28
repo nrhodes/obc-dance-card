@@ -33,9 +33,10 @@ import {
   type Weekday,
   type WeekdayProgramme,
   type ClubPaths,
+  PRODUCT_NAME,
 } from '@obc/shared';
 import { db } from '../lib/admin.js';
-import { activeMembershipsOf } from '../lib/clubs.js';
+import { activeMembershipsOf, brandNameForClubs, clubName } from '../lib/clubs.js';
 import { assertRateLimit } from '../lib/rateLimit.js';
 import { clientIpFromForwardedFor, forwardedForEntries, trustedHopsFromEnv } from '../lib/clientIp.js';
 import { logger } from '../lib/logger.js';
@@ -43,7 +44,7 @@ import { buildCalendar, type IcsEvent } from './ics.js';
 
 /** 32 CSPRNG bytes, base64url — exactly 43 characters (plan §21 B1 token model). */
 const TOKEN_RE = /^[A-Za-z0-9_-]{43}$/;
-const PROD_ID = '-//Orewa Bridge Club//OBC Dance Card//EN';
+const PROD_ID = `-//${PRODUCT_NAME}//EN`;
 /** Include recently-past sessions too, not just future ones (plan §21 B1 step 4). */
 const LOOKBACK_DAYS = 30;
 const SESSION_DURATION_MINUTES = 180;
@@ -144,14 +145,18 @@ export async function icalFeedHandler(req: Request, res: Response): Promise<void
     for (const { cp } of memberships) {
       events.push(...(await loadFeedEvents(cp, tokenDoc.memberId)));
     }
-    const icsText = buildCalendar(events, { prodId: PROD_ID });
+    const icsText = buildCalendar(events, {
+      prodId: PROD_ID,
+      // One club: its name. Several: the product's, since the feed merges them.
+      calendarName: await brandNameForClubs(memberships.map((m) => m.cp.clubId)),
+    });
 
     res
       .status(200)
       .set('Content-Type', 'text/calendar; charset=utf-8')
       .set('Cache-Control', 'private, max-age=300')
       .set('X-Content-Type-Options', 'nosniff')
-      .set('Content-Disposition', 'inline; filename="obc-bridge.ics"');
+      .set('Content-Disposition', 'inline; filename="bridge.ics"');
 
     logger.info('ical_feed_served', {
       tokenPrefix: tokenHashPrefix,
@@ -221,6 +226,10 @@ async function loadFeedEvents(cp: ClubPaths, memberId: string): Promise<IcsEvent
     return teamCache.get(teamId)?.name ?? null;
   }
 
+  // Each event says which club it is at — the only thing that tells a
+  // two-club person's sessions apart in a merged feed.
+  const location = await clubName(cp);
+
   const events: IcsEvent[] = [];
   for (const entry of entries) {
     const year = Number(entry.date.slice(0, 4));
@@ -249,7 +258,7 @@ async function loadFeedEvents(cp: ClubPaths, memberId: string): Promise<IcsEvent
     events.push({
       uid: `${entry.id}@obc-dance-card`,
       summary,
-      location: 'Orewa Bridge Club',
+      location,
       status,
       date: entry.date,
       startTime,

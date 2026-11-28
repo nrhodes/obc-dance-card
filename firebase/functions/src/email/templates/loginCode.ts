@@ -13,13 +13,17 @@ export interface EmailContent {
   html: string;
 }
 
-export function loginCodeEmail(code: string): EmailContent {
+/**
+ * `brand` is who the code is from: the person's club when they belong to
+ * exactly one, otherwise the product's name (`brandNameForClubs`).
+ */
+export function loginCodeEmail(code: string, brand: string): EmailContent {
   const safeCode = esc(code);
 
-  const subject = 'Your Orewa Bridge Club sign-in code';
+  const subject = `Your ${brand} sign-in code`.replace(/[\r\n]+/g, ' ');
 
   const text = [
-    `Your Orewa Bridge Club sign-in code is: ${code}`,
+    `Your ${brand} sign-in code is: ${code}`,
     '',
     'This code is valid for 10 minutes.',
     '',
@@ -27,7 +31,7 @@ export function loginCodeEmail(code: string): EmailContent {
   ].join('\n');
 
   const html = [
-    '<p>Your Orewa Bridge Club sign-in code is:</p>',
+    `<p>Your ${esc(brand)} sign-in code is:</p>`,
     `<p style="font-size:28px;font-weight:bold;letter-spacing:4px;">${safeCode}</p>`,
     '<p>This code is valid for 10 minutes.</p>',
     '<p>We will never ask you to click a link to sign in.</p>',

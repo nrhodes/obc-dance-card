@@ -30,7 +30,7 @@ import { callableOptions } from '../lib/callable.js';
 import { logger } from '../lib/logger.js';
 import { SMTP_SECRETS } from '../lib/secrets.js';
 import { requireMember, resolveActingMember } from '../lib/context.js';
-import { clubOf } from '../lib/clubs.js';
+import { clubContactEmail, clubOf, clubRecord } from '../lib/clubs.js';
 import { createNotification } from '../notifications/create.js';
 import { sendMatchmakingAlerts } from '../notifications/matchmaking.js';
 import { getEmailProvider } from '../email/provider.js';
@@ -401,7 +401,10 @@ export async function cancelEntryHandler(req: CallableRequest<CancelEntryInput>)
     const visitorSnap = await db.doc(cp.visitor(result.cancelledVisitorId)).get();
     const visitor = visitorSnap.data() as Visitor | undefined;
     if (visitor?.courtesyEmails && visitor.email) {
+      const club = await clubRecord(cp);
       const content = visitorCancelledEmail({
+        clubName: club.name,
+        contactEmail: clubContactEmail(club),
         sponsorName: actorName,
         sponsorPhone: actor.member.phone || undefined,
         date: result.ownEntry.date,

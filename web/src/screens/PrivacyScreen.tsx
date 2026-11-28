@@ -7,12 +7,17 @@
  * who can see what (plan §2 Visibility), and retention/erasure
  * (`docs/ops-runbook.md` "Member erasure").
  */
+import { useClubs } from '../club/useClub';
+
 export function PrivacyScreen() {
+  // Signed out there is no club to name (the page is public).
+  const { clubs, currentClubId } = useClubs();
+  const clubName = clubs.find((c) => c.id === currentClubId)?.name ?? 'your bridge club';
   return (
     <div className="card">
       <h1>Privacy</h1>
       <p>
-        This app is run by Orewa Bridge Club to organise dance-card partners for club sessions. This
+        This app is used by {clubName} to organise dance-card partners for club sessions. This
         page explains, in plain language, what we store and who can see it.
       </p>
 

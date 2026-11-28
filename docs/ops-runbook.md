@@ -323,6 +323,19 @@ sign in). They see the Platform link after refreshing.
 Setting up a real second club is then: create it, add its admin, and they import
 their members and programme from Admin as Orewa's admins do.
 
+
+**Names (plan §21 B14.8 stage 3).** Nothing in the code names a particular club.
+A club's name comes from its record, so renaming it in the Platform area changes
+its emails, notifications and calendar feed within a minute. The product itself is
+"Bridge Programme" (`PRODUCT_NAME`, `shared/src/brand.ts`): that is what the page
+title, the installed app and anything sent to a person in more than one club say.
+
+**Contact email.** Each club can have a contact address (Platform → Rename). It is
+the address a visitor is told to write to if they want their details removed. A
+club with none gets wording that says to ask the member who signed them up. The
+original club falls back to the old `CLUB_CONTACT_EMAIL` setting until one is set
+on its record — set it, so the setting can be retired.
+
 ## Test club (plan §21 B14)
 
 A second club with fake data, for exercising the multi-club work before a real

@@ -18,7 +18,7 @@ import { db } from '../lib/admin.js';
 import { audit } from '../lib/audit.js';
 import { callableOptions } from '../lib/callable.js';
 import { requireAdmin } from '../lib/context.js';
-import { clubOf } from '../lib/clubs.js';
+import { clubName, clubOf } from '../lib/clubs.js';
 import { createNotification } from '../notifications/create.js';
 import { parseInput } from '../lib/parseInput.js';
 
@@ -58,6 +58,7 @@ export async function runPublishProgramme(
   const activeMembersSnap = await db.collection(cp.members()).where('active', '==', true).get();
   const activeUids = activeMembersSnap.docs.map((d) => (d.data() as Member).id);
 
+  const publishedClubName = await clubName(cp);
   for (let i = 0; i < activeUids.length; i += NOTIFY_CHUNK_SIZE) {
     const chunk = activeUids.slice(i, i + NOTIFY_CHUNK_SIZE);
     await Promise.all(
@@ -66,7 +67,7 @@ export async function runPublishProgramme(
           memberId,
           'broadcast',
           `The ${input.year} programme is out`,
-          `The ${input.year} Orewa Bridge Club programme has been published — take a look and start signing up.`,
+          `The ${input.year} ${publishedClubName} programme has been published — take a look and start signing up.`,
           { year: String(input.year) },
         ),
       ),

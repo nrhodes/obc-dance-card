@@ -13,6 +13,10 @@ export interface EmailContent {
 }
 
 export interface VisitorCourtesyEmailInput {
+  /** The club the game is at (`Club.name`). */
+  clubName: string;
+  /** The club's contact address for removal requests, if it has one. */
+  contactEmail?: string;
   sponsorName: string;
   sponsorPhone?: string;
   /** NZ-local `YYYY-MM-DD` dates, already sorted. */
@@ -20,25 +24,32 @@ export interface VisitorCourtesyEmailInput {
   seriesName?: string;
 }
 
-/** Club address visitors can write to if they want their details removed. */
-const CLUB_CONTACT_EMAIL = process.env.CLUB_CONTACT_EMAIL || 'info@orewabridgeclub.org.nz';
+/**
+ * How a visitor gets their details removed: by writing to the club's contact
+ * address when it has one (`clubContactEmail`), otherwise through the member
+ * who signed them up. `esc` is applied by the caller for the HTML part.
+ */
+function removalLine(sponsorName: string, contactEmail: string | undefined): string {
+  return contactEmail
+    ? `${sponsorName} gave us your details to arrange this game. If you would like them removed, email the club at ${contactEmail}.`
+    : `${sponsorName} gave us your details to arrange this game. If you would like them removed, ask ${sponsorName} or the club.`;
+}
 
 export function visitorCourtesyEmail(input: VisitorCourtesyEmailInput): EmailContent {
-  const { sponsorName, sponsorPhone, dates, seriesName } = input;
+  const { clubName, contactEmail, sponsorName, sponsorPhone, dates, seriesName } = input;
   const dateList = dates.join(', ');
   const seriesSuffix = seriesName ? ` (${seriesName})` : '';
   const contactLine = sponsorPhone
     ? `Contact ${sponsorName} on ${sponsorPhone} if anything changes.`
     : `Contact ${sponsorName} if anything changes.`;
 
-  const subject = 'You are down to play at Orewa Bridge Club';
+  const subject = `You are down to play at ${clubName}`.replace(/[\r\n]+/g, ' ');
 
   const text = [
-    `You are down to play with ${sponsorName} at Orewa Bridge Club on ${dateList}${seriesSuffix}.`,
+    `You are down to play with ${sponsorName} at ${clubName} on ${dateList}${seriesSuffix}.`,
     contactLine,
     '',
-    `${sponsorName} gave us your details to arrange this game. If you would like them removed, ` +
-      `email the club at ${CLUB_CONTACT_EMAIL}.`,
+    removalLine(sponsorName, contactEmail),
   ].join('\n');
 
   const safeSponsor = esc(sponsorName);
@@ -47,19 +58,22 @@ export function visitorCourtesyEmail(input: VisitorCourtesyEmailInput): EmailCon
   const safeContactLine = sponsorPhone
     ? `Contact ${safeSponsor} on ${esc(sponsorPhone)} if anything changes.`
     : `Contact ${safeSponsor} if anything changes.`;
-  const safeClubEmail = esc(CLUB_CONTACT_EMAIL);
+  const safeClub = esc(clubName);
 
   const html = [
-    `<p>You are down to play with ${safeSponsor} at Orewa Bridge Club on ${safeDates}${safeSeriesSuffix}.</p>`,
+    `<p>You are down to play with ${safeSponsor} at ${safeClub} on ${safeDates}${safeSeriesSuffix}.</p>`,
     `<p>${safeContactLine}</p>`,
-    `<p>${safeSponsor} gave us your details to arrange this game. If you would like them removed, ` +
-      `email the club at ${safeClubEmail}.</p>`,
+    `<p>${esc(removalLine(sponsorName, contactEmail))}</p>`,
   ].join('\n');
 
   return { subject, text, html };
 }
 
 export interface VisitorCancelledEmailInput {
+  /** The club the game is at (`Club.name`). */
+  clubName: string;
+  /** The club's contact address for removal requests, if it has one. */
+  contactEmail?: string;
   sponsorName: string;
   sponsorPhone?: string;
   /** NZ-local `YYYY-MM-DD` date of the cancelled session. */
@@ -74,20 +88,19 @@ export interface VisitorCancelledEmailInput {
  * one entry at a time, never a whole series in one call.
  */
 export function visitorCancelledEmail(input: VisitorCancelledEmailInput): EmailContent {
-  const { sponsorName, sponsorPhone, date, seriesName } = input;
+  const { clubName, contactEmail, sponsorName, sponsorPhone, date, seriesName } = input;
   const seriesSuffix = seriesName ? ` (${seriesName})` : '';
   const contactLine = sponsorPhone
     ? `Contact ${sponsorName} on ${sponsorPhone} if you have any questions.`
     : `Contact ${sponsorName} if you have any questions.`;
 
-  const subject = 'Your game at Orewa Bridge Club has been cancelled';
+  const subject = `Your game at ${clubName} has been cancelled`.replace(/[\r\n]+/g, ' ');
 
   const text = [
-    `Your game with ${sponsorName} at Orewa Bridge Club on ${date}${seriesSuffix} has been cancelled.`,
+    `Your game with ${sponsorName} at ${clubName} on ${date}${seriesSuffix} has been cancelled.`,
     contactLine,
     '',
-    `${sponsorName} gave us your details to arrange this game. If you would like them removed, ` +
-      `email the club at ${CLUB_CONTACT_EMAIL}.`,
+    removalLine(sponsorName, contactEmail),
   ].join('\n');
 
   const safeSponsor = esc(sponsorName);
@@ -96,13 +109,12 @@ export function visitorCancelledEmail(input: VisitorCancelledEmailInput): EmailC
   const safeContactLine = sponsorPhone
     ? `Contact ${safeSponsor} on ${esc(sponsorPhone)} if you have any questions.`
     : `Contact ${safeSponsor} if you have any questions.`;
-  const safeClubEmail = esc(CLUB_CONTACT_EMAIL);
+  const safeClub = esc(clubName);
 
   const html = [
-    `<p>Your game with ${safeSponsor} at Orewa Bridge Club on ${safeDate}${safeSeriesSuffix} has been cancelled.</p>`,
+    `<p>Your game with ${safeSponsor} at ${safeClub} on ${safeDate}${safeSeriesSuffix} has been cancelled.</p>`,
     `<p>${safeContactLine}</p>`,
-    `<p>${safeSponsor} gave us your details to arrange this game. If you would like them removed, ` +
-      `email the club at ${safeClubEmail}.</p>`,
+    `<p>${esc(removalLine(sponsorName, contactEmail))}</p>`,
   ].join('\n');
 
   return { subject, text, html };

@@ -19,6 +19,7 @@ import {
 } from '@obc/shared';
 import { auth, db } from '../lib/admin.js';
 import { callableOptions } from '../lib/callable.js';
+import { brandNameFor } from '../lib/clubs.js';
 import { requireUser } from '../lib/context.js';
 import { createNotification } from '../notifications/create.js';
 import { parseInput } from '../lib/parseInput.js';
@@ -72,7 +73,7 @@ export async function setPasswordHandler(req: CallableRequest<SetPasswordInput>)
     caller.uid,
     'security',
     'Password set',
-    'A password was set on your Orewa Bridge Club account. If this was not you, contact the club.',
+    `A password was set on your ${await brandNameFor(caller.uid)} account. If this was not you, contact the club.`,
   );
 
   return { ok: true };
@@ -103,7 +104,7 @@ export async function markPasswordSetHandler(
     caller.uid,
     'security',
     'Password set',
-    'A password was set on your Orewa Bridge Club account.',
+    `A password was set on your ${await brandNameFor(caller.uid)} account.`,
   );
 
   return { ok: true };
