@@ -111,22 +111,70 @@ jobs:
       - name: Functions emulator tests
         run: npm run test:emu -w @obc/functions
 
+  changes:
+    # Decides whether this run needs the (slow, macOS) iOS job. A few seconds
+    # on ubuntu, so that most PRs — which touch only the web app or the
+    # functions — are not held up by an Xcode build that cannot be affected.
+    #
+    # On a pull request the iOS job runs only when the PR changes `ios/`,
+    # `shared/` or this workflow. `shared/` is included on purpose: `ios/`
+    # mirrors `shared/src/{models,enums}.ts` by hand, and `ModelDecodingTests`
+    # exists to fail when the two drift, so a `shared/` change that renames a
+    # field must re-run those tests or the drift ships silently.
+    #
+    # On `main` and on manual dispatch it always runs: nothing waits for it
+    # there, and that is the only place its emulator-backed tests run.
+    #
+    # Fails open: if the file list cannot be read, the iOS job runs.
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      ios: ${{ steps.decide.outputs.ios }}
+    steps:
+      - name: Does this run need the iOS job?
+        id: decide
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          ios=true
+          if [ "$EVENT" = "pull_request" ]; then
+            if files=$(gh api "repos/$REPO/pulls/$PR/files" --paginate --jq '.[].filename'); then
+              if printf '%s\n' "$files" | grep -qE '^(ios/|shared/|\.github/workflows/ci\.yml$)'; then
+                echo "iOS-relevant files changed."
+              else
+                ios=false
+                echo "Nothing under ios/, shared/ or the workflow changed: skipping the iOS job."
+              fi
+            else
+              echo "Could not list the PR's files; running the iOS job to be safe."
+            fi
+          fi
+          echo "ios=$ios" >> "$GITHUB_OUTPUT"
+
   ios-build-test:
     # Builds and unit-tests the SwiftUI member client. Needs a macOS runner
     # (Xcode), so it is the one job here that can't share the ubuntu setup.
     # Requires Xcode 16+: the project uses the objectVersion 77 format with
     # synchronized folder groups, which older Xcode cannot open.
     #
-    # Runs on every PR, not just iOS-path ones, on purpose: `ios/` mirrors
-    # `shared/src/{models,enums}.ts` by hand, and `ModelDecodingTests` exists
-    # to fail when the two drift. A `shared/` change that renames a field must
-    # re-run these tests, or the drift ships silently.
+    # Skipped when `changes` says the run cannot affect it. It stays a
+    # required check on PRs: GitHub counts a job skipped by `if` as passing.
+    needs: changes
+    if: needs.changes.outputs.ios == 'true'
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Xcode version
-        run: xcodebuild -version
+        id: xcode
+        run: |
+          xcodebuild -version
+          echo "id=$(xcodebuild -version | tr '\n' ' ' | shasum | cut -c1-12)" >> "$GITHUB_OUTPUT"
 
       # Pin the package checkout somewhere stable so it can be cached —
       # by default SwiftPM clones inside DerivedData, which is not.
@@ -137,6 +185,18 @@ jobs:
           key: spm-${{ runner.os }}-${{ hashFiles('ios/OBCDanceCard.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
           restore-keys: |
             spm-${{ runner.os }}-
+
+      # The Firebase SDK is compiled from source and is almost all of the build
+      # time. Its build products are reusable as long as the packages and
+      # Xcode are unchanged, so keep DerivedData between runs, keyed on both.
+      # The package sources come from the cache above with their timestamps
+      # intact, which is what lets Xcode trust the cached products; the app's
+      # own sources are rebuilt every time, which is quick.
+      - name: Cache DerivedData (compiled Swift packages)
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: ios/DerivedData
+          key: dd-${{ runner.os }}-${{ steps.xcode.outputs.id }}-${{ hashFiles('ios/OBCDanceCard.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
 
       - name: Resolve Swift packages
         working-directory: ios
@@ -208,7 +268,8 @@ jobs:
             -project OBCDanceCard.xcodeproj \
             -scheme "OBCDanceCard (Emulator)" \
             -destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
-            -clonedSourcePackagesDirPath .spm
+            -clonedSourcePackagesDirPath .spm \
+            -derivedDataPath DerivedData
 
       - name: Wait for emulators
         if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
@@ -237,6 +298,7 @@ jobs:
             -scheme "OBCDanceCard (Emulator)" \
             -destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
             -clonedSourcePackagesDirPath .spm \
+            -derivedDataPath DerivedData \
             -resultBundlePath OBCDanceCard.xcresult
 
       - name: Scrub login codes from emulator log
