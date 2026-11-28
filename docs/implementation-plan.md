@@ -1977,7 +1977,16 @@ in more than one club, each screen still showing one club at a time
 (there is still no `createClub` callable and no platform admin). iOS still shows
 only the default club. See `docs/ops-runbook.md` "Test club".
 
-**Stage 2 — platform admin and club management.** `platformAdmins`,
+**Stage 2 — platform admin and club management.** *(Built 2026-11-28:
+`platformAdmins`, `platformAuditLog`, `listClubs` / `createClub` / `updateClub` /
+`setClubAdmin`, the Platform area at `/platform`, and `make-platform-admin.ts`.
+One deliberate difference from B14.3 as first written: a platform admin has NO
+rights inside a club. `requireAdmin` and the rules were not widened; to administer
+a club they appoint themselves one of its admins, which is audited. That keeps a
+platform admin's browser from ever holding a general read of every club's members,
+and avoids a second class of "admin without a membership" through every member
+screen. `updateClubSettings` for club admins and per-club email identity (B14.7)
+are not built yet. See `docs/ops-runbook.md`.)* `platformAdmins`,
 `platformAuditLog`, `createClub`, `updateClub`, `setClubAdmin`, and the Platform
 admin area. The first visible change, and visible only to a platform admin.
 

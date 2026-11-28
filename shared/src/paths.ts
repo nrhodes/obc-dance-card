@@ -113,6 +113,17 @@ export const paths = {
   clubs: () => 'clubs',
   club: (clubId: ClubId) => `clubs/${clubId}`,
 
+  /**
+   * Platform administrators (plan §21 B14.3): a document here, keyed by uid,
+   * IS the grant. Written only by `make-platform-admin.ts`, never by a callable.
+   */
+  platformAdmins: () => 'platformAdmins',
+  platformAdmin: (uid: Id) => `platformAdmins/${uid}`,
+
+  /** What platform administrators did: clubs created, suspended, admins appointed. Server-only. */
+  platformAuditLog: () => 'platformAuditLog',
+  platformAuditLogEntry: (id: Id) => `platformAuditLog/${id}`,
+
   /** The person: which clubs they are an active member of. Server-maintained. */
   users: () => 'users',
   user: (uid: Id) => `users/${uid}`,

@@ -60,6 +60,8 @@ export { onNotificationCreated } from './notifications/dispatch.js';
 export { sendSessionReminders, sendDailyDigest, purgeExpired } from './notifications/scheduled.js';
 
 // Phase 6 — admin extras + integrity
+// Platform administration (plan §21 B14.3, stage 2).
+export { listClubs, createClub, updateClub, setClubAdmin } from './clubs/platform.js';
 export { addMember, updateMember, setMemberRole, deactivateMember, reactivateMember, eraseMember } from './admin/members.js';
 export { updateSeries, updateSession, updateWeekday } from './admin/programmeEdit.js';
 export { broadcast, listAuditLog } from './admin/misc.js';

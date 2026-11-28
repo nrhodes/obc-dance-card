@@ -1,3 +1,4 @@
+import { Suspense, lazy } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { AuthProvider } from './auth/AuthProvider';
 import { ClubProvider } from './club/ClubProvider';
@@ -23,8 +24,12 @@ import { NotificationsScreen } from './screens/NotificationsScreen';
 import { PrivacyScreen } from './screens/PrivacyScreen';
 import { HelpScreen } from './screens/HelpScreen';
 import { AdminRoutes } from './AdminRoutes';
+import { RequirePlatformAdmin } from './platform/RequirePlatformAdmin';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { PwaUpdater } from './pwa/PwaUpdater';
+
+// Code-split like the admin screens: only a platform admin ever loads it.
+const PlatformScreen = lazy(() => import('./platform/PlatformScreen').then((m) => ({ default: m.PlatformScreen })));
 
 export function App() {
   return (
@@ -73,6 +78,16 @@ export function App() {
             <Route path="/invites" element={<InvitesScreen />} />
             <Route path="/notifications" element={<NotificationsScreen />} />
             <Route path="/help" element={<HelpScreen />} />
+            <Route
+              path="/platform"
+              element={
+                <RequirePlatformAdmin>
+                  <Suspense fallback={<p>Loading…</p>}>
+                    <PlatformScreen />
+                  </Suspense>
+                </RequirePlatformAdmin>
+              }
+            />
             <Route
               path="/admin/*"
               element={

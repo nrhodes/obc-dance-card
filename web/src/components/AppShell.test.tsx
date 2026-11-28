@@ -48,6 +48,11 @@ vi.mock('../pwa/usePwaUpdate', () => ({
   usePwaUpdate: () => ({ needsRefresh: needsRefreshFixture, reload: reloadMock }),
 }));
 
+let platformAdminFixture = false;
+vi.mock('../platform/usePlatformAdmin', () => ({
+  usePlatformAdmin: () => ({ isPlatformAdmin: platformAdminFixture, loading: false }),
+}));
+
 vi.mock('../session/useIdleSignOut', () => ({
   useIdleSignOut: () => undefined,
 }));
@@ -216,5 +221,22 @@ describe('AppShell', () => {
     expect(switcher.value).toBe('testclub');
     await user.selectOptions(switcher, 'orewa');
     expect(selectClub).toHaveBeenCalledWith('orewa');
+  });
+
+  it('offers the Platform area under "More" only to a platform administrator', async () => {
+    memberFixture = member({ role: 'admin' });
+    const user = userEvent.setup();
+
+    platformAdminFixture = false;
+    const first = renderShell();
+    await user.click(screen.getByRole('button', { name: /More/ }));
+    expect(document.querySelector('a[href="/platform"]')).toBeNull();
+    first.unmount();
+
+    platformAdminFixture = true;
+    renderShell();
+    await user.click(screen.getByRole('button', { name: /More/ }));
+    expect(document.querySelector('a[href="/platform"]')).not.toBeNull();
+    platformAdminFixture = false;
   });
 });

@@ -148,3 +148,35 @@ describe('pre-migration top-level collections', () => {
     }
   });
 });
+
+describe('platformAdmins and platformAuditLog (plan §21 B14.3)', () => {
+  beforeEach(async () => {
+    await seedDoc(env, 'platformAdmins/oadmin', { id: 'oadmin', grantedAt: 'now', grantedBy: 'test' });
+    await seedDoc(env, 'platformAuditLog/p1', { id: 'p1', action: 'club_created' });
+  });
+
+  it('a person can see whether they are a platform admin, and nobody else can', async () => {
+    await assertSucceeds(getDoc(doc(clientAs(env, 'oadmin'), 'platformAdmins/oadmin')));
+    // Not a platform admin: the read of their own (absent) doc is still allowed.
+    await assertSucceeds(getDoc(doc(clientAs(env, 'alice'), 'platformAdmins/alice')));
+    await assertFails(getDoc(doc(clientAs(env, 'alice'), 'platformAdmins/oadmin')));
+    await assertFails(getDoc(doc(clientAnon(env), 'platformAdmins/oadmin')));
+    await assertFails(getDocs(collection(clientAs(env, 'oadmin'), 'platformAdmins')));
+  });
+
+  it('nobody can grant it from a client — not even an existing platform admin', async () => {
+    await assertFails(setDoc(doc(clientAs(env, 'alice'), 'platformAdmins/alice'), { id: 'alice' }));
+    await assertFails(setDoc(doc(clientAs(env, 'oadmin'), 'platformAdmins/alice'), { id: 'alice' }));
+  });
+
+  it('a platform admin gains no read of a club they are not a member of', async () => {
+    const db = clientAs(env, 'oadmin');
+    await assertFails(getDoc(doc(db, 'clubs/other')));
+    await assertFails(getDoc(doc(db, 'clubs/other/members/bob')));
+    await assertFails(getDoc(doc(db, 'clubs/other/entries/s1_bob')));
+  });
+
+  it('the platform audit log is unreadable by every client', async () => {
+    await assertFails(getDoc(doc(clientAs(env, 'oadmin'), 'platformAuditLog/p1')));
+  });
+});

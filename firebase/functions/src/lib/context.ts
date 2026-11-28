@@ -4,7 +4,7 @@
  * `requireAdmin`.
  */
 import { HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
-import type { ClubPaths, Member } from '@obc/shared';
+import { paths, type ClubPaths, type Member } from '@obc/shared';
 import { db } from './admin.js';
 import { activeMembershipsOf } from './clubs.js';
 
@@ -44,6 +44,26 @@ export async function requireUser(req: CallableRequest): Promise<{ uid: string }
   }
   if ((await activeMembershipsOf(uid)).length === 0) {
     throw new HttpsError('permission-denied', 'Your membership is not active.');
+  }
+  return { uid };
+}
+
+/**
+ * The caller must be a platform administrator (plan §21 B14.3): signed in,
+ * with a `platformAdmins/{uid}` document. That document is the whole grant —
+ * it is written only by `make-platform-admin.ts`, never by a callable, so no
+ * request can promote anyone.
+ *
+ * Being a platform admin confers nothing INSIDE a club: every club-scoped
+ * callable still checks the caller's membership of that club.
+ */
+export async function requirePlatformAdmin(req: CallableRequest): Promise<{ uid: string }> {
+  const uid = req.auth?.uid;
+  if (!uid) {
+    throw new HttpsError('unauthenticated', 'Sign in to continue.');
+  }
+  if (!(await db.doc(paths.platformAdmin(uid)).get()).exists) {
+    throw new HttpsError('permission-denied', 'Platform administrators only.');
   }
   return { uid };
 }
