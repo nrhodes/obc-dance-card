@@ -2,6 +2,7 @@
 // below is Vitest's, and Vite's own `UserConfigExport` type has no `test`
 // key — importing from 'vite' fails the build under Vitest 3+.
 import { defineConfig } from 'vitest/config';
+import { execFileSync } from 'node:child_process';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 
@@ -27,7 +28,28 @@ import { VitePWA } from 'vite-plugin-pwa';
 // explicitly to `getToken`, per `src/push/usePush.ts`), so the merged
 // worker's filename is free to describe what it now actually is: the app's
 // one and only service worker, not "the FCM one".
+/**
+ * The commit this bundle is built from, baked into the JavaScript so the app
+ * can say which version is actually RUNNING in this tab (Help screen). That
+ * can differ from `/version.json` — the version currently deployed — for as
+ * long as an older bundle is still loaded or cached. Same resolution order
+ * as `scripts/write-version.mjs`; never a build failure.
+ */
+function resolveCommit(): string {
+  try {
+    return execFileSync('git', ['rev-parse', 'HEAD'], { stdio: ['ignore', 'pipe', 'ignore'] })
+      .toString()
+      .trim();
+  } catch {
+    return process.env.GITHUB_SHA || 'unknown';
+  }
+}
+
 export default defineConfig({
+  define: {
+    __APP_COMMIT__: JSON.stringify(resolveCommit()),
+    __APP_BUILT_AT__: JSON.stringify(new Date().toISOString()),
+  },
   plugins: [
     react(),
     VitePWA({

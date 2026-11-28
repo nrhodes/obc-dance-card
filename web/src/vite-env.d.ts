@@ -15,3 +15,8 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv;
 }
+
+/** The git commit this bundle was built from (`vite.config.ts`), or `"unknown"`. */
+declare const __APP_COMMIT__: string;
+/** When this bundle was built, ISO-8601 UTC. */
+declare const __APP_BUILT_AT__: string;

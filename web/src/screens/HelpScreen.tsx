@@ -3,6 +3,7 @@
  * Linked from the main nav. Plain language, short sections, no jargon.
  */
 import { Link } from 'react-router-dom';
+import { APP_VERSION } from '../lib/appVersion';
 
 export function HelpScreen() {
   return (
@@ -73,6 +74,11 @@ export function HelpScreen() {
           top — look up their phone number in the members list or ask at the club.
         </p>
       </div>
+
+      <p className="muted" data-testid="app-version">
+        Version {APP_VERSION.commit}
+        {APP_VERSION.builtAt && <> · built {APP_VERSION.builtAt}</>}
+      </p>
     </div>
   );
 }
